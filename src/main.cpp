@@ -1,5 +1,5 @@
 #include <iostream>
-#include "solver/solver.h"
+#include "solver.h"
 
 /**
  * @file main.cpp

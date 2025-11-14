@@ -9,9 +9,9 @@
  * using various algorithms including De Casteljau subdivision.
  */
 
-#include "polynomial/polynomial.h"
-#include "geometry/geometry.h"
-#include "de_casteljau/de_casteljau.h"
+#include "polynomial.h"
+#include "geometry.h"
+#include "de_casteljau.h"
 
 namespace polynomial_solver {
 

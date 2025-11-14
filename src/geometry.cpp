@@ -1,4 +1,4 @@
-#include "geometry/geometry.h"
+#include "geometry.h"
 
 /**
  * @file geometry.cpp

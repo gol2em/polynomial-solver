@@ -1,4 +1,4 @@
-#include "solver/solver.h"
+#include "solver.h"
 
 /**
  * @file solver.cpp

@@ -14,11 +14,33 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
-# Add subdirectories for each module
-add_subdirectory(src/polynomial)
-add_subdirectory(src/geometry)
-add_subdirectory(src/de_casteljau)
-add_subdirectory(src/solver)
+# Build polynomial library
+add_library(polynomial STATIC
+    src/polynomial.cpp
+)
+
+# Build geometry library
+add_library(geometry STATIC
+    src/geometry.cpp
+)
+
+# Build de_casteljau library
+add_library(de_casteljau STATIC
+    src/de_casteljau.cpp
+)
+target_link_libraries(de_casteljau polynomial geometry)
+
+# Build solver library
+add_library(solver STATIC
+    src/solver.cpp
+)
+target_link_libraries(solver polynomial geometry de_casteljau)
+
+# Build main executable
+add_executable(polynomial_solver_app
+    src/main.cpp
+)
+target_link_libraries(polynomial_solver_app solver polynomial geometry de_casteljau)
 
 # Optional: Enable testing
 enable_testing()

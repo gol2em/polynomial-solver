@@ -9,8 +9,8 @@
  * polynomial curves, which is useful for root isolation and refinement.
  */
 
-#include "polynomial/polynomial.h"
-#include "geometry/geometry.h"
+#include "polynomial.h"
+#include "geometry.h"
 
 namespace polynomial_solver {
 

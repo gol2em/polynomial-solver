@@ -1,4 +1,4 @@
-#include "polynomial/polynomial.h"
+#include "polynomial.h"
 
 /**
  * @file polynomial.cpp
