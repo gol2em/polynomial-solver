@@ -62,3 +62,8 @@ Testing/
 docs/_build/
 *.pdf
 
+
+# Generated visualization images
+graph_*.png
+python/graph_*.png
+

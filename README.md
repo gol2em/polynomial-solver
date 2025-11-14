@@ -2,23 +2,29 @@
 
 A C++11 implementation of a polynomial solver using De Casteljau subdivision algorithm.
 
+GitHub repository: https://github.com/gol2em/polynomial-solver.git
+
 ## Project Structure
 
 ```
 polynomial-solver/
 ├── include/              # Header files
-│   ├── polynomial/       # Polynomial class headers
-│   ├── geometry/         # Geometry tools headers
-│   ├── de_casteljau/     # De Casteljau algorithm headers
-│   └── solver/           # Main solver interface headers
+│   ├── polynomial.h      # Polynomial class interface
+│   ├── geometry.h        # Geometry tools interface
+│   ├── de_casteljau.h    # De Casteljau algorithm interface
+│   └── solver.h          # Main solver interface
 ├── src/                  # Source files
-│   ├── polynomial/       # Polynomial implementation
-│   ├── geometry/         # Geometry tools implementation
-│   ├── de_casteljau/     # De Casteljau algorithm implementation
-│   └── solver/           # Main solver implementation
-├── tests/                # Unit tests
+│   ├── polynomial.cpp    # Polynomial implementation
+│   ├── geometry.cpp      # Geometry tools implementation
+│   ├── de_casteljau.cpp  # De Casteljau algorithm implementation
+│   ├── solver.cpp        # Main solver implementation
+│   └── main.cpp          # Application entry point
+├── tests/                # Unit tests (conversion, graph, etc.)
 ├── python/               # Python visualization tools
+│   ├── visualize.py                      # General visualization entry point (stub)
+│   └── visualize_graph_from_test.py      # Visualize graph/control-point test data
 ├── build/                # Build directory (generated)
+├── .venv/                # Python virtual environment managed by uv
 └── CMakeLists.txt        # CMake configuration
 ```
 
@@ -55,6 +61,7 @@ polynomial-solver/
 - CMake 3.15 or higher
 - C++11 compatible compiler (GCC 13.2.0 or higher)
 - Python 3.11 or higher (for visualization)
+- uv (for managing the `.venv` Python virtual environment)
 
 ### Building the Project
 
@@ -82,15 +89,46 @@ ctest
 
 ## Python Visualization
 
+### Environment
+
 ```bash
-cd python
-python3 visualize.py
+# From the project root
+uv sync  # or equivalent to create/manage .venv
+source .venv/bin/activate
 ```
+
+### Visualize graph/control-point test cases
+
+After building and running the C++ tests (from `build/`):
+
+```bash
+cd build
+ctest --output-on-failure
+```
+
+This writes CSV files into `build/tests/` for the graph/control-point tests.
+From the project root you can then run:
+
+```bash
+python python/visualize_graph_from_test.py
+```
+
+This produces PNGs in the `python/` directory showing:
+- the 1D graph and its Bernstein control points, and
+- the 2D surface and its 3D Bernstein control net.
+
+( `python/visualize.py` is kept as a stub for future, more general
+visualization tools.)
 
 ## Development Status
 
-This project is currently in the initial setup phase. Module interfaces have been defined,
-but implementations are pending.
+Core components are implemented and tested:
+- Multivariate Bernstein polynomial representation and stable power→Bernstein conversion
+- De Casteljau evaluation in 1D and 2D
+- Graph control-net construction for scalar polynomials and systems
+- Unit tests for coefficient conversion and graph/control-net correctness
+
+The solver’s higher-level root-finding and subdivision strategies are still evolving.
 
 ## Author
 
