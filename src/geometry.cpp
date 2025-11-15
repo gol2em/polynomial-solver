@@ -14,6 +14,13 @@
 
 namespace polynomial_solver {
 
+// Global geometry configuration
+static GeometryConfig g_geometry_config;
+
+GeometryConfig& getGeometryConfig() {
+    return g_geometry_config;
+}
+
 // Point2D implementation
 Point2D::Point2D() : x_(0.0), y_(0.0) {
 }
@@ -1170,7 +1177,7 @@ bool intersect_convex_polyhedra(
                 const ConvexPolyhedron& poly = (n_result == 2u) ? polyhedra[i] : result;
 
                 // Debug output
-                const bool debug = false; // Set to true to enable debug output
+                const bool debug = getGeometryConfig().debug;
                 if (debug) {
                     std::cout << "DEBUG: Clipping segment against polygon" << std::endl;
                     std::cout << "  Segment: (" << seg.vertices[0][0] << "," << seg.vertices[0][1]

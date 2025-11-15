@@ -3,6 +3,7 @@
 #include "geometry.h"
 
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -620,8 +621,16 @@ int test_subdivision_solver_graph_hull_2d_quadratic_debug()
     return 0;
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    // Parse command-line arguments
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--debug") == 0) {
+            getGeometryConfig().debug = true;
+            std::cout << "Debug mode enabled" << std::endl;
+        }
+    }
+
     int status = 0;
     status |= test_subdivision_solver_uniform_grid();
     status |= test_subdivision_solver_graph_hull_1d();

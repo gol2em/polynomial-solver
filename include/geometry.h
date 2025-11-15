@@ -17,6 +17,20 @@
 namespace polynomial_solver {
 
 /**
+ * @brief Global configuration for geometry operations.
+ */
+struct GeometryConfig {
+    bool debug;        ///< Enable debug output for geometric operations (default: false)
+
+    GeometryConfig() : debug(false) {}
+};
+
+/**
+ * @brief Get the global geometry configuration.
+ */
+GeometryConfig& getGeometryConfig();
+
+/**
  * @class Point2D
  * @brief Represents a 2D point
  */
