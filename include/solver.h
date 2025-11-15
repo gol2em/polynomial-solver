@@ -95,14 +95,14 @@ enum class RootBoundingMethod {
  * @brief Configuration parameters for the subdivision-based solver.
  */
 struct SubdivisionConfig {
-    double crit_shrink_factor; ///< Threshold CRIT used to decide if a contracted interval is "small".
-    double min_box_width;      ///< Absolute minimum width of a box in each dimension.
+    double tolerance;          ///< Absolute minimum width of a box in each dimension (convergence criterion).
     unsigned int max_depth;    ///< Maximum allowed subdivision depth.
+    unsigned int max_boxes_per_depth; ///< Maximum boxes at a depth before declaring degeneracy.
 
     SubdivisionConfig()
-        : crit_shrink_factor(0.8),
-          min_box_width(1e-3),
-          max_depth(20u)
+        : tolerance(1e-3),
+          max_depth(20u),
+          max_boxes_per_depth(1000u)
     {
     }
 };

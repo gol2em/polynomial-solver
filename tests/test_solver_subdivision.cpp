@@ -37,9 +37,8 @@ int test_subdivision_solver_uniform_grid()
     Solver solver;
 
     SubdivisionConfig config;
-    config.crit_shrink_factor = 0.8;   // Bounding step is a no-op for now.
-    config.min_box_width = 0.25;       // Stop once boxes reach width 1/4.
-    config.max_depth = 10u;            // Large enough to not be active here.
+    config.tolerance = 0.25;       // Stop once boxes reach width 1/4.
+    config.max_depth = 10u;        // Large enough to not be active here.
 
     const std::vector<SubdivisionBoxResult> boxes =
         solver.subdivisionSolve(system, config, RootBoundingMethod::None);
@@ -101,8 +100,7 @@ int test_subdivision_solver_graph_hull_1d()
     Solver solver;
 
     SubdivisionConfig config;
-    config.crit_shrink_factor = 0.8;
-    config.min_box_width = 0.05;
+    config.tolerance = 0.05;
     config.max_depth = 10u;
 
     // First solve with None method to get baseline.
@@ -236,8 +234,7 @@ int test_subdivision_solver_graph_hull_2d()
     Solver solver;
 
     SubdivisionConfig config;
-    config.crit_shrink_factor = 0.8;
-    config.min_box_width = 0.05;
+    config.tolerance = 0.05;
     config.max_depth = 10u;
 
     // First solve with None method to get baseline.
@@ -464,8 +461,7 @@ int test_subdivision_solver_graph_hull_2d_quadratic()
     Solver solver;
 
     SubdivisionConfig config;
-    config.crit_shrink_factor = 0.8;
-    config.min_box_width = 0.05;
+    config.tolerance = 0.05;
     config.max_depth = 10u;
 
     // First solve with None method to get baseline.
