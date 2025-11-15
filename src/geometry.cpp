@@ -1126,7 +1126,9 @@ bool intersect_convex_polyhedra(
                 const std::vector<double>& pt = (n_result == 1u) ? result.vertices[0] : polyhedra[i].vertices[0];
                 const ConvexPolyhedron& poly = (n_result == 1u) ? polyhedra[i] : result;
 
-                // For now, use a simple containment test: check if point is one of the vertices
+                // TODO: Implement proper point-in-convex-polygon test.
+                // For now, use a simple containment test: check if point is one of the vertices.
+                // This is sufficient for many cases but may miss points on edges or in the interior.
                 const double eps = 1e-12;
                 bool found = false;
                 for (const std::vector<double>& v : poly.vertices) {
