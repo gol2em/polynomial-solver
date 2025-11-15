@@ -508,16 +508,127 @@ int test_subdivision_solver_graph_hull_2d_quadratic()
     return 0;
 }
 
+int test_subdivision_solver_graph_hull_2d_quadratic_debug()
+{
+    // Same as quadratic test but with debug output
+    std::vector<unsigned int> degrees_f1{2u, 1u};
+    std::vector<double> power_coeffs_f1{-0.25, 0.0, 0.0, 0.0, 1.0, 0.0};
+    Polynomial p1 = Polynomial::fromPower(degrees_f1, power_coeffs_f1);
+
+    std::vector<unsigned int> degrees_f2{0u, 1u};
+    std::vector<double> power_coeffs_f2{-0.3, 1.0};
+    Polynomial p2 = Polynomial::fromPower(degrees_f2, power_coeffs_f2);
+
+    // Open CSV file for dumping data.
+    std::ofstream csv("graph_hull_2d_quadratic_debug.csv");
+    csv << "equation,step,type,dim,index,coord0,coord1,coord2\n";
+
+    // For each equation, dump control points and compute convex hull
+    std::vector<ConvexPolyhedron> hyperplane_intersections;
+    for (std::size_t eq_idx = 0; eq_idx < 2; ++eq_idx) {
+        const Polynomial& poly = (eq_idx == 0) ? p1 : p2;
+
+        // Step 0: Control points
+        std::vector<double> control_points;
+        poly.graphControlPoints(control_points);
+        const std::size_t num_coeffs = poly.coefficientCount();
+
+        std::vector<std::vector<double>> points;
+        for (std::size_t i = 0; i < num_coeffs; ++i) {
+            csv << (eq_idx + 1) << ",0,control_point,3," << i << ","
+                << control_points[i * 3 + 0] << ","
+                << control_points[i * 3 + 1] << ","
+                << control_points[i * 3 + 2] << "\n";
+
+            std::vector<double> pt(3);
+            pt[0] = control_points[i * 3 + 0];
+            pt[1] = control_points[i * 3 + 1];
+            pt[2] = control_points[i * 3 + 2];
+            points.push_back(pt);
+        }
+
+        // Step 1: Convex hull
+        ConvexPolyhedron hull = convex_hull(points);
+        for (std::size_t i = 0; i < hull.vertices.size(); ++i) {
+            csv << (eq_idx + 1) << ",1,hull_vertex,3," << i << ","
+                << hull.vertices[i][0] << ","
+                << hull.vertices[i][1] << ","
+                << hull.vertices[i][2] << "\n";
+        }
+
+        // Step 2: Intersect with hyperplane z=0
+        ConvexPolyhedron hyperplane_intersection;
+        bool has_intersection = intersect_convex_polyhedron_with_last_coordinate_zero(
+            hull, hyperplane_intersection);
+
+        if (has_intersection) {
+            for (std::size_t i = 0; i < hyperplane_intersection.vertices.size(); ++i) {
+                csv << (eq_idx + 1) << ",2,hyperplane_intersection,3," << i << ","
+                    << hyperplane_intersection.vertices[i][0] << ","
+                    << hyperplane_intersection.vertices[i][1] << ","
+                    << hyperplane_intersection.vertices[i][2] << "\n";
+            }
+
+            // Step 3: Project to 2D
+            std::vector<std::vector<double>> projected_points;
+            projected_points.reserve(hyperplane_intersection.vertices.size());
+            for (const auto& v : hyperplane_intersection.vertices) {
+                std::vector<double> proj_v(2);
+                proj_v[0] = v[0];
+                proj_v[1] = v[1];
+                projected_points.push_back(proj_v);
+            }
+
+            // Recompute convex hull in 2D to ensure proper vertex ordering
+            ConvexPolyhedron projected = convex_hull(projected_points);
+
+            for (std::size_t i = 0; i < projected.vertices.size(); ++i) {
+                csv << (eq_idx + 1) << ",3,projected,2," << i << ","
+                    << projected.vertices[i][0] << "," << projected.vertices[i][1] << ",0\n";
+            }
+
+            hyperplane_intersections.push_back(projected);
+        }
+    }
+
+    // Step 4: Intersect all projected polyhedra
+    if (!hyperplane_intersections.empty()) {
+        ConvexPolyhedron final_intersection;
+        bool success = intersect_convex_polyhedra(hyperplane_intersections, final_intersection);
+
+        if (success && !final_intersection.vertices.empty()) {
+            for (std::size_t i = 0; i < final_intersection.vertices.size(); ++i) {
+                csv << "0,4,final_intersection,2," << i << ","
+                    << final_intersection.vertices[i][0] << ","
+                    << final_intersection.vertices[i][1] << ",0\n";
+            }
+
+            // Step 5: Bounding box
+            ConvexPolyhedronBox bbox = bounding_box(final_intersection);
+            csv << "0,5,bbox_min,2,0,"
+                << bbox.min_coords[0] << ","
+                << bbox.min_coords[1] << ",0\n";
+            csv << "0,5,bbox_max,2,0,"
+                << bbox.max_coords[0] << ","
+                << bbox.max_coords[1] << ",0\n";
+        }
+    }
+
+    csv.close();
+    std::cout << "Quadratic debug data written to graph_hull_2d_quadratic_debug.csv" << std::endl;
+
+    return 0;
+}
+
 int main()
 {
     int status = 0;
     status |= test_subdivision_solver_uniform_grid();
     status |= test_subdivision_solver_graph_hull_1d();
     status |= test_subdivision_solver_graph_hull_2d();
-    // TODO: Fix quadratic test - convex hull for non-planar surfaces needs more work
-    // status |= test_subdivision_solver_graph_hull_2d_quadratic();
+    status |= test_subdivision_solver_graph_hull_2d_quadratic();
     status |= test_subdivision_solver_graph_hull_1d_debug();
-    status |= test_subdivision_solver_graph_hull_2d_debug();
+    status |= test_subdivision_solver_graph_hull_2d_quadratic_debug();
 
     if (status == 0) {
         std::cout << "Subdivision solver tests passed." << std::endl;

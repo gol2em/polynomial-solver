@@ -155,15 +155,18 @@ bool compute_graph_hull_bounds(
         }
 
         // Project to R^n by dropping the last coordinate (which is 0).
-        polynomial_solver::ConvexPolyhedron projected;
-        projected.vertices.reserve(hyperplane_intersection.vertices.size());
+        std::vector<std::vector<double>> projected_points;
+        projected_points.reserve(hyperplane_intersection.vertices.size());
         for (const std::vector<double>& v : hyperplane_intersection.vertices) {
             std::vector<double> proj(dim, 0.0);
             for (std::size_t j = 0; j < dim; ++j) {
                 proj[j] = v[j];
             }
-            projected.vertices.push_back(proj);
+            projected_points.push_back(proj);
         }
+
+        // Recompute convex hull in R^n to ensure proper vertex ordering.
+        polynomial_solver::ConvexPolyhedron projected = polynomial_solver::convex_hull(projected_points);
 
         hyperplane_intersections.push_back(projected);
     }

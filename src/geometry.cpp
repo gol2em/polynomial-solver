@@ -4,6 +4,7 @@
 #include <limits>
 #include <map>
 #include <cmath>
+#include <iostream>
 
 
 /**
@@ -1154,10 +1155,29 @@ bool intersect_convex_polyhedra(
                 result.vertices = inter_pts;
                 result.intrinsic_dim = compute_intrinsic_dimension(inter_pts);
             } else if (n_result == 2u || n_other == 2u) {
-                // One is a segment, the other is a polygon.
+                // One is a segment, the other is a polygon (or both are segments, already handled above).
                 // Clip the segment against the polygon.
+
+                // Make sure we're not in the "both are segments" case (already handled above)
+                if (n_result == 2u && n_other == 2u) {
+                    // This should have been handled in the previous case
+                    return false;
+                }
+
                 const ConvexPolyhedron& seg = (n_result == 2u) ? result : polyhedra[i];
                 const ConvexPolyhedron& poly = (n_result == 2u) ? polyhedra[i] : result;
+
+                // Debug output
+                const bool debug = false; // Set to true to enable debug output
+                if (debug) {
+                    std::cout << "DEBUG: Clipping segment against polygon" << std::endl;
+                    std::cout << "  Segment: (" << seg.vertices[0][0] << "," << seg.vertices[0][1]
+                              << ") to (" << seg.vertices[1][0] << "," << seg.vertices[1][1] << ")" << std::endl;
+                    std::cout << "  Polygon: " << poly.vertices.size() << " vertices" << std::endl;
+                    for (std::size_t v = 0; v < poly.vertices.size(); ++v) {
+                        std::cout << "    v" << v << ": (" << poly.vertices[v][0] << "," << poly.vertices[v][1] << ")" << std::endl;
+                    }
+                }
 
                 std::vector<std::vector<double>> inter_pts;
                 inter_pts.push_back(seg.vertices[0]);
@@ -1167,6 +1187,9 @@ bool intersect_convex_polyhedra(
                 const std::size_t m = poly.vertices.size();
                 for (std::size_t j = 0; j < m; ++j) {
                     if (inter_pts.empty()) {
+                        if (debug) {
+                            std::cout << "  Edge " << j << ": inter_pts is empty, returning false" << std::endl;
+                        }
                         return false;
                     }
 
@@ -1177,6 +1200,16 @@ bool intersect_convex_polyhedra(
                     const double ey = edge_end[1] - edge_start[1];
                     const double nx = -ey;
                     const double ny = ex;
+
+                    if (debug) {
+                        std::cout << "  Edge " << j << ": (" << edge_start[0] << "," << edge_start[1]
+                                  << ") to (" << edge_end[0] << "," << edge_end[1] << ")" << std::endl;
+                        std::cout << "    Normal: (" << nx << "," << ny << ")" << std::endl;
+                        std::cout << "    inter_pts before clipping: " << inter_pts.size() << " points" << std::endl;
+                        for (std::size_t k = 0; k < inter_pts.size(); ++k) {
+                            std::cout << "      p" << k << ": (" << inter_pts[k][0] << "," << inter_pts[k][1] << ")" << std::endl;
+                        }
+                    }
 
                     std::vector<std::vector<double>> clipped;
                     for (std::size_t k = 0; k + 1 < inter_pts.size(); ++k) {
@@ -1203,7 +1236,7 @@ bool intersect_convex_polyhedra(
                             const double denom = nx * (p2[0] - p1[0]) + ny * (p2[1] - p1[1]);
                             const double abs_denom = (denom >= 0.0) ? denom : -denom;
                             if (abs_denom > eps) {
-                                const double t = (nx * dx1 + ny * dy1) / denom;
+                                const double t = -dist1 / denom;
                                 std::vector<double> p(2, 0.0);
                                 p[0] = p1[0] + t * (p2[0] - p1[0]);
                                 p[1] = p1[1] + t * (p2[1] - p1[1]);
@@ -1213,7 +1246,7 @@ bool intersect_convex_polyhedra(
                             const double denom = nx * (p2[0] - p1[0]) + ny * (p2[1] - p1[1]);
                             const double abs_denom = (denom >= 0.0) ? denom : -denom;
                             if (abs_denom > eps) {
-                                const double t = (nx * dx1 + ny * dy1) / denom;
+                                const double t = -dist1 / denom;
                                 std::vector<double> p(2, 0.0);
                                 p[0] = p1[0] + t * (p2[0] - p1[0]);
                                 p[1] = p1[1] + t * (p2[1] - p1[1]);
@@ -1223,6 +1256,13 @@ bool intersect_convex_polyhedra(
                         }
                     }
                     inter_pts = clipped;
+
+                    if (debug) {
+                        std::cout << "    inter_pts after clipping: " << inter_pts.size() << " points" << std::endl;
+                        for (std::size_t k = 0; k < inter_pts.size(); ++k) {
+                            std::cout << "      p" << k << ": (" << inter_pts[k][0] << "," << inter_pts[k][1] << ")" << std::endl;
+                        }
+                    }
                 }
 
                 if (inter_pts.empty()) {
