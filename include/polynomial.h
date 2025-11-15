@@ -122,6 +122,39 @@ public:
      */
     void graphControlPoints(std::vector<double>& control_points) const;
 
+    /**
+     * @brief Compute graph corners for geometric operations.
+     *
+     * For a polynomial f: [0,1]^n -> R, computes the corners of the graph
+     * in R^{n+1}. The graph is the set {(x, f(x)) : x in [0,1]^n}.
+     *
+     * This evaluates f at all 2^n corners of the unit hypercube and returns
+     * points in R^{n+1} of the form (x_1, ..., x_n, f(x_1,...,x_n)).
+     *
+     * This is different from graphControlPoints(), which returns only the
+     * Bernstein control points. For polynomials with degree 0 in some dimensions,
+     * the Bernstein control points don't span the full domain, so we need to
+     * evaluate at all corners for correct geometric operations.
+     *
+     * @param corners Output vector of corner points, each of size dimension()+1
+     */
+    void graphCorners(std::vector<std::vector<double>>& corners) const;
+
+    /**
+     * @brief Restrict this polynomial to [a,b] along the given axis.
+     *
+     * For the specified axis (0 <= axis < dimension()), this constructs a new
+     * polynomial q with the same degrees and dimension such that
+     *
+     *   q(u_0, ..., u_axis, ..., u_{n-1}) =
+     *       p(u_0, ..., a + (b - a) * u_axis, ..., u_{n-1}),
+     *
+     * i.e. the original polynomial restricted to the parameter interval [a,b]
+     * along that axis and reparameterized back to [0,1]. If the inputs do not
+     * satisfy 0 <= a < b <= 1, the original polynomial is returned unchanged.
+     */
+    Polynomial restrictedToInterval(std::size_t axis, double a, double b) const;
+
 private:
     /// Number of variables.
     std::size_t dimension_;

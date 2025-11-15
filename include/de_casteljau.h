@@ -47,6 +47,24 @@ public:
                              double t);
 
     /**
+     * @brief Subdivide a univariate Bernstein polynomial at parameter t.
+     *
+     * Given coefficients b[0..n] in Bernstein basis on [0,1], this computes
+     * two new coefficient sets 'left' and 'right' (size n+1 each) that
+     * represent the curve segments on [0,t] and [t,1], each reparameterized
+     * back to [0,1].
+     *
+     * @param bernstein_coeffs Input coefficients in Bernstein basis.
+     * @param t Subdivision parameter in [0, 1].
+     * @param left Output coefficients for the [0,t] segment.
+     * @param right Output coefficients for the [t,1] segment.
+     */
+    static void subdivide1D(const std::vector<double>& bernstein_coeffs,
+                            double t,
+                            std::vector<double>& left,
+                            std::vector<double>& right);
+
+    /**
      * @brief Evaluate a tensor-product Bernstein polynomial.
      *
      * @param degrees Degrees per variable.

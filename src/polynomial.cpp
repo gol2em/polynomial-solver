@@ -7,6 +7,7 @@
  */
 
 #include <algorithm>
+#include <iostream>
 
 namespace {
 
@@ -137,7 +138,9 @@ Polynomial Polynomial::fromBernstein(const std::vector<unsigned int>& degrees,
 Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
                                  const std::vector<double>& power_coeffs)
 {
-    // Compute expected number of coefficients.
+    const std::size_t dim = degrees.size();
+
+    // Compute expected number of coefficients for original degrees.
     std::size_t count = 1u;
     for (std::size_t i = 0; i < degrees.size(); ++i) {
         count *= static_cast<std::size_t>(degrees[i] + 1u);
@@ -155,7 +158,6 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
         coeffs.resize(count);
     }
 
-    const std::size_t dim = degrees.size();
     if (dim == 0u) {
         return Polynomial(degrees, coeffs);
     }
@@ -166,6 +168,8 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
 
     // Transform along each dimension separately from power basis to Bernstein.
     std::vector<unsigned int> multi_index(dim, 0u);
+
+    bool debug = false; // (dim == 2 && degrees[0] == 2 && degrees[1] == 1);
 
     for (std::size_t axis = 0; axis < dim; ++axis) {
         const unsigned int deg_axis = degrees[axis];
@@ -191,8 +195,32 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
                 line_in[k] = coeffs[idx];
             }
 
+            if (debug) {
+                std::cout << "DEBUG: axis=" << axis << ", multi_index=(";
+                for (std::size_t d = 0; d < dim; ++d) {
+                    if (d > 0) std::cout << ",";
+                    if (d == axis) std::cout << "*";
+                    else std::cout << multi_index[d];
+                }
+                std::cout << "), line_in=[";
+                for (std::size_t k = 0; k < len_axis; ++k) {
+                    if (k > 0) std::cout << ",";
+                    std::cout << line_in[k];
+                }
+                std::cout << "]" << std::endl;
+            }
+
             // Convert this slice from power basis to Bernstein basis.
             power_to_bernstein_1d(deg_axis, line_in, line_out);
+
+            if (debug) {
+                std::cout << "  line_out=[";
+                for (std::size_t k = 0; k < len_axis; ++k) {
+                    if (k > 0) std::cout << ",";
+                    std::cout << line_out[k];
+                }
+                std::cout << "]" << std::endl;
+            }
 
             // Scatter converted coefficients back.
             for (std::size_t k = 0; k < len_axis; ++k) {
@@ -201,6 +229,98 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
                 coeffs[idx] = line_out[k];
             }
         }
+    }
+
+    // Debug: print coefficients after conversion
+    #if 0
+    if (dim == 2 && degrees[0] == 2 && degrees[1] == 1) {
+        std::cout << "DEBUG: After power-to-Bernstein conversion for degrees (2,1):" << std::endl;
+        for (std::size_t i = 0; i < count; ++i) {
+            std::cout << "  coeffs[" << i << "] = " << coeffs[i] << std::endl;
+        }
+    }
+    #endif
+
+    // Now raise degree to at least 1 in each dimension (in Bernstein basis).
+    // This ensures proper geometric representation with at least 2 control points per dimension.
+    std::vector<unsigned int> adjusted_degrees = degrees;
+    bool needs_degree_raising = false;
+    for (std::size_t i = 0; i < dim; ++i) {
+        if (adjusted_degrees[i] == 0u) {
+            adjusted_degrees[i] = 1u;
+            needs_degree_raising = true;
+        }
+    }
+
+    if (needs_degree_raising) {
+        // Compute new coefficient count.
+        std::size_t new_count = 1u;
+        for (std::size_t i = 0; i < dim; ++i) {
+            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
+        }
+
+        std::vector<double> raised_coeffs(new_count, 0.0);
+
+        // Copy coefficients, duplicating along dimensions where degree was raised.
+        std::vector<unsigned int> old_multi(dim, 0u);
+        std::vector<unsigned int> new_multi(dim, 0u);
+
+        for (std::size_t old_idx = 0; old_idx < count; ++old_idx) {
+            // Compute old multi-index.
+            std::size_t temp = old_idx;
+            for (std::size_t d = dim; d-- > 0;) {
+                old_multi[d] = temp % (degrees[d] + 1u);
+                temp /= (degrees[d] + 1u);
+            }
+
+            // For each dimension where degree was raised, we need to duplicate.
+            // Generate all new multi-indices that correspond to this old multi-index.
+            std::vector<unsigned int> dup_counts(dim, 1u);
+            for (std::size_t d = 0; d < dim; ++d) {
+                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
+                    dup_counts[d] = 2u; // Duplicate this dimension
+                }
+            }
+
+            // Enumerate all combinations.
+            std::vector<unsigned int> dup_idx(dim, 0u);
+            bool done = false;
+            while (!done) {
+                // Compute new multi-index.
+                for (std::size_t d = 0; d < dim; ++d) {
+                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
+                        new_multi[d] = dup_idx[d]; // 0 or 1
+                    } else {
+                        new_multi[d] = old_multi[d];
+                    }
+                }
+
+                // Compute new linear index.
+                std::size_t new_idx = 0;
+                std::size_t stride = 1;
+                for (std::size_t d = dim; d-- > 0;) {
+                    new_idx += new_multi[d] * stride;
+                    stride *= (adjusted_degrees[d] + 1u);
+                }
+
+                raised_coeffs[new_idx] = coeffs[old_idx];
+
+                // Increment dup_idx.
+                done = true;
+                for (std::size_t d = dim; d-- > 0;) {
+                    if (dup_idx[d] + 1 < dup_counts[d]) {
+                        dup_idx[d]++;
+                        for (std::size_t e = d + 1; e < dim; ++e) {
+                            dup_idx[e] = 0;
+                        }
+                        done = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return Polynomial(adjusted_degrees, raised_coeffs);
     }
 
     return Polynomial(degrees, coeffs);
@@ -235,6 +355,83 @@ double Polynomial::evaluate(double t) const {
     // Convenience overload for the univariate case.
     std::vector<double> params(1u, t);
     return evaluate(params);
+}
+
+Polynomial Polynomial::restrictedToInterval(std::size_t axis, double a, double b) const {
+    const std::size_t dim = degrees_.size();
+    if (axis >= dim) {
+        // Invalid axis: return a copy of the original polynomial.
+        return Polynomial(degrees_, bernstein_coeffs_);
+    }
+
+    // Clamp a and b to [0,1].
+    if (a < 0.0) {
+        a = 0.0;
+    }
+    if (b > 1.0) {
+        b = 1.0;
+    }
+
+    if (!(a >= 0.0 && b <= 1.0 && a < b)) {
+        // Degenerate interval: return a copy.
+        return Polynomial(degrees_, bernstein_coeffs_);
+    }
+
+    const unsigned int deg_axis = degrees_[axis];
+    const std::size_t len_axis = static_cast<std::size_t>(deg_axis + 1u);
+
+    if (len_axis <= 1u) {
+        // Constant along this axis.
+        return Polynomial(degrees_, bernstein_coeffs_);
+    }
+
+    // Precompute strides for tensor layout (last dimension fastest).
+    std::vector<std::size_t> strides;
+    compute_strides(degrees_, strides);
+
+    std::vector<double> new_coeffs(bernstein_coeffs_.size(), 0.0);
+
+    std::vector<unsigned int> multi_index(dim, 0u);
+    std::vector<double> line(len_axis);
+    std::vector<double> left;
+    std::vector<double> right;
+
+    // Iterate over all 1D slices along the given axis.
+    std::fill(multi_index.begin(), multi_index.end(), 0u);
+    bool first = true;
+    while (first || increment_multi_except_axis(multi_index, degrees_, axis)) {
+        first = false;
+
+        // Gather coefficients along the current axis-line.
+        for (std::size_t k = 0; k < len_axis; ++k) {
+            multi_index[axis] = static_cast<unsigned int>(k);
+            const std::size_t idx = flatten_index(multi_index, strides);
+            line[k] = bernstein_coeffs_[idx];
+        }
+
+        // Restrict this 1D Bernstein polynomial to [a,b].
+        std::vector<double> segment = line;
+
+        if (a > 0.0) {
+            DeCasteljau::subdivide1D(segment, a, left, right);
+            segment = right; // [a,1]
+        }
+
+        const double denom = 1.0 - a;
+        const double t_rel = (denom > 0.0) ? (b - a) / denom : 0.0;
+        DeCasteljau::subdivide1D(segment, t_rel, left, right);
+
+        const std::vector<double>& ab_coeffs = left; // represents [a,b]
+
+        // Scatter the restricted coefficients back into the tensor.
+        for (std::size_t k = 0; k < len_axis; ++k) {
+            multi_index[axis] = static_cast<unsigned int>(k);
+            const std::size_t idx = flatten_index(multi_index, strides);
+            new_coeffs[idx] = ab_coeffs[k];
+        }
+    }
+
+    return Polynomial(degrees_, new_coeffs);
 }
 
 std::size_t Polynomial::flattenIndex(const std::vector<unsigned int>& multi_index) const {

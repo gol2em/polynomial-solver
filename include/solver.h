@@ -78,6 +78,46 @@ private:
     std::vector<Polynomial> equations_;
 };
 
+/**
+ * @brief Root bounding method selector for the subdivision solver.
+ *
+ * - None: No contraction; root bounding box equals the current box.
+ * - GraphHull: Uses exact convex hull of graph control points (implemented for 1D and 2D systems).
+ * - IntervalArithmetic: Placeholder for interval-arithmetic-based bounding (not yet implemented).
+ */
+enum class RootBoundingMethod {
+    None,               ///< No contraction; root bounding box equals the current box.
+    GraphHull,          ///< Exact convex-hull-based bounding in graph space (1D and 2D only).
+    IntervalArithmetic  ///< Placeholder for interval-arithmetic-based bounding.
+};
+
+/**
+ * @brief Configuration parameters for the subdivision-based solver.
+ */
+struct SubdivisionConfig {
+    double crit_shrink_factor; ///< Threshold CRIT used to decide if a contracted interval is "small".
+    double min_box_width;      ///< Absolute minimum width of a box in each dimension.
+    unsigned int max_depth;    ///< Maximum allowed subdivision depth.
+
+    SubdivisionConfig()
+        : crit_shrink_factor(0.8),
+          min_box_width(1e-3),
+          max_depth(20u)
+    {
+    }
+};
+
+/**
+ * @brief Resulting box from the subdivision solver.
+ *
+ * Each box represents a region in the normalized domain [0,1]^n.
+ */
+struct SubdivisionBoxResult {
+    std::vector<double> lower; ///< Lower corner of the box in each dimension.
+    std::vector<double> upper; ///< Upper corner of the box in each dimension.
+    unsigned int depth;        ///< Subdivision depth at which this box was produced.
+    bool converged;            ///< True if the box was terminated because it was small enough.
+};
 
 /**
  * @class Solver
@@ -95,11 +135,19 @@ public:
      */
     ~Solver();
 
-    // TODO: Add solver operations
-    // - Find all roots in an interval
-    // - Find roots with specified precision
-    // - Isolate roots
-    // - Refine root approximations
+    /**
+     * @brief Run a subdivision-based search for root regions.
+     *
+     * The system is assumed to be defined on the normalized domain [0,1]^n.
+     * The algorithm maintains a priority queue of boxes ordered by subdivision
+     * depth, contracts them using a root bounding method, and either refines or
+     * subdivides them, until all boxes are small enough or the maximum depth is
+     * reached.
+     */
+    std::vector<SubdivisionBoxResult>
+    subdivisionSolve(const PolynomialSystem& system,
+                     const SubdivisionConfig& config,
+                     RootBoundingMethod method = RootBoundingMethod::None) const;
 
 private:
     // TODO: Add member variables

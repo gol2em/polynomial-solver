@@ -8,5 +8,18 @@ add_executable(test_polynomial_graph test_polynomial_graph.cpp)
 target_link_libraries(test_polynomial_graph PRIVATE solver polynomial de_casteljau geometry)
 add_test(NAME PolynomialGraphTest COMMAND test_polynomial_graph)
 
-message(STATUS "Tests directory configured (polynomial conversion and graph tests enabled)")
+add_executable(test_polynomial_system test_polynomial_system.cpp)
+target_link_libraries(test_polynomial_system PRIVATE solver polynomial de_casteljau geometry)
+add_test(NAME PolynomialSystemExampleTest COMMAND test_polynomial_system)
+
+add_executable(test_solver_subdivision test_solver_subdivision.cpp)
+target_link_libraries(test_solver_subdivision PRIVATE solver polynomial de_casteljau geometry)
+add_test(NAME SolverSubdivisionTest COMMAND test_solver_subdivision)
+add_executable(test_geometry_convex test_geometry_convex.cpp)
+target_link_libraries(test_geometry_convex PRIVATE geometry)
+add_test(NAME GeometryConvexTest COMMAND test_geometry_convex)
+
+
+
+message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 

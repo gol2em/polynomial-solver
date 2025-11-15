@@ -38,6 +38,43 @@ double DeCasteljau::evaluate1D(const std::vector<double>& bernstein_coeffs,
     return tmp[0];
 }
 
+void DeCasteljau::subdivide1D(const std::vector<double>& bernstein_coeffs,
+                              double t,
+                              std::vector<double>& left,
+                              std::vector<double>& right)
+{
+    const std::size_t n = bernstein_coeffs.size();
+    if (n == 0u) {
+        left.clear();
+        right.clear();
+        return;
+    }
+
+    const std::size_t degree = n - 1u;
+
+    // Build the De Casteljau triangle.
+    std::vector<std::vector<double>> b(degree + 1u);
+    b[0] = bernstein_coeffs;
+
+    for (std::size_t r = 1; r <= degree; ++r) {
+        const std::size_t upper = degree - r + 1u;
+        b[r].resize(upper);
+        for (std::size_t i = 0; i < upper; ++i) {
+            b[r][i] = (1.0 - t) * b[r - 1u][i] + t * b[r - 1u][i + 1u];
+        }
+    }
+
+    left.resize(n);
+    right.resize(n);
+
+    // Left segment: control points b[j][0], j = 0..degree.
+    // Right segment: control points b[degree-j][j], j = 0..degree.
+    for (std::size_t j = 0; j <= degree; ++j) {
+        left[j]  = b[j][0];
+        right[j] = b[degree - j][j];
+    }
+}
+
 double DeCasteljau::evaluateTensorProduct(const std::vector<unsigned int>& degrees,
                                           const std::vector<double>& bernstein_coeffs,
                                           const std::vector<double>& parameters)
