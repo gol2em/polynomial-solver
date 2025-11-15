@@ -15,9 +15,9 @@ This document describes the command-line parameters available for the polynomial
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--debug` | flag | disabled | Enable debug output for geometric operations |
-| `--crit <value>` | double | 0.8 | CRIT shrink factor for subdivision convergence |
-| `--tolerance <value>` | double | 1e-3 | Minimum box width tolerance (convergence criterion) |
+| `--tolerance <value>` | double | 1e-3 | Box width tolerance (convergence criterion) |
 | `--max-depth <value>` | unsigned int | 20 | Maximum subdivision depth |
+| `--max-boxes <value>` | unsigned int | 1000 | Max boxes per depth for degeneracy detection |
 | `--help` | flag | - | Show help message and exit |
 
 ### Examples
@@ -34,7 +34,7 @@ This document describes the command-line parameters available for the polynomial
 
 **Run with custom parameters:**
 ```bash
-./bin/polynomial_solver_app --debug --crit 0.9 --tolerance 1e-4 --max-depth 25
+./bin/polynomial_solver_app --debug --tolerance 1e-4 --max-depth 25 --max-boxes 500
 ```
 
 ## Test Suite (`test_solver_subdivision`)
@@ -84,31 +84,13 @@ This is useful for:
 
 **Note:** Debug output can be verbose. Consider piping to a file or using grep to filter.
 
-### `--crit <value>`
-
-The CRIT shrink factor determines when a contracted box is considered "small enough" to stop subdividing.
-
-- **Range:** 0.0 to 1.0
-- **Default:** 0.8
-- **Meaning:** If the contracted box width is less than `crit * original_box_width`, the box is considered converged
-
-**Higher values** (e.g., 0.9):
-- More aggressive convergence criterion
-- Fewer subdivisions
-- Faster but potentially less accurate
-
-**Lower values** (e.g., 0.5):
-- More conservative convergence criterion
-- More subdivisions
-- Slower but potentially more accurate
-
 ### `--tolerance <value>`
 
-The minimum box width tolerance is the absolute minimum width a box can have in any dimension before it's considered converged.
+The box width tolerance is the absolute minimum width a box can have in any dimension before it's considered converged.
 
 - **Range:** > 0.0
 - **Default:** 1e-3
-- **Meaning:** If any dimension of the box is smaller than this value, stop subdividing
+- **Meaning:** The solver iteratively contracts boxes using root bounding methods. When all dimensions of a box are smaller than this tolerance, the box is considered converged and returned as a root candidate.
 
 **Smaller values** (e.g., 1e-6):
 - Higher precision
@@ -118,6 +100,24 @@ The minimum box width tolerance is the absolute minimum width a box can have in 
 **Larger values** (e.g., 1e-2):
 - Lower precision
 - Fewer subdivisions
+- Faster computation
+
+**Workflow:**
+1. Start with a box (initially [0,1]^n)
+2. Compute bounding box of roots using the selected method
+3. If empty, discard the box
+4. If all dimensions < tolerance, converge
+5. Else, make the bounding box the new region and iterate from step 2
+6. If not converged after iteration, subdivide and continue
+
+**Smaller values** (e.g., 1e-6):
+- Higher precision
+- More iterations/subdivisions
+- Slower computation
+
+**Larger values** (e.g., 1e-2):
+- Lower precision
+- Fewer iterations/subdivisions
 - Faster computation
 
 **Note:** This is different from the geometric tolerance (1e-12), which is used for geometric comparisons and remains at machine precision.
@@ -139,6 +139,34 @@ The maximum subdivision depth limits how many times a box can be subdivided.
 - Limit subdivision depth
 - Faster but may miss small root regions
 - Useful for quick exploratory runs
+
+### `--max-boxes <value>`
+
+The maximum number of boxes allowed at any single depth level before declaring a degenerate case.
+
+- **Range:** > 0
+- **Default:** 1000
+- **Meaning:** If the number of boxes at a given depth exceeds this threshold, the solver terminates and returns a degeneracy marker
+
+**Purpose:** Detect degenerate cases such as:
+- Multiple roots with high multiplicity
+- Infinite solution sets (e.g., a curve of roots in 2D systems)
+- Numerical instabilities causing excessive subdivision
+
+**Higher values** (e.g., 5000):
+- Allow more boxes before declaring degeneracy
+- May take longer to detect degenerate cases
+- Useful for systems with many isolated roots
+
+**Lower values** (e.g., 100):
+- Detect degeneracy earlier
+- Faster termination for degenerate cases
+- May prematurely terminate for systems with many roots
+
+**Degeneracy marker:** When degeneracy is detected, the solver returns a special marker box with:
+- `depth = max_depth + 1`
+- `lower = [-1, -1, ...]` (invalid coordinates)
+- `upper = [-1, -1, ...]` (invalid coordinates)
 
 ## Demo Script
 
