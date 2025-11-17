@@ -67,3 +67,4 @@ docs/_build/
 graph_*.png
 python/graph_*.png
 
+*.tar.gz

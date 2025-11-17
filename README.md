@@ -1,134 +1,129 @@
 # Polynomial Solver
 
-A C++11 implementation of a polynomial solver using De Casteljau subdivision algorithm.
+A high-performance C++11 library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
 
-GitHub repository: https://github.com/gol2em/polynomial-solver.git
+**GitHub**: https://github.com/gol2em/polynomial-solver.git
+
+## Features
+
+- **Multivariate Polynomial Support**: Handle polynomials in multiple variables with arbitrary degrees
+- **Bernstein Basis Representation**: Numerically stable polynomial representation with power↔Bernstein conversion
+- **Multiple Root Bounding Methods**:
+  - **GraphHull**: Exact convex hull-based bounding in graph space
+  - **ProjectedPolyhedral**: Direction-by-direction projection method
+  - **None**: Uniform subdivision (baseline)
+- **Intelligent Degeneracy Detection**: Automatically detects degenerate cases (multiple roots, infinite solutions)
+- **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
+- **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
+- **Comprehensive Test Suite**: 11 test suites covering all major functionality
+- **Python Visualization**: Optional visualization tools for graphs and control points
+
+## Quick Start
+
+See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
+
+### 1. Check Prerequisites
+
+```bash
+./check_prerequisites.sh
+```
+
+### 2. Build
+
+```bash
+./build.sh --test
+```
+
+### 3. Run Examples
+
+```bash
+./build/bin/test_method_comparison
+```
 
 ## Project Structure
 
 ```
 polynomial-solver/
 ├── include/              # Header files
-│   ├── polynomial.h      # Polynomial class interface
-│   ├── geometry.h        # Geometry tools interface
-│   ├── de_casteljau.h    # De Casteljau algorithm interface
-│   └── solver.h          # Main solver interface
-├── src/                  # Source files
-│   ├── polynomial.cpp    # Polynomial implementation
-│   ├── geometry.cpp      # Geometry tools implementation
-│   ├── de_casteljau.cpp  # De Casteljau algorithm implementation
-│   ├── solver.cpp        # Main solver implementation
-│   └── main.cpp          # Application entry point
-├── tests/                # Unit tests (conversion, graph, etc.)
+│   ├── polynomial.h      # Multivariate polynomial class
+│   ├── solver.h          # Main solver interface
+│   ├── geometry.h        # Geometric algorithms
+│   └── de_casteljau.h    # De Casteljau algorithm
+├── src/                  # Implementation files
+│   ├── polynomial.cpp
+│   ├── solver.cpp
+│   ├── geometry.cpp
+│   ├── de_casteljau.cpp
+│   └── main.cpp
+├── tests/                # Test suite (11 tests)
 ├── python/               # Python visualization tools
-│   ├── visualize.py                      # General visualization entry point (stub)
-│   └── visualize_graph_from_test.py      # Visualize graph/control-point test data
-├── build/                # Build directory (generated)
-├── .venv/                # Python virtual environment managed by uv
-└── CMakeLists.txt        # CMake configuration
+├── docs/                 # Documentation
+├── build.sh              # Automated build script
+├── check_prerequisites.sh # Prerequisite checker
+└── QUICKSTART.md         # Quick start guide
 ```
 
-## Modules
+## Algorithm Overview
 
-### 1. Polynomial Module
-- Polynomial representation and manipulation
-- Arithmetic operations
-- Evaluation and differentiation
+### Root Bounding Methods
 
-### 2. Geometry Module
-- 2D point representation
-- Interval operations
-- Geometric utilities
+#### GraphHull Method
+- Computes convex hull of graph control points in R^{n+1}
+- Intersects with hyperplane x_{n+1} = 0
+- Projects to R^n parameter space
+- Exact for linear functions (machine epsilon error)
 
-### 3. De Casteljau Module
-- De Casteljau subdivision algorithm
-- Curve subdivision and evaluation
-- Control point manipulation
+#### ProjectedPolyhedral Method
+- Processes each direction independently
+- Projects to 2D (direction + function value)
+- Computes convex hull and intersects with axis
+- Simpler and more modular than GraphHull
 
-### 4. Solver Module
-- Main solver interface
-- Root finding algorithms
-- Root isolation and refinement
+### Subdivision Solver Workflow
 
-### 5. Python Visualization
-- Polynomial plotting
-- Root visualization
-- Subdivision process visualization
+1. Start with region [0,1]^n
+2. Compute bounding box using selected method
+3. If empty: discard (no roots)
+4. If small enough: mark as converged
+5. Else: subdivide and add to queue
+6. Process boxes by depth (breadth-first)
+7. Degeneracy detection for degenerate cases
 
-## Build Instructions
+## Test Suite
 
-### Prerequisites
-- CMake 3.15 or higher
-- C++11 compatible compiler (GCC 13.2.0 or higher)
-- Python 3.11 or higher (for visualization)
-- uv (for managing the `.venv` Python virtual environment)
+All 11 test suites pass:
 
-### Building the Project
+| Test | Description |
+|------|-------------|
+| PolynomialConversionTest | Power ↔ Bernstein conversion |
+| PolynomialGraphTest | Graph control points |
+| PolynomialSystemExampleTest | System evaluation |
+| SolverSubdivisionTest | Subdivision solver |
+| GeometryConvexTest | Convex hull algorithms |
+| 2DHyperplaneIntersectionTest | Hyperplane intersection |
+| 2DConvexHullRobustTest | Robust 2D convex hull |
+| 2DHullVertexOrderTest | Vertex ordering |
+| DegenerateBoxesTest | Degenerate case handling |
+| LinearGraphHullTest | Linear function verification |
+| ProjectedPolyhedralTest | PP method verification |
 
-```bash
-# Create build directory
-mkdir -p build
-cd build
+## Documentation
 
-# Configure with CMake
-cmake ..
+- **[QUICKSTART.md](QUICKSTART.md)**: Quick start guide
+- **[docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md)**: Geometric algorithms
+- **[docs/GEOMETRY_ROBUSTNESS.md](docs/GEOMETRY_ROBUSTNESS.md)**: Robustness improvements
+- **[docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md)**: Degeneracy handling
 
-# Build
-make
+## Moving to Another Environment
 
-# Run the application
-./bin/polynomial_solver_app
-```
+This project is fully portable. To move to another environment:
 
-### Running Tests
+1. **Copy the entire project directory**
+2. **Run prerequisite checker**: `./check_prerequisites.sh`
+3. **Install missing dependencies** (if any)
+4. **Build**: `./build.sh --test`
 
-```bash
-cd build
-ctest
-```
-
-## Python Visualization
-
-### Environment
-
-```bash
-# From the project root
-uv sync  # or equivalent to create/manage .venv
-source .venv/bin/activate
-```
-
-### Visualize graph/control-point test cases
-
-After building and running the C++ tests (from `build/`):
-
-```bash
-cd build
-ctest --output-on-failure
-```
-
-This writes CSV files into `build/tests/` for the graph/control-point tests.
-From the project root you can then run:
-
-```bash
-python python/visualize_graph_from_test.py
-```
-
-This produces PNGs in the `python/` directory showing:
-- the 1D graph and its Bernstein control points, and
-- the 2D surface and its 3D Bernstein control net.
-
-( `python/visualize.py` is kept as a stub for future, more general
-visualization tools.)
-
-## Development Status
-
-Core components are implemented and tested:
-- Multivariate Bernstein polynomial representation and stable power→Bernstein conversion
-- De Casteljau evaluation in 1D and 2D
-- Graph control-net construction for scalar polynomials and systems
-- Unit tests for coefficient conversion and graph/control-net correctness
-
-The solver’s higher-level root-finding and subdivision strategies are still evolving.
+All dependencies are standard C++11 libraries. No external libraries required.
 
 ## Author
 
@@ -138,4 +133,3 @@ The solver’s higher-level root-finding and subdivision strategies are still ev
 ## License
 
 TBD
-
