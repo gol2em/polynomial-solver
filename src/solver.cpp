@@ -2,7 +2,12 @@
 #include <queue>
 #include <map>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
 #include <limits>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 
 /**
@@ -11,6 +16,20 @@
  */
 
 namespace polynomial_solver {
+
+// Helper function to create directory if it doesn't exist
+static void ensure_directory_exists(const std::string& path) {
+    std::size_t pos = path.find_last_of("/\\");
+    if (pos != std::string::npos) {
+        std::string dir = path.substr(0, pos);
+        // Try to create directory (ignore errors if it already exists)
+        #ifdef _WIN32
+            _mkdir(dir.c_str());
+        #else
+            mkdir(dir.c_str(), 0755);
+        #endif
+    }
+}
 
 PolynomialSystem::PolynomialSystem()
     : dimension_(0u)
@@ -92,6 +111,20 @@ Solver::~Solver() {
 
 namespace {
 
+// Forward declaration for internal helper function
+// This function is always available, but dump I/O is only compiled when ENABLE_GEOMETRY_DUMP is defined
+bool compute_projected_polyhedral_bounds_with_dump(
+    const std::vector<polynomial_solver::Polynomial>& polys,
+    std::size_t dim,
+    std::vector<double>& local_bound_lower,
+    std::vector<double>& local_bound_upper,
+    const std::string& dump_file,
+    const std::vector<double>& global_box_lower,
+    const std::vector<double>& global_box_upper,
+    unsigned int depth,
+    unsigned int iteration,
+    const std::string& decision);
+
 struct SubdivisionNode {
     std::vector<double> box_lower;  ///< Global box lower corner in [0,1]^n.
     std::vector<double> box_upper;  ///< Global box upper corner in [0,1]^n.
@@ -161,26 +194,111 @@ int analyze_box_dimension(const std::vector<double>& lower,
  *
  * Returns true if a non-empty bounding box is found, false otherwise.
  */
+/**
+ * @brief Compute root bounding box using the projected polyhedral method.
+ *
+ * This function implements the following workflow for each direction i:
+ * 1. For each equation, project all graph control points to 2D (coordinate i + function value).
+ * 2. For each equation, compute convex hull of these 2D points.
+ * 3. For each equation, intersect with horizontal axis (function value = 0).
+ * 4. For each equation, project to 1D to get an interval.
+ * 5. Intersect all intervals from all equations to get the bound in direction i.
+ *
+ * Returns true if a non-empty bounding box is found, false otherwise.
+ */
 bool compute_projected_polyhedral_bounds(
     const std::vector<polynomial_solver::Polynomial>& polys,
     std::size_t dim,
     std::vector<double>& local_bound_lower,
     std::vector<double>& local_bound_upper)
 {
+    // Forward to the dump version with empty dump file
+    // This ensures we maintain a single implementation
+    // When ENABLE_GEOMETRY_DUMP is disabled, the dump I/O code is compiled out
+    std::vector<double> dummy_box_lower(dim, 0.0);
+    std::vector<double> dummy_box_upper(dim, 1.0);
+    return compute_projected_polyhedral_bounds_with_dump(
+        polys, dim, local_bound_lower, local_bound_upper,
+        "",  // empty dump file means no dumping
+        dummy_box_lower, dummy_box_upper,
+        0, 0, "CONTRACT");
+}
+
+/**
+ * @brief Compute root bounding box using projected polyhedral method with optional geometry dump.
+ *
+ * Same as compute_projected_polyhedral_bounds but with optional dump of geometric data.
+ * If dump_file is not empty AND ENABLE_GEOMETRY_DUMP is defined, writes:
+ * - Projected 2D points for each direction and equation
+ * - Convex hull vertices
+ * - Intersection with axis
+ * - Final bounding box
+ *
+ * When ENABLE_GEOMETRY_DUMP is not defined, all dump I/O code is removed at compile time.
+ */
+bool compute_projected_polyhedral_bounds_with_dump(
+    const std::vector<polynomial_solver::Polynomial>& polys,
+    std::size_t dim,
+    std::vector<double>& local_bound_lower,
+    std::vector<double>& local_bound_upper,
+    const std::string& dump_file,
+    const std::vector<double>& global_box_lower,
+    const std::vector<double>& global_box_upper,
+    unsigned int depth,
+    unsigned int iteration,
+    const std::string& decision = "CONTRACT")
+{
     if (polys.empty() || dim == 0u) {
         return false;
     }
+
+#ifdef ENABLE_GEOMETRY_DUMP
+    // Dump I/O setup (only compiled when dump is enabled)
+    std::ofstream dump;
+    bool do_dump = !dump_file.empty();
+    if (do_dump) {
+        dump.open(dump_file.c_str(), std::ios::app);
+        if (!dump.is_open()) {
+            std::cerr << "Warning: Failed to open dump file: " << dump_file << std::endl;
+            do_dump = false;
+        } else {
+            dump << std::setprecision(16);
+            dump << "# Iteration " << iteration << ", Depth " << depth << "\n";
+            dump << "# Decision: " << decision << "\n";
+            dump << "# Global box: [";
+            for (std::size_t i = 0; i < dim; ++i) {
+                if (i > 0) dump << ", ";
+                dump << global_box_lower[i] << ", " << global_box_upper[i];
+            }
+            dump << "]\n";
+        }
+    }
+#endif
 
     local_bound_lower.resize(dim);
     local_bound_upper.resize(dim);
 
     // Process each direction independently
     for (std::size_t dir = 0; dir < dim; ++dir) {
+#ifdef ENABLE_GEOMETRY_DUMP
+        if (do_dump) {
+            dump << "\n## Direction " << dir << "\n";
+        }
+#endif
+
         // For this direction, we'll compute the intersection of intervals from all equations
         double dir_min = 0.0;
         double dir_max = 1.0;
 
-        for (const polynomial_solver::Polynomial& poly : polys) {
+        for (std::size_t eq_idx = 0; eq_idx < polys.size(); ++eq_idx) {
+            const polynomial_solver::Polynomial& poly = polys[eq_idx];
+
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "\n### Equation " << eq_idx << "\n";
+            }
+#endif
+
             // Get graph control points in R^{n+1}
             std::vector<double> control_points;
             poly.graphControlPoints(control_points);
@@ -192,27 +310,68 @@ bool compute_projected_polyhedral_bounds(
             std::vector<std::vector<double>> projected_2d;
             projected_2d.reserve(num_coeffs);
 
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Projected_Points " << num_coeffs << "\n";
+            }
+#endif
+
             for (std::size_t i = 0; i < num_coeffs; ++i) {
                 std::vector<double> pt_2d(2);
                 pt_2d[0] = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
                 pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
                 projected_2d.push_back(pt_2d);
+
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (do_dump) {
+                    dump << pt_2d[0] << " " << pt_2d[1] << "\n";
+                }
+#endif
             }
 
             // Compute convex hull in 2D
             polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
+
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "ConvexHull " << hull_2d.vertices.size() << "\n";
+                for (const std::vector<double>& v : hull_2d.vertices) {
+                    dump << v[0] << " " << v[1] << "\n";
+                }
+            }
+#endif
 
             // Intersect with horizontal axis (y = 0, i.e., last coordinate = 0)
             polynomial_solver::ConvexPolyhedron intersection_1d;
             if (!polynomial_solver::intersect_convex_polyhedron_with_last_coordinate_zero(
                     hull_2d, intersection_1d)) {
                 // No intersection with axis for this equation means no roots
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (do_dump) {
+                    dump << "Intersection EMPTY\n";
+                    dump.close();
+                }
+#endif
                 return false;
             }
+
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Intersection " << intersection_1d.vertices.size() << "\n";
+                for (const std::vector<double>& v : intersection_1d.vertices) {
+                    dump << v[0] << " " << v[1] << "\n";
+                }
+            }
+#endif
 
             // Project to 1D by taking the first coordinate (drop the second which is 0)
             // Find min and max of the first coordinate
             if (intersection_1d.vertices.empty()) {
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (do_dump) {
+                    dump.close();
+                }
+#endif
                 return false;
             }
 
@@ -224,12 +383,24 @@ bool compute_projected_polyhedral_bounds(
                 if (v[0] > eq_max) eq_max = v[0];
             }
 
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Interval [" << eq_min << ", " << eq_max << "]\n";
+            }
+#endif
+
             // Intersect with current bounds for this direction
             if (eq_min > dir_min) dir_min = eq_min;
             if (eq_max < dir_max) dir_max = eq_max;
 
             // Check if intersection is empty
             if (dir_min > dir_max) {
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (do_dump) {
+                    dump << "Direction_Interval EMPTY\n";
+                    dump.close();
+                }
+#endif
                 return false;
             }
         }
@@ -246,9 +417,44 @@ bool compute_projected_polyhedral_bounds(
 
         // Check for empty interval
         if (local_bound_lower[dir] > local_bound_upper[dir]) {
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Final_Interval EMPTY\n";
+                dump.close();
+            }
+#endif
             return false;
         }
+
+#ifdef ENABLE_GEOMETRY_DUMP
+        if (do_dump) {
+            dump << "Final_Interval [" << local_bound_lower[dir] << ", " << local_bound_upper[dir] << "]\n";
+        }
+#endif
     }
+
+#ifdef ENABLE_GEOMETRY_DUMP
+    if (do_dump) {
+        dump << "\n# Bounding Box (local): [";
+        for (std::size_t i = 0; i < dim; ++i) {
+            if (i > 0) dump << ", ";
+            dump << local_bound_lower[i] << ", " << local_bound_upper[i];
+        }
+        dump << "]\n";
+
+        // Compute global bounding box
+        dump << "# Bounding Box (global): [";
+        for (std::size_t i = 0; i < dim; ++i) {
+            if (i > 0) dump << ", ";
+            double global_low = global_box_lower[i] + local_bound_lower[i] * (global_box_upper[i] - global_box_lower[i]);
+            double global_high = global_box_lower[i] + local_bound_upper[i] * (global_box_upper[i] - global_box_lower[i]);
+            dump << global_low << ", " << global_high;
+        }
+        dump << "]\n\n";
+
+        dump.close();
+    }
+#endif
 
     return true;
 }
@@ -413,6 +619,32 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
     const double tolerance = config.tolerance;
 
+    // Setup dump file if requested
+    std::string dump_file;
+    unsigned int dump_iteration = 0;
+    if (config.dump_geometry) {
+        dump_file = config.dump_prefix + "_geometry.txt";
+        // Ensure directory exists
+        ensure_directory_exists(dump_file);
+        // Clear the file
+        std::ofstream clear_dump(dump_file.c_str());
+        if (clear_dump.is_open()) {
+            clear_dump << "# Polynomial Solver Geometry Dump\n";
+            clear_dump << "# Method: ";
+            if (method == RootBoundingMethod::ProjectedPolyhedral) {
+                clear_dump << "ProjectedPolyhedral\n";
+            } else if (method == RootBoundingMethod::GraphHull) {
+                clear_dump << "GraphHull\n";
+            } else {
+                clear_dump << "None\n";
+            }
+            clear_dump << "# Dimension: " << dim << "\n";
+            clear_dump << "# Number of equations: " << system.equationCount() << "\n";
+            clear_dump << "\n";
+            clear_dump.close();
+        }
+    }
+
     // Track boxes per depth for degeneracy detection
     std::map<unsigned int, std::size_t> boxes_per_depth;
 
@@ -504,6 +736,8 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
         bool converged = false;
         const unsigned int max_iterations = 100u;  // Prevent infinite loops
+        std::vector<bool> final_needs_subdivision(dim, false);  // Track which dimensions need subdivision
+        bool box_was_pruned = false;  // Track if box was pruned (to skip subdivision)
 
         for (unsigned int iter = 0; iter < max_iterations; ++iter) {
             // Step 1: Compute bounding box of roots in local [0,1]^n space
@@ -520,42 +754,154 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 }
             } else if (method == RootBoundingMethod::ProjectedPolyhedral) {
                 // Use projected polyhedral method (direction-by-direction)
-                if (!compute_projected_polyhedral_bounds(node.polys, dim,
-                                                         local_bound_lower, local_bound_upper)) {
-                    // Step 2: If empty, quit (no roots in this box)
-                    has_roots = false;
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (config.dump_geometry) {
+                    // Determine decision based on strategy
+                    std::ostringstream decision_stream;
+                    decision_stream << "BOUNDING (";
+                    if (config.strategy == SubdivisionStrategy::ContractFirst) {
+                        decision_stream << "ContractFirst";
+                    } else if (config.strategy == SubdivisionStrategy::SubdivideFirst) {
+                        decision_stream << "SubdivideFirst";
+                    } else if (config.strategy == SubdivisionStrategy::Simultaneous) {
+                        decision_stream << "Simultaneous";
+                    }
+                    decision_stream << ", iter " << iter << ")";
+
+                    // Use dump version
+                    if (!compute_projected_polyhedral_bounds_with_dump(
+                            node.polys, dim,
+                            local_bound_lower, local_bound_upper,
+                            dump_file,
+                            node.box_lower, node.box_upper,
+                            node.depth, dump_iteration++,
+                            decision_stream.str())) {
+                        // Step 2: If empty, quit (no roots in this box)
+                        has_roots = false;
+                    }
+                } else
+#endif
+                {
+                    // Use regular version
+                    if (!compute_projected_polyhedral_bounds(node.polys, dim,
+                                                             local_bound_lower, local_bound_upper)) {
+                        // Step 2: If empty, quit (no roots in this box)
+                        has_roots = false;
+                    }
                 }
             }
             // For RootBoundingMethod::None, keep the default [0,1]^n bounds
 
             if (!has_roots) {
                 // No roots in this box; discard it
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                    std::ofstream dump(dump_file.c_str(), std::ios::app);
+                    if (dump.is_open()) {
+                        dump << "# FINAL_DECISION: PRUNED (empty bounding box, no roots)\n\n";
+                        dump.close();
+                    }
+                }
+#endif
+                box_was_pruned = true;
                 break;
             }
 
-            // Step 3: Contract the box to the bounding box
-            // Make bounding box the new region
+            // Step 3: Analyze contraction per direction
+            std::vector<double> contraction_ratio(dim);
+            std::vector<bool> needs_subdivision(dim, false);
+            bool any_needs_subdivision = false;
+
             for (std::size_t i = 0; i < dim; ++i) {
-                const double a = local_bound_lower[i];
-                const double b = local_bound_upper[i];
+                const double old_width = node.box_upper[i] - node.box_lower[i];
+                const double new_width = (local_bound_upper[i] - local_bound_lower[i]) * old_width;
+                contraction_ratio[i] = (old_width > 0.0) ? (new_width / old_width) : 0.0;
 
-                const double old_low = node.box_lower[i];
-                const double old_high = node.box_upper[i];
-                const double old_width = old_high - old_low;
-
-                const double new_low = old_low + a * old_width;
-                const double new_high = old_low + b * old_width;
-
-                node.box_lower[i] = new_low;
-                node.box_upper[i] = new_high;
-
-                // Restrict polynomials to new interval
-                for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
-                    node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
+                // Check if this direction contracted enough
+                if (contraction_ratio[i] > config.contraction_threshold && old_width > tolerance) {
+                    needs_subdivision[i] = true;
+                    any_needs_subdivision = true;
                 }
             }
 
-            // Step 4: Check if contracted box is small enough
+#ifdef ENABLE_GEOMETRY_DUMP
+            // Dump contraction analysis
+            if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                std::ofstream dump(dump_file.c_str(), std::ios::app);
+                if (dump.is_open()) {
+                    dump << std::setprecision(6);
+                    dump << "# Contraction Analysis:\n";
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        dump << "#   Direction " << i << ": ratio=" << contraction_ratio[i]
+                             << " (threshold=" << config.contraction_threshold << ")";
+                        if (needs_subdivision[i]) {
+                            dump << " -> NEEDS_SUBDIVISION";
+                        } else {
+                            dump << " -> OK";
+                        }
+                        dump << "\n";
+                    }
+                    dump.close();
+                }
+            }
+#endif
+
+            // Step 4: Apply strategy-specific logic
+            bool should_subdivide_now = false;
+            bool should_contract = true;
+
+            if (config.strategy == SubdivisionStrategy::SubdivideFirst) {
+                // SubdivideFirst: If any direction didn't contract enough, subdivide immediately
+                if (any_needs_subdivision) {
+                    should_subdivide_now = true;
+                    should_contract = false;
+                }
+            } else if (config.strategy == SubdivisionStrategy::Simultaneous) {
+                // Simultaneous: Subdivide in non-contracting directions, contract in others
+                if (any_needs_subdivision) {
+                    should_subdivide_now = true;
+                    should_contract = true;  // Will contract only in directions that don't need subdivision
+                }
+            }
+            // ContractFirst: Always contract, will subdivide later if needed (default behavior)
+
+            // Step 5: Contract the box (if strategy allows)
+            if (should_contract) {
+                for (std::size_t i = 0; i < dim; ++i) {
+                    // For Simultaneous strategy, only contract directions that don't need subdivision
+                    if (config.strategy == SubdivisionStrategy::Simultaneous && needs_subdivision[i]) {
+                        continue;  // Skip contraction for this direction
+                    }
+
+                    const double a = local_bound_lower[i];
+                    const double b = local_bound_upper[i];
+
+                    const double old_low = node.box_lower[i];
+                    const double old_high = node.box_upper[i];
+                    const double old_width = old_high - old_low;
+
+                    const double new_low = old_low + a * old_width;
+                    const double new_high = old_low + b * old_width;
+
+                    node.box_lower[i] = new_low;
+                    node.box_upper[i] = new_high;
+
+                    // Restrict polynomials to new interval
+                    for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
+                        node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
+                    }
+                }
+            }
+
+            // Step 6: If strategy says subdivide now, break out of iteration loop
+            if (should_subdivide_now) {
+                // Save which dimensions need subdivision for later
+                final_needs_subdivision = needs_subdivision;
+                // Will subdivide after the iteration loop
+                break;
+            }
+
+            // Step 7: Check if contracted box is small enough
             bool all_small = true;
             for (std::size_t i = 0; i < dim; ++i) {
                 const double width = node.box_upper[i] - node.box_lower[i];
@@ -566,7 +912,16 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             }
 
             if (all_small) {
-                // Step 5: Box is small enough, converged
+                // Step 8: Box is small enough, converged
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                    std::ofstream dump(dump_file.c_str(), std::ios::app);
+                    if (dump.is_open()) {
+                        dump << "# FINAL_DECISION: CONTRACTED (box small enough, converged)\n\n";
+                        dump.close();
+                    }
+                }
+#endif
                 converged = true;
                 break;
             }
@@ -669,16 +1024,48 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             continue;
         }
 
+        // Skip subdivision if box was pruned
+        if (box_was_pruned) {
+            continue;
+        }
+
         // --- Subdivision step ----------------------------------------------
         // Subdivide along axes that are not small enough.
         // Only subdivide dimensions whose width is larger than tolerance.
         std::vector<bool> split_dim(dim, false);
-        for (std::size_t i = 0; i < dim; ++i) {
-            const double width = node.box_upper[i] - node.box_lower[i];
-            if (width > tolerance) {
-                split_dim[i] = true;
+
+        if (config.strategy == SubdivisionStrategy::Simultaneous) {
+            // For Simultaneous strategy, only subdivide dimensions that didn't contract enough
+            split_dim = final_needs_subdivision;
+        } else {
+            // For ContractFirst and SubdivideFirst, subdivide all dimensions not small enough
+            for (std::size_t i = 0; i < dim; ++i) {
+                const double width = node.box_upper[i] - node.box_lower[i];
+                if (width > tolerance) {
+                    split_dim[i] = true;
+                }
             }
         }
+
+        // Dump subdivision decision
+#ifdef ENABLE_GEOMETRY_DUMP
+        if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+            std::ofstream dump(dump_file.c_str(), std::ios::app);
+            if (dump.is_open()) {
+                dump << "# FINAL_DECISION: SUBDIVIDE in [";
+                bool first = true;
+                for (std::size_t i = 0; i < dim; ++i) {
+                    if (split_dim[i]) {
+                        if (!first) dump << ", ";
+                        dump << "axis " << i;
+                        first = false;
+                    }
+                }
+                dump << "]\n\n";
+                dump.close();
+            }
+        }
+#endif
 
         // Seed for children: start from the (possibly contracted) node.
         std::vector<SubdivisionNode> children;

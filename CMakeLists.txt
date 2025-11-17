@@ -6,6 +6,17 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Option to enable geometry dump for debugging
+# Set to ON for development, OFF for release builds
+option(ENABLE_GEOMETRY_DUMP "Enable geometry dump for debugging" ON)
+
+if(ENABLE_GEOMETRY_DUMP)
+    add_compile_definitions(ENABLE_GEOMETRY_DUMP)
+    message(STATUS "Geometry dump: ENABLED (development mode)")
+else()
+    message(STATUS "Geometry dump: DISABLED (release mode)")
+endif()
+
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -45,6 +56,15 @@ target_link_libraries(polynomial_solver_app solver polynomial geometry de_castel
 # Optional: Enable testing
 enable_testing()
 add_subdirectory(tests)
+
+# Optional: Build examples
+option(BUILD_EXAMPLES "Build example programs" ON)
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+    message(STATUS "Examples: ENABLED")
+else()
+    message(STATUS "Examples: DISABLED")
+endif()
 
 # Print configuration summary
 message(STATUS "")

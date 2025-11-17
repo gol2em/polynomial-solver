@@ -10,6 +10,7 @@
  */
 
 #include <vector>
+#include <string>
 
 #include "polynomial.h"
 #include "geometry.h"
@@ -113,17 +114,38 @@ enum class RootBoundingMethod {
 };
 
 /**
+ * @brief Subdivision strategy selector for the subdivision solver.
+ *
+ * - ContractFirst: Always contract first, subdivide only when contraction doesn't shrink enough (default).
+ * - SubdivideFirst: When any direction doesn't shrink enough, immediately subdivide in all directions.
+ * - Simultaneous: In one step, subdivide in directions that didn't shrink enough, contract in others.
+ */
+enum class SubdivisionStrategy {
+    ContractFirst,   ///< Contract iteratively, subdivide when stuck (default).
+    SubdivideFirst,  ///< Subdivide immediately when contraction is insufficient.
+    Simultaneous     ///< Subdivide non-contracting directions, contract others simultaneously.
+};
+
+/**
  * @brief Configuration parameters for the subdivision-based solver.
  */
 struct SubdivisionConfig {
     double tolerance;          ///< Absolute minimum width of a box in each dimension (convergence criterion).
     unsigned int max_depth;    ///< Maximum allowed subdivision depth (for safety/debug, should be large).
     double degeneracy_multiplier; ///< Multiplier for expected root count to detect degeneracy (default: 5.0).
+    double contraction_threshold; ///< Minimum contraction ratio to consider progress (default: 0.9).
+    SubdivisionStrategy strategy; ///< Subdivision strategy to use (default: ContractFirst).
+    bool dump_geometry;        ///< If true, dump detailed geometric information during solving.
+    std::string dump_prefix;   ///< Prefix for dump files (default: "dump").
 
     SubdivisionConfig()
         : tolerance(1e-8),
           max_depth(100u),
-          degeneracy_multiplier(5.0)
+          degeneracy_multiplier(5.0),
+          contraction_threshold(0.9),
+          strategy(SubdivisionStrategy::ContractFirst),
+          dump_geometry(false),
+          dump_prefix("dump")
     {
     }
 };

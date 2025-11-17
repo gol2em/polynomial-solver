@@ -49,9 +49,9 @@ sudo apt-get update
 # Install required packages
 sudo apt-get install -y build-essential cmake git
 
-# Optional: Install Python tools
-sudo apt-get install -y python3 python3-pip
-pip3 install numpy matplotlib
+# Optional: Install Python tools (for visualization)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Then use: uv venv .venv && source .venv/bin/activate && uv pip install numpy matplotlib
 ```
 
 #### Fedora/RHEL/CentOS
@@ -60,9 +60,8 @@ pip3 install numpy matplotlib
 # Install required packages
 sudo dnf install -y gcc-c++ cmake git make
 
-# Optional: Install Python tools
-sudo dnf install -y python3 python3-pip
-pip3 install numpy matplotlib
+# Optional: Install Python tools (for visualization)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 #### Arch Linux
@@ -71,9 +70,8 @@ pip3 install numpy matplotlib
 # Install required packages
 sudo pacman -S base-devel cmake git
 
-# Optional: Install Python tools
-sudo pacman -S python python-pip
-pip install numpy matplotlib
+# Optional: Install Python tools (for visualization)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 #### macOS
@@ -88,9 +86,8 @@ xcode-select --install
 # Install required packages
 brew install cmake git
 
-# Optional: Install Python tools
-brew install python
-pip3 install numpy matplotlib
+# Optional: Install Python tools (for visualization)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### Step 2: Clone Repository
@@ -151,10 +148,33 @@ cd build
 ctest
 
 # Expected output:
-# 100% tests passed, 0 tests failed out of 11
+# 100% tests passed, 0 tests failed out of 12
 ```
 
-### Run Example Programs
+### Run Standard Verification Workflow
+
+The circle-ellipse intersection serves as the standard verification:
+
+```bash
+# 1. Run the test with all 3 strategies
+./build/bin/test_strategies
+
+# 2. Set up Python environment (one-time)
+uv venv .venv
+source .venv/bin/activate
+uv pip install numpy matplotlib
+
+# 3. Visualize results
+python examples/visualize_circle_ellipse.py
+```
+
+**Expected Results:**
+- All 12 tests pass
+- 3 geometry dumps generated in `dumps/`
+- Visualizations generated in `visualizations/`
+- All strategies converge to root: (0.894427, 0.447214)
+
+### Run Other Example Programs
 
 ```bash
 # Method comparison
@@ -179,8 +199,9 @@ ls -lh build/lib/
 
 Expected executables:
 - `polynomial_solver_app` - Main application
-- `test_*` - Test executables (11 tests)
-- `test_method_comparison` - Method comparison tool
+- `test_*` - Test executables (12 tests)
+- `test_strategies` - Strategy comparison with geometry dumps
+- `example_circle_ellipse` - Circle-ellipse intersection example
 
 Expected libraries:
 - `libpolynomial.a` - Polynomial module
@@ -261,7 +282,7 @@ cd polynomial-solver
 
 # Configure Git
 git config user.name "gol2em"
-git config user.email "664862601@qq.com"
+git config user.email "wenyd@lsec.cc.ac.cn"
 
 # Build in debug mode
 ./build.sh --debug --test
@@ -400,7 +421,7 @@ For algorithm details, see documentation in [docs/](docs/).
 
 ## Support
 
-- **Email**: 664862601@qq.com
+- **Email**: wenyd@lsec.cc.ac.cn
 - **GitHub**: https://github.com/gol2em/polynomial-solver
 - **Issues**: https://github.com/gol2em/polynomial-solver/issues
 

@@ -47,5 +47,13 @@ add_executable(test_method_comparison test_method_comparison.cpp)
 target_link_libraries(test_method_comparison PRIVATE solver polynomial geometry de_casteljau)
 # Note: This is a comparison tool, not added to ctest
 
+add_executable(test_ellipse_dump test_ellipse_dump.cpp)
+target_link_libraries(test_ellipse_dump PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME EllipseDumpTest COMMAND test_ellipse_dump)
+
+add_executable(test_strategies test_strategies.cpp)
+target_link_libraries(test_strategies PRIVATE solver polynomial geometry de_casteljau)
+# Note: This is a comparison tool for different strategies, not added to ctest
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 

@@ -56,12 +56,40 @@ This will:
 
 Expected output:
 ```
-100% tests passed, 0 tests failed out of 11
+100% tests passed, 0 tests failed out of 12
 ```
 
 ## Running Examples
 
-### Example 1: Method Comparison
+### Example 1: Circle-Ellipse Intersection (Standard Verification)
+
+Run the standard verification workflow:
+
+```bash
+# Run the test with all 3 strategies
+./build/bin/test_strategies
+```
+
+This generates geometry dumps in `dumps/` directory for visualization.
+
+**Visualize the results:**
+
+```bash
+# Set up Python environment (one-time)
+uv venv .venv
+source .venv/bin/activate
+uv pip install numpy matplotlib
+
+# Visualize all strategies
+python examples/visualize_circle_ellipse.py
+
+# Or visualize specific strategy with limited steps
+python examples/visualize_circle_ellipse.py --strategy ContractFirst --max-steps 10
+```
+
+Output: PNG visualizations in `visualizations/viz_*/` showing step-by-step solving process.
+
+### Example 2: Method Comparison
 
 Compare GraphHull vs ProjectedPolyhedral methods:
 
@@ -71,25 +99,7 @@ Compare GraphHull vs ProjectedPolyhedral methods:
 
 Output shows both methods produce identical results for linear and quadratic systems.
 
-### Example 2: Linear Function Test
-
-Test machine epsilon precision on linear functions:
-
-```bash
-./build/bin/test_linear_graph_hull
-```
-
-Output shows exact roots with error = 2.22×10⁻¹⁶ (machine epsilon).
-
-### Example 3: ProjectedPolyhedral Method
-
-Test the PP method specifically:
-
-```bash
-./build/bin/test_projected_polyhedral
-```
-
-### Example 4: Run All Tests
+### Example 3: Run All Tests
 
 ```bash
 cd build
@@ -204,7 +214,8 @@ RootBoundingMethod::None
 - Read the full [README.md](README.md) for detailed documentation
 - Explore [docs/](docs/) for algorithm details
 - Check [tests/](tests/) for more examples
-- Use Python visualization tools in [python/](python/)
+- Try [examples/](examples/) for complete workflows
+- Use visualization tools in [tools/](tools/)
 
 ## Troubleshooting
 
@@ -236,6 +247,6 @@ ctest --output-on-failure --verbose
 ## Support
 
 For issues or questions:
-- Email: 664862601@qq.com
+- Email: wenyd@lsec.cc.ac.cn
 - GitHub: https://github.com/gol2em/polynomial-solver
 

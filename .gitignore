@@ -62,9 +62,15 @@ Testing/
 docs/_build/
 *.pdf
 
+# Geometry dump files and visualizations
+dumps/
+visualizations/
+*_geometry.txt
 
 # Generated visualization images
 graph_*.png
 python/graph_*.png
+viz_*/
+*.png
 
 *.tar.gz
