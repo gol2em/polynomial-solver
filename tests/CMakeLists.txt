@@ -31,5 +31,9 @@ add_executable(test_2d_hull_vertex_order test_2d_hull_vertex_order.cpp)
 target_link_libraries(test_2d_hull_vertex_order PRIVATE geometry)
 add_test(NAME 2DHullVertexOrderTest COMMAND test_2d_hull_vertex_order)
 
+add_executable(test_degenerate_boxes test_degenerate_boxes.cpp)
+target_link_libraries(test_degenerate_boxes PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME DegenerateBoxesTest COMMAND test_degenerate_boxes)
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 

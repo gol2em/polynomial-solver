@@ -73,6 +73,25 @@ public:
      */
     std::vector<GraphControlNet> graphControlNets() const;
 
+    /**
+     * @brief Evaluate all equations at a point.
+     *
+     * @param point Parameter values for each variable (size = dimension()).
+     * @param values Output vector of equation values (size = equationCount()).
+     */
+    void evaluate(const std::vector<double>& point, std::vector<double>& values) const;
+
+    /**
+     * @brief Check if a point is approximately a root of the system.
+     *
+     * A point is considered a root if all equation values are within tolerance.
+     *
+     * @param point Parameter values for each variable (size = dimension()).
+     * @param tolerance Maximum absolute value for each equation (default: 1e-6).
+     * @return true if point is approximately a root, false otherwise.
+     */
+    bool isApproximateRoot(const std::vector<double>& point, double tolerance = 1e-6) const;
+
 private:
     std::size_t dimension_;
     std::vector<Polynomial> equations_;

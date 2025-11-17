@@ -54,6 +54,29 @@ std::vector<GraphControlNet> PolynomialSystem::graphControlNets() const {
     return nets;
 }
 
+void PolynomialSystem::evaluate(const std::vector<double>& point, std::vector<double>& values) const {
+    values.resize(equations_.size());
+    for (std::size_t i = 0; i < equations_.size(); ++i) {
+        values[i] = equations_[i].evaluate(point);
+    }
+}
+
+bool PolynomialSystem::isApproximateRoot(const std::vector<double>& point, double tolerance) const {
+    if (point.size() != dimension_) {
+        return false;
+    }
+
+    for (const Polynomial& eq : equations_) {
+        const double value = eq.evaluate(point);
+        const double abs_value = (value >= 0.0) ? value : -value;
+        if (abs_value > tolerance) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 
 
 
@@ -91,6 +114,38 @@ struct NodeQueueCompare {
         return lhs.index > rhs.index;
     }
 };
+
+// Helper: Analyze bounding box to detect degenerate cases
+// Returns:
+//   0: Empty box (should not happen if has_roots is true)
+//   1: Single point (all dimensions < tolerance)
+//   2: Line segment (exactly one dimension >= tolerance)
+//   3: Higher dimensional box (multiple dimensions >= tolerance)
+int analyze_box_dimension(const std::vector<double>& lower,
+                          const std::vector<double>& upper,
+                          double tolerance,
+                          std::size_t& active_axis)
+{
+    const std::size_t dim = lower.size();
+    std::size_t num_active = 0;
+    active_axis = 0;
+
+    for (std::size_t i = 0; i < dim; ++i) {
+        const double width = upper[i] - lower[i];
+        if (width > tolerance) {
+            num_active++;
+            active_axis = i;  // Remember the last active axis
+        }
+    }
+
+    if (num_active == 0) {
+        return 1;  // Single point
+    } else if (num_active == 1) {
+        return 2;  // Line segment (1D problem)
+    } else {
+        return 3;  // Higher dimensional box
+    }
+}
 
 /**
  * @brief Compute root bounding box using graph convex hull method.
@@ -356,7 +411,65 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         }
 
         if (converged) {
-            // Box converged, add to results
+            // Box converged
+            // Only do degenerate box handling when using GraphHull method
+            if (method == RootBoundingMethod::GraphHull) {
+                std::size_t active_axis = 0;
+                int box_dim = analyze_box_dimension(node.box_lower, node.box_upper,
+                                                    tolerance, active_axis);
+
+                if (box_dim == 1) {
+                    // Single point: check if it's actually a root
+                    std::vector<double> center(dim);
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
+                    }
+
+                    // Create a PolynomialSystem from the current polynomials
+                    PolynomialSystem local_system(node.polys);
+
+                    // Check if center is approximately a root
+                    // Use a tolerance based on the box size
+                    double max_box_width = 0.0;
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        const double w = node.box_upper[i] - node.box_lower[i];
+                        if (w > max_box_width) {
+                            max_box_width = w;
+                        }
+                    }
+                    const double root_tolerance = std::max(1e-6, max_box_width);
+
+                    if (local_system.isApproximateRoot(center, root_tolerance)) {
+                        // It's a root, add to results
+                        SubdivisionBoxResult res;
+                        res.lower = node.box_lower;
+                        res.upper = node.box_upper;
+                        res.depth = node.depth;
+                        res.converged = true;
+                        results.push_back(std::move(res));
+                    } else {
+                        // Not a root, discard (false positive from bounding)
+                        // This can happen due to numerical errors or conservative bounding
+                    }
+                    continue;
+
+                } else if (box_dim == 2) {
+                    // Line segment (1D degenerate case)
+                    // The problem is now 1D along active_axis
+                    // For now, mark as converged and let user handle
+                    // TODO: Implement 1D subdivision along the active axis
+                    SubdivisionBoxResult res;
+                    res.lower = node.box_lower;
+                    res.upper = node.box_upper;
+                    res.depth = node.depth;
+                    res.converged = true;
+                    results.push_back(std::move(res));
+                    continue;
+                }
+                // Fall through to normal case for box_dim == 3
+            }
+
+            // Normal case: add converged box to results
             SubdivisionBoxResult res;
             res.lower = node.box_lower;
             res.upper = node.box_upper;
