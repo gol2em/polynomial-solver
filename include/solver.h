@@ -102,12 +102,14 @@ private:
  *
  * - None: No contraction; root bounding box equals the current box.
  * - GraphHull: Uses exact convex hull of graph control points (implemented for 1D and 2D systems).
+ * - ProjectedPolyhedral: Projects graph control points direction-by-direction to compute bounds.
  * - IntervalArithmetic: Placeholder for interval-arithmetic-based bounding (not yet implemented).
  */
 enum class RootBoundingMethod {
-    None,               ///< No contraction; root bounding box equals the current box.
-    GraphHull,          ///< Exact convex-hull-based bounding in graph space (1D and 2D only).
-    IntervalArithmetic  ///< Placeholder for interval-arithmetic-based bounding.
+    None,                ///< No contraction; root bounding box equals the current box.
+    GraphHull,           ///< Exact convex-hull-based bounding in graph space (1D and 2D only).
+    ProjectedPolyhedral, ///< Direction-by-direction projection of graph control points.
+    IntervalArithmetic   ///< Placeholder for interval-arithmetic-based bounding.
 };
 
 /**

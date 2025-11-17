@@ -39,5 +39,9 @@ add_executable(test_linear_graph_hull test_linear_graph_hull.cpp)
 target_link_libraries(test_linear_graph_hull PRIVATE solver polynomial geometry de_casteljau)
 add_test(NAME LinearGraphHullTest COMMAND test_linear_graph_hull)
 
+add_executable(test_projected_polyhedral test_projected_polyhedral.cpp)
+target_link_libraries(test_projected_polyhedral PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME ProjectedPolyhedralTest COMMAND test_projected_polyhedral)
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 
