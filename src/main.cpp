@@ -14,6 +14,7 @@ void print_usage(const char* program_name) {
     std::cout << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  --debug                     Enable debug output for geometric operations" << std::endl;
+    std::cout << "  --dump [prefix]             Dump detailed geometric information (default prefix: 'dump')" << std::endl;
     std::cout << "  --tolerance <value>         Set box width tolerance (default: 1e-8)" << std::endl;
     std::cout << "  --max-depth <value>         Set maximum subdivision depth (default: 20)" << std::endl;
     std::cout << "  --degeneracy-mult <value>   Set degeneracy multiplier (default: 5.0)" << std::endl;
@@ -34,6 +35,14 @@ int main(int argc, char* argv[]) {
         if (std::strcmp(argv[i], "--debug") == 0) {
             geom_config.debug = true;
             std::cout << "Debug mode enabled" << std::endl;
+        } else if (std::strcmp(argv[i], "--dump") == 0) {
+            config.dump_geometry = true;
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                config.dump_prefix = argv[++i];
+                std::cout << "Geometry dump enabled with prefix: " << config.dump_prefix << std::endl;
+            } else {
+                std::cout << "Geometry dump enabled with default prefix: " << config.dump_prefix << std::endl;
+            }
         } else if (std::strcmp(argv[i], "--tolerance") == 0) {
             if (i + 1 < argc) {
                 config.tolerance = std::atof(argv[++i]);
@@ -71,6 +80,10 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Debug mode: " << (geom_config.debug ? "enabled" : "disabled") << std::endl;
+    std::cout << "  Geometry dump: " << (config.dump_geometry ? "enabled" : "disabled") << std::endl;
+    if (config.dump_geometry) {
+        std::cout << "  Dump prefix: " << config.dump_prefix << std::endl;
+    }
     std::cout << "  Tolerance: " << config.tolerance << std::endl;
     std::cout << "  Max depth: " << config.max_depth << std::endl;
     std::cout << "  Degeneracy multiplier: " << config.degeneracy_multiplier << std::endl;

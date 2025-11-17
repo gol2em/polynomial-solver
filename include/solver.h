@@ -10,6 +10,7 @@
  */
 
 #include <vector>
+#include <string>
 
 #include "polynomial.h"
 #include "geometry.h"
@@ -119,11 +120,15 @@ struct SubdivisionConfig {
     double tolerance;          ///< Absolute minimum width of a box in each dimension (convergence criterion).
     unsigned int max_depth;    ///< Maximum allowed subdivision depth (for safety/debug, should be large).
     double degeneracy_multiplier; ///< Multiplier for expected root count to detect degeneracy (default: 5.0).
+    bool dump_geometry;        ///< If true, dump detailed geometric information during solving.
+    std::string dump_prefix;   ///< Prefix for dump files (default: "dump").
 
     SubdivisionConfig()
         : tolerance(1e-8),
           max_depth(100u),
-          degeneracy_multiplier(5.0)
+          degeneracy_multiplier(5.0),
+          dump_geometry(false),
+          dump_prefix("dump")
     {
     }
 };

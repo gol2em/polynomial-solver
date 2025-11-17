@@ -2,6 +2,9 @@
 #include <queue>
 #include <map>
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
 #include <limits>
 
 
@@ -254,6 +257,208 @@ bool compute_projected_polyhedral_bounds(
 }
 
 /**
+ * @brief Compute root bounding box using projected polyhedral method with optional geometry dump.
+ *
+ * Same as compute_projected_polyhedral_bounds but with optional dump of geometric data.
+ * If dump_file is not empty, writes:
+ * - Projected 2D points for each direction and equation
+ * - Convex hull vertices
+ * - Intersection with axis
+ * - Final bounding box
+ */
+bool compute_projected_polyhedral_bounds_with_dump(
+    const std::vector<polynomial_solver::Polynomial>& polys,
+    std::size_t dim,
+    std::vector<double>& local_bound_lower,
+    std::vector<double>& local_bound_upper,
+    const std::string& dump_file,
+    const std::vector<double>& global_box_lower,
+    const std::vector<double>& global_box_upper,
+    unsigned int depth,
+    unsigned int iteration)
+{
+    if (polys.empty() || dim == 0u) {
+        return false;
+    }
+
+    std::ofstream dump;
+    bool do_dump = !dump_file.empty();
+    if (do_dump) {
+        dump.open(dump_file.c_str(), std::ios::app);
+        if (!dump.is_open()) {
+            std::cerr << "Warning: Failed to open dump file: " << dump_file << std::endl;
+            do_dump = false;
+        } else {
+            dump << std::setprecision(16);
+            dump << "# Iteration " << iteration << ", Depth " << depth << "\n";
+            dump << "# Global box: [";
+            for (std::size_t i = 0; i < dim; ++i) {
+                if (i > 0) dump << ", ";
+                dump << global_box_lower[i] << ", " << global_box_upper[i];
+            }
+            dump << "]\n";
+        }
+    }
+
+    local_bound_lower.resize(dim);
+    local_bound_upper.resize(dim);
+
+    // Process each direction independently
+    for (std::size_t dir = 0; dir < dim; ++dir) {
+        if (do_dump) {
+            dump << "\n## Direction " << dir << "\n";
+        }
+
+        // For this direction, we'll compute the intersection of intervals from all equations
+        double dir_min = 0.0;
+        double dir_max = 1.0;
+
+        for (std::size_t eq_idx = 0; eq_idx < polys.size(); ++eq_idx) {
+            const polynomial_solver::Polynomial& poly = polys[eq_idx];
+
+            if (do_dump) {
+                dump << "\n### Equation " << eq_idx << "\n";
+            }
+
+            // Get graph control points in R^{n+1}
+            std::vector<double> control_points;
+            poly.graphControlPoints(control_points);
+
+            const std::size_t num_coeffs = poly.coefficientCount();
+            const std::size_t point_dim = dim + 1u;
+
+            // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
+            std::vector<std::vector<double>> projected_2d;
+            projected_2d.reserve(num_coeffs);
+
+            if (do_dump) {
+                dump << "Projected_Points " << num_coeffs << "\n";
+            }
+
+            for (std::size_t i = 0; i < num_coeffs; ++i) {
+                std::vector<double> pt_2d(2);
+                pt_2d[0] = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
+                pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
+                projected_2d.push_back(pt_2d);
+
+                if (do_dump) {
+                    dump << pt_2d[0] << " " << pt_2d[1] << "\n";
+                }
+            }
+
+            // Compute convex hull in 2D
+            polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
+
+            if (do_dump) {
+                dump << "ConvexHull " << hull_2d.vertices.size() << "\n";
+                for (const std::vector<double>& v : hull_2d.vertices) {
+                    dump << v[0] << " " << v[1] << "\n";
+                }
+            }
+
+            // Intersect with horizontal axis (y = 0, i.e., last coordinate = 0)
+            polynomial_solver::ConvexPolyhedron intersection_1d;
+            if (!polynomial_solver::intersect_convex_polyhedron_with_last_coordinate_zero(
+                    hull_2d, intersection_1d)) {
+                // No intersection with axis for this equation means no roots
+                if (do_dump) {
+                    dump << "Intersection EMPTY\n";
+                    dump.close();
+                }
+                return false;
+            }
+
+            if (do_dump) {
+                dump << "Intersection " << intersection_1d.vertices.size() << "\n";
+                for (const std::vector<double>& v : intersection_1d.vertices) {
+                    dump << v[0] << " " << v[1] << "\n";
+                }
+            }
+
+            // Project to 1D by taking the first coordinate (drop the second which is 0)
+            // Find min and max of the first coordinate
+            if (intersection_1d.vertices.empty()) {
+                if (do_dump) {
+                    dump.close();
+                }
+                return false;
+            }
+
+            double eq_min = intersection_1d.vertices[0][0];
+            double eq_max = intersection_1d.vertices[0][0];
+
+            for (const std::vector<double>& v : intersection_1d.vertices) {
+                if (v[0] < eq_min) eq_min = v[0];
+                if (v[0] > eq_max) eq_max = v[0];
+            }
+
+            if (do_dump) {
+                dump << "Interval [" << eq_min << ", " << eq_max << "]\n";
+            }
+
+            // Intersect with current bounds for this direction
+            if (eq_min > dir_min) dir_min = eq_min;
+            if (eq_max < dir_max) dir_max = eq_max;
+
+            // Check if intersection is empty
+            if (dir_min > dir_max) {
+                if (do_dump) {
+                    dump << "Direction_Interval EMPTY\n";
+                    dump.close();
+                }
+                return false;
+            }
+        }
+
+        // Store the bounds for this direction
+        local_bound_lower[dir] = dir_min;
+        local_bound_upper[dir] = dir_max;
+
+        // Clamp to [0, 1] (local parameter space)
+        if (local_bound_lower[dir] < 0.0) local_bound_lower[dir] = 0.0;
+        if (local_bound_upper[dir] > 1.0) local_bound_upper[dir] = 1.0;
+        if (local_bound_lower[dir] > 1.0) local_bound_lower[dir] = 1.0;
+        if (local_bound_upper[dir] < 0.0) local_bound_upper[dir] = 0.0;
+
+        // Check for empty interval
+        if (local_bound_lower[dir] > local_bound_upper[dir]) {
+            if (do_dump) {
+                dump << "Final_Interval EMPTY\n";
+                dump.close();
+            }
+            return false;
+        }
+
+        if (do_dump) {
+            dump << "Final_Interval [" << local_bound_lower[dir] << ", " << local_bound_upper[dir] << "]\n";
+        }
+    }
+
+    if (do_dump) {
+        dump << "\n# Bounding Box (local): [";
+        for (std::size_t i = 0; i < dim; ++i) {
+            if (i > 0) dump << ", ";
+            dump << local_bound_lower[i] << ", " << local_bound_upper[i];
+        }
+        dump << "]\n";
+
+        // Compute global bounding box
+        dump << "# Bounding Box (global): [";
+        for (std::size_t i = 0; i < dim; ++i) {
+            if (i > 0) dump << ", ";
+            double global_low = global_box_lower[i] + local_bound_lower[i] * (global_box_upper[i] - global_box_lower[i]);
+            double global_high = global_box_lower[i] + local_bound_upper[i] * (global_box_upper[i] - global_box_lower[i]);
+            dump << global_low << ", " << global_high;
+        }
+        dump << "]\n\n";
+
+        dump.close();
+    }
+
+    return true;
+}
+
+/**
  * @brief Compute root bounding box using graph convex hull method.
  *
  * For each equation f_i(x) = 0, we build the graph control net (x, f_i(x)) in R^{n+1}.
@@ -413,6 +618,30 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
     const double tolerance = config.tolerance;
 
+    // Setup dump file if requested
+    std::string dump_file;
+    unsigned int dump_iteration = 0;
+    if (config.dump_geometry) {
+        dump_file = config.dump_prefix + "_geometry.txt";
+        // Clear the file
+        std::ofstream clear_dump(dump_file.c_str());
+        if (clear_dump.is_open()) {
+            clear_dump << "# Polynomial Solver Geometry Dump\n";
+            clear_dump << "# Method: ";
+            if (method == RootBoundingMethod::ProjectedPolyhedral) {
+                clear_dump << "ProjectedPolyhedral\n";
+            } else if (method == RootBoundingMethod::GraphHull) {
+                clear_dump << "GraphHull\n";
+            } else {
+                clear_dump << "None\n";
+            }
+            clear_dump << "# Dimension: " << dim << "\n";
+            clear_dump << "# Number of equations: " << system.equationCount() << "\n";
+            clear_dump << "\n";
+            clear_dump.close();
+        }
+    }
+
     // Track boxes per depth for degeneracy detection
     std::map<unsigned int, std::size_t> boxes_per_depth;
 
@@ -520,10 +749,24 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 }
             } else if (method == RootBoundingMethod::ProjectedPolyhedral) {
                 // Use projected polyhedral method (direction-by-direction)
-                if (!compute_projected_polyhedral_bounds(node.polys, dim,
-                                                         local_bound_lower, local_bound_upper)) {
-                    // Step 2: If empty, quit (no roots in this box)
-                    has_roots = false;
+                if (config.dump_geometry) {
+                    // Use dump version
+                    if (!compute_projected_polyhedral_bounds_with_dump(
+                            node.polys, dim,
+                            local_bound_lower, local_bound_upper,
+                            dump_file,
+                            node.box_lower, node.box_upper,
+                            node.depth, dump_iteration++)) {
+                        // Step 2: If empty, quit (no roots in this box)
+                        has_roots = false;
+                    }
+                } else {
+                    // Use regular version
+                    if (!compute_projected_polyhedral_bounds(node.polys, dim,
+                                                             local_bound_lower, local_bound_upper)) {
+                        // Step 2: If empty, quit (no roots in this box)
+                        has_roots = false;
+                    }
                 }
             }
             // For RootBoundingMethod::None, keep the default [0,1]^n bounds
