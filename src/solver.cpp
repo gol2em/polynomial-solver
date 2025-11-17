@@ -364,28 +364,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 break;
             }
 
-            // Step 3: Check if bounding box is small enough
-            bool all_small = true;
-            for (std::size_t i = 0; i < dim; ++i) {
-                const double local_width = local_bound_upper[i] - local_bound_lower[i];
-                const double old_low = node.box_lower[i];
-                const double old_high = node.box_upper[i];
-                const double old_width = old_high - old_low;
-                const double global_width = local_width * old_width;
-
-                if (global_width > tolerance) {
-                    all_small = false;
-                    break;
-                }
-            }
-
-            if (all_small) {
-                // Step 4: Box is small enough, converged
-                converged = true;
-                break;
-            }
-
-            // Step 5: Box not small enough, contract and iterate
+            // Step 3: Contract the box to the bounding box
             // Make bounding box the new region
             for (std::size_t i = 0; i < dim; ++i) {
                 const double a = local_bound_lower[i];
@@ -405,6 +384,22 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
                     node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
                 }
+            }
+
+            // Step 4: Check if contracted box is small enough
+            bool all_small = true;
+            for (std::size_t i = 0; i < dim; ++i) {
+                const double width = node.box_upper[i] - node.box_lower[i];
+                if (width > tolerance) {
+                    all_small = false;
+                    break;
+                }
+            }
+
+            if (all_small) {
+                // Step 5: Box is small enough, converged
+                converged = true;
+                break;
             }
 
             // Continue iteration (go back to step 1)

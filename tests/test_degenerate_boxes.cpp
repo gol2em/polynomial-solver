@@ -1,5 +1,6 @@
 #include "polynomial.h"
 #include "solver.h"
+#include "geometry.h"
 #include <iostream>
 #include <cmath>
 #include <limits>
@@ -23,6 +24,9 @@ int test_single_point_root() {
     Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
 
     PolynomialSystem system({p});
+
+    // Enable debug output
+    getGeometryConfig().debug = false;  // Keep it off for now
 
     Solver solver;
     SubdivisionConfig config;

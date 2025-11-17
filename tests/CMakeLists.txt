@@ -35,5 +35,9 @@ add_executable(test_degenerate_boxes test_degenerate_boxes.cpp)
 target_link_libraries(test_degenerate_boxes PRIVATE solver polynomial geometry de_casteljau)
 add_test(NAME DegenerateBoxesTest COMMAND test_degenerate_boxes)
 
+add_executable(test_linear_graph_hull test_linear_graph_hull.cpp)
+target_link_libraries(test_linear_graph_hull PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME LinearGraphHullTest COMMAND test_linear_graph_hull)
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 
