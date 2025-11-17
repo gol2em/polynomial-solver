@@ -1330,9 +1330,8 @@ bool intersect_convex_polyhedron_with_last_coordinate_zero(
     const double eps = 1e-12;
 
     // For 2D and 3D ambient space, we compute the exact intersection of the convex hull
-    // with the hyperplane x_{n+1} = 0 by intersecting all segments between
-    // hull vertices with that hyperplane and taking the convex hull of the
-    // resulting points.
+    // with the hyperplane x_{n+1} = 0 by intersecting segments with that hyperplane
+    // and taking the convex hull of the resulting points.
     if (ambient_dim == 2u || ambient_dim == 3u) {
         ConvexPolyhedron hull = convex_hull(polyhedron.vertices);
         const std::vector<std::vector<double>>& verts = hull.vertices;
@@ -1355,13 +1354,17 @@ bool intersect_convex_polyhedron_with_last_coordinate_zero(
             }
         }
 
-        // Collect intersections of segments between pairs of vertices that
-        // straddle the hyperplane.
-        for (std::size_t i = 0; i < n; ++i) {
-            const double zi = verts[i][last];
-            const double abs_zi = (zi >= 0.0) ? zi : -zi;
-            for (std::size_t j = i + 1; j < n; ++j) {
+        // For 2D: vertices are in counter-clockwise order, so adjacent vertices form edges.
+        // For 3D: we need to check all pairs since we don't have explicit edge information.
+        if (ambient_dim == 2u) {
+            // Check only adjacent pairs (edges) for 2D polygons.
+            // This is O(n) instead of O(n^2).
+            for (std::size_t i = 0; i < n; ++i) {
+                const std::size_t j = (i + 1) % n;  // Next vertex (wraps around)
+
+                const double zi = verts[i][last];
                 const double zj = verts[j][last];
+                const double abs_zi = (zi >= 0.0) ? zi : -zi;
                 const double abs_zj = (zj >= 0.0) ? zj : -zj;
 
                 // Skip if either endpoint is (almost) on the plane; those were
@@ -1383,6 +1386,36 @@ bool intersect_convex_polyhedron_with_last_coordinate_zero(
                 }
                 p[last] = 0.0;
                 on_plane_points.push_back(p);
+            }
+        } else {
+            // For 3D: check all pairs of vertices (we don't have explicit edges).
+            for (std::size_t i = 0; i < n; ++i) {
+                const double zi = verts[i][last];
+                const double abs_zi = (zi >= 0.0) ? zi : -zi;
+                for (std::size_t j = i + 1; j < n; ++j) {
+                    const double zj = verts[j][last];
+                    const double abs_zj = (zj >= 0.0) ? zj : -zj;
+
+                    // Skip if either endpoint is (almost) on the plane; those were
+                    // already handled above.
+                    if (abs_zi <= eps || abs_zj <= eps) {
+                        continue;
+                    }
+
+                    const bool above_i = zi > 0.0;
+                    const bool above_j = zj > 0.0;
+                    if (above_i == above_j) {
+                        continue;
+                    }
+
+                    const double t = zi / (zi - zj);
+                    std::vector<double> p(ambient_dim, 0.0);
+                    for (std::size_t k = 0; k < ambient_dim; ++k) {
+                        p[k] = verts[i][k] + t * (verts[j][k] - verts[i][k]);
+                    }
+                    p[last] = 0.0;
+                    on_plane_points.push_back(p);
+                }
             }
         }
 

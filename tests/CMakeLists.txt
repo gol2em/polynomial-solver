@@ -27,5 +27,9 @@ add_executable(test_2d_convex_hull_robust test_2d_convex_hull_robust.cpp)
 target_link_libraries(test_2d_convex_hull_robust PRIVATE geometry)
 add_test(NAME 2DConvexHullRobustTest COMMAND test_2d_convex_hull_robust)
 
+add_executable(test_2d_hull_vertex_order test_2d_hull_vertex_order.cpp)
+target_link_libraries(test_2d_hull_vertex_order PRIVATE geometry)
+add_test(NAME 2DHullVertexOrderTest COMMAND test_2d_hull_vertex_order)
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 

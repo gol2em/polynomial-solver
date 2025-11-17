@@ -91,10 +91,11 @@ This document summarizes the robustness verification of the 2D convex hull and h
 - Space: O(n) for storing vertices
 
 **Hyperplane Intersection**:
-- Time: O(n²) for checking all pairs + O(m log m) for final hull (m ≤ n)
+- **2D**: O(n) for checking adjacent edges + O(m log m) for final hull (m ≤ n)
+- **3D**: O(n²) for checking all pairs + O(m log m) for final hull (m ≤ n)
 - Space: O(n) for storing intersection points
 
-**Note**: For 2D polygons, checking all pairs is inefficient (could be O(n) by checking only edges), but it's correct and simple. For 3D polyhedra, we need to check all pairs since we don't have explicit edge information.
+**Optimization**: For 2D polygons, the monotone chain algorithm guarantees vertices are in counter-clockwise order, so adjacent vertices form edges. We only check O(n) edges instead of O(n²) pairs. For 3D polyhedra, we still need to check all pairs since we don't have explicit edge information.
 
 ## Integration with Solver
 
@@ -111,13 +112,14 @@ All steps handle degenerate cases correctly, ensuring robustness of the entire p
 
 ## Test Coverage
 
-**Total test suites**: 2  
-**Total test cases**: 16  
+**Total test suites**: 3
+**Total test cases**: 20
 **All tests passing**: ✅
 
 **Test files**:
 - `tests/test_2d_convex_hull_robust.cpp`: 6 tests
 - `tests/test_2d_hyperplane_intersection.cpp`: 10 tests
+- `tests/test_2d_hull_vertex_order.cpp`: 4 tests (verifies CCW ordering)
 
 Run tests with:
 ```bash
