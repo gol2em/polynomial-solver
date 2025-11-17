@@ -115,12 +115,12 @@ enum class RootBoundingMethod {
  */
 struct SubdivisionConfig {
     double tolerance;          ///< Absolute minimum width of a box in each dimension (convergence criterion).
-    unsigned int max_depth;    ///< Maximum allowed subdivision depth.
+    unsigned int max_depth;    ///< Maximum allowed subdivision depth (for safety/debug, should be large).
     double degeneracy_multiplier; ///< Multiplier for expected root count to detect degeneracy (default: 5.0).
 
     SubdivisionConfig()
         : tolerance(1e-8),
-          max_depth(20u),
+          max_depth(100u),
           degeneracy_multiplier(5.0)
     {
     }
@@ -136,10 +136,9 @@ struct SubdivisionBoxResult {
     std::vector<double> lower;      ///< Lower corner of the box in each dimension.
     std::vector<double> upper;      ///< Upper corner of the box in each dimension.
     std::vector<double> center;     ///< Center of the box (estimated root location).
-    std::vector<double> max_error;  ///< Half-width of the box in each dimension (max error).
+    std::vector<double> max_error;  ///< Half-width of the box in each dimension (max error, machine epsilon if point).
     unsigned int depth;             ///< Subdivision depth at which this box was produced.
     bool converged;                 ///< True if the box was terminated because it was small enough.
-    bool is_degenerate;             ///< True if this box is marked as potentially degenerate.
 };
 
 /**

@@ -1,6 +1,8 @@
 #include "solver.h"
 #include <queue>
 #include <map>
+#include <iostream>
+#include <limits>
 
 
 /**
@@ -94,7 +96,6 @@ struct SubdivisionNode {
     std::vector<double> box_lower;  ///< Global box lower corner in [0,1]^n.
     std::vector<double> box_upper;  ///< Global box upper corner in [0,1]^n.
     unsigned int depth;             ///< Subdivision depth.
-    unsigned int consecutive_subdivisions; ///< Number of consecutive subdivisions without convergence.
 
     // Polynomials restricted to this node's box and re-parameterised to [0,1]^n.
     std::vector<polynomial_solver::Polynomial> polys;
@@ -300,7 +301,6 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     root.box_lower.assign(dim, 0.0);
     root.box_upper.assign(dim, 1.0);
     root.depth = 0u;
-    root.consecutive_subdivisions = 0u;
     root.polys = system.equations();
 
     std::priority_queue<NodeQueueEntry, std::vector<NodeQueueEntry>, NodeQueueCompare> queue;
@@ -326,7 +326,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             // Degenerate case detected (multiplicity, infinite roots, etc.)
             result.degeneracy_detected = true;
 
-            // Mark this box as degenerate
+            // Add current node to unresolved
             SubdivisionBoxResult box;
             box.lower = node.box_lower;
             box.upper = node.box_upper;
@@ -334,19 +334,48 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             box.max_error.resize(dim);
             for (std::size_t i = 0; i < dim; ++i) {
                 box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
-                box.max_error[i] = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                    ? std::numeric_limits<double>::epsilon()
+                    : half_width;
             }
             box.depth = node.depth;
             box.converged = false;
-            box.is_degenerate = true;
             unresolved_boxes.push_back(std::move(box));
 
-            // Stop processing and return what we have
+            // Collect all remaining boxes in queue as unresolved
+            while (!queue.empty()) {
+                NodeQueueEntry remaining_entry = queue.top();
+                queue.pop();
+                SubdivisionNode& remaining_node = remaining_entry.node;
+
+                SubdivisionBoxResult remaining_box;
+                remaining_box.lower = remaining_node.box_lower;
+                remaining_box.upper = remaining_node.box_upper;
+                remaining_box.center.resize(dim);
+                remaining_box.max_error.resize(dim);
+                for (std::size_t i = 0; i < dim; ++i) {
+                    remaining_box.center[i] = 0.5 * (remaining_node.box_lower[i] + remaining_node.box_upper[i]);
+                    const double half_width = 0.5 * (remaining_node.box_upper[i] - remaining_node.box_lower[i]);
+                    remaining_box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                        ? std::numeric_limits<double>::epsilon()
+                        : half_width;
+                }
+                remaining_box.depth = remaining_node.depth;
+                remaining_box.converged = false;
+                unresolved_boxes.push_back(std::move(remaining_box));
+            }
+
+            // Stop processing
             break;
         }
 
-        // Check depth limit
+        // Check depth limit (should rarely happen - indicates problem)
         if (node.depth >= config.max_depth) {
+            std::cerr << "Warning: Maximum depth " << config.max_depth
+                      << " reached. This may indicate numerical issues or insufficient tolerance."
+                      << std::endl;
+
             SubdivisionBoxResult box;
             box.lower = node.box_lower;
             box.upper = node.box_upper;
@@ -354,11 +383,13 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             box.max_error.resize(dim);
             for (std::size_t i = 0; i < dim; ++i) {
                 box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
-                box.max_error[i] = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                    ? std::numeric_limits<double>::epsilon()
+                    : half_width;
             }
             box.depth = node.depth;
             box.converged = false;
-            box.is_degenerate = false;
             unresolved_boxes.push_back(std::move(box));
             continue;
         }
@@ -469,11 +500,13 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                         box.center = center;
                         box.max_error.resize(dim);
                         for (std::size_t i = 0; i < dim; ++i) {
-                            box.max_error[i] = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                            const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                            box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                                ? std::numeric_limits<double>::epsilon()
+                                : half_width;
                         }
                         box.depth = node.depth;
                         box.converged = true;
-                        box.is_degenerate = (node.consecutive_subdivisions > 3);
                         resolved_boxes.push_back(std::move(box));
                     } else {
                         // Not a root, discard (false positive from bounding)
@@ -493,11 +526,13 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                     box.max_error.resize(dim);
                     for (std::size_t i = 0; i < dim; ++i) {
                         box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
-                        box.max_error[i] = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                        const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                        box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                            ? std::numeric_limits<double>::epsilon()
+                            : half_width;
                     }
                     box.depth = node.depth;
                     box.converged = true;
-                    box.is_degenerate = (node.consecutive_subdivisions > 3);
                     resolved_boxes.push_back(std::move(box));
                     continue;
                 }
@@ -512,11 +547,13 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             box.max_error.resize(dim);
             for (std::size_t i = 0; i < dim; ++i) {
                 box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
-                box.max_error[i] = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                    ? std::numeric_limits<double>::epsilon()
+                    : half_width;
             }
             box.depth = node.depth;
             box.converged = true;
-            box.is_degenerate = (node.consecutive_subdivisions > 3);
             resolved_boxes.push_back(std::move(box));
             continue;
         }
@@ -536,7 +573,6 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         std::vector<SubdivisionNode> children;
         SubdivisionNode seed = node;
         seed.depth = node.depth + 1u;
-        seed.consecutive_subdivisions = node.consecutive_subdivisions + 1u;
         children.push_back(seed);
 
         for (std::size_t axis = 0; axis < dim; ++axis) {
