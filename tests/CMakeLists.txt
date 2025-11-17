@@ -19,7 +19,13 @@ add_executable(test_geometry_convex test_geometry_convex.cpp)
 target_link_libraries(test_geometry_convex PRIVATE geometry)
 add_test(NAME GeometryConvexTest COMMAND test_geometry_convex)
 
+add_executable(test_2d_hyperplane_intersection test_2d_hyperplane_intersection.cpp)
+target_link_libraries(test_2d_hyperplane_intersection PRIVATE geometry)
+add_test(NAME 2DHyperplaneIntersectionTest COMMAND test_2d_hyperplane_intersection)
 
+add_executable(test_2d_convex_hull_robust test_2d_convex_hull_robust.cpp)
+target_link_libraries(test_2d_convex_hull_robust PRIVATE geometry)
+add_test(NAME 2DConvexHullRobustTest COMMAND test_2d_convex_hull_robust)
 
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 
