@@ -59,7 +59,7 @@ double squared_distance(const std::vector<double>& a, const std::vector<double>&
 /**
  * @brief Check if points are collinear (lie on a line).
  */
-bool are_collinear(const std::vector<std::vector<double>>& points, double eps = 1e-12) {
+bool are_collinear(const std::vector<std::vector<double>>& points, double eps = GEOMETRY_EPSILON) {
     if (points.size() <= 2) {
         return true;
     }
@@ -136,7 +136,7 @@ bool are_collinear(const std::vector<std::vector<double>>& points, double eps = 
 /**
  * @brief Check if points are coplanar (lie on a plane) in 3D.
  */
-bool are_coplanar_3d(const std::vector<std::vector<double>>& points, double eps = 1e-12) {
+bool are_coplanar_3d(const std::vector<std::vector<double>>& points, double eps = GEOMETRY_EPSILON) {
     if (points.size() <= 3) {
         return true;
     }
@@ -380,7 +380,7 @@ static double signed_distance_to_face(
 static std::vector<std::vector<double>>
 convex_hull_3d(const std::vector<std::vector<double>>& pts_in)
 {
-    const double eps = 1e-12;
+    const double eps = GEOMETRY_EPSILON;
     std::vector<std::vector<double>> hull;
 
     if (pts_in.empty()) {
@@ -736,7 +736,7 @@ std::size_t compute_intrinsic_dimension(
     // Filter out duplicate points
     std::vector<std::vector<double>> unique_pts;
     unique_pts.reserve(n);
-    const double eps = 1e-12;
+    const double eps = GEOMETRY_EPSILON;
 
     for (const std::vector<double>& p : points) {
         if (p.size() != ambient_dim) continue;
@@ -915,7 +915,7 @@ static bool intersect_line_segments_2d(
     const std::vector<double>& b1, const std::vector<double>& b2,
     std::vector<std::vector<double>>& intersection_points)
 {
-    const double eps = 1e-12;
+    const double eps = GEOMETRY_EPSILON;
     intersection_points.clear();
 
     // Extract 2D coordinates (first two components).
@@ -1033,7 +1033,7 @@ static bool intersect_convex_polygons_2d(
     const ConvexPolyhedron& poly_b,
     ConvexPolyhedron& intersection)
 {
-    const double eps = 1e-12;
+    const double eps = GEOMETRY_EPSILON;
 
     if (poly_a.vertices.empty() || poly_b.vertices.empty()) {
         return false;
@@ -1118,7 +1118,7 @@ bool intersect_convex_polyhedra(
 
             // Case: both are single points
             if (n_result == 1u && n_other == 1u) {
-                const double eps = 1e-12;
+                const double eps = GEOMETRY_EPSILON;
                 const double dist_sq = squared_distance(result.vertices[0], polyhedra[i].vertices[0]);
                 if (dist_sq > eps * eps) {
                     // Different points - no intersection
@@ -1136,7 +1136,7 @@ bool intersect_convex_polyhedra(
                 // TODO: Implement proper point-in-convex-polygon test.
                 // For now, use a simple containment test: check if point is one of the vertices.
                 // This is sufficient for many cases but may miss points on edges or in the interior.
-                const double eps = 1e-12;
+                const double eps = GEOMETRY_EPSILON;
                 bool found = false;
                 for (const std::vector<double>& v : poly.vertices) {
                     if (squared_distance(pt, v) < eps * eps) {
@@ -1233,7 +1233,7 @@ bool intersect_convex_polyhedra(
                         const double dy2 = p2[1] - edge_start[1];
                         const double dist2 = nx * dx2 + ny * dy2;
 
-                        const double eps = 1e-12;
+                        const double eps = GEOMETRY_EPSILON;
                         const bool inside1 = dist1 >= -eps;
                         const bool inside2 = dist2 >= -eps;
 
@@ -1327,7 +1327,7 @@ bool intersect_convex_polyhedron_with_last_coordinate_zero(
     }
 
     const std::size_t last = ambient_dim - 1u;
-    const double eps = 1e-12;
+    const double eps = GEOMETRY_EPSILON;
 
     // For 2D and 3D ambient space, we compute the exact intersection of the convex hull
     // with the hyperplane x_{n+1} = 0 by intersecting segments with that hyperplane

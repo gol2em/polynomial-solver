@@ -33,26 +33,27 @@ int test_single_point_root() {
     config.tolerance = 0.05;  // Use same tolerance as existing test
     config.max_depth = 20;
 
-    std::vector<SubdivisionBoxResult> boxes =
+    SubdivisionSolverResult result =
         solver.subdivisionSolve(system, config, RootBoundingMethod::GraphHull);
 
     // Should find at least one box containing the root
-    if (boxes.empty()) {
+    if (result.boxes.empty()) {
         std::cerr << "  FAIL: No boxes found" << std::endl;
         return 1;
     }
 
-    std::cout << "  Found " << boxes.size() << " box(es)" << std::endl;
-    for (size_t i = 0; i < boxes.size(); ++i) {
-        std::cout << "    Box " << i << ": [" << boxes[i].lower[0] << ", "
-                  << boxes[i].upper[0] << "], width = "
-                  << (boxes[i].upper[0] - boxes[i].lower[0])
-                  << ", converged = " << boxes[i].converged << std::endl;
+    std::cout << "  Found " << result.boxes.size() << " box(es), "
+              << result.num_resolved << " resolved" << std::endl;
+    for (size_t i = 0; i < result.boxes.size(); ++i) {
+        std::cout << "    Box " << i << ": [" << result.boxes[i].lower[0] << ", "
+                  << result.boxes[i].upper[0] << "], width = "
+                  << (result.boxes[i].upper[0] - result.boxes[i].lower[0])
+                  << ", converged = " << result.boxes[i].converged << std::endl;
     }
 
     // Check if any box contains x = 0.5
     bool found_root = false;
-    for (const auto& box : boxes) {
+    for (const auto& box : result.boxes) {
         if (box.lower[0] <= 0.5 && box.upper[0] >= 0.5) {
             found_root = true;
 

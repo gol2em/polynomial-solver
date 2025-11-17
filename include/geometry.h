@@ -17,6 +17,16 @@
 namespace polynomial_solver {
 
 /**
+ * @brief Default geometric tolerance for numerical comparisons.
+ *
+ * This tolerance is used for:
+ * - Detecting collinear/coplanar points
+ * - Filtering duplicate points
+ * - Comparing distances in geometric algorithms
+ */
+constexpr double GEOMETRY_EPSILON = 1e-15;
+
+/**
  * @brief Global configuration for geometry operations.
  */
 struct GeometryConfig {

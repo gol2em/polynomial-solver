@@ -116,12 +116,12 @@ enum class RootBoundingMethod {
 struct SubdivisionConfig {
     double tolerance;          ///< Absolute minimum width of a box in each dimension (convergence criterion).
     unsigned int max_depth;    ///< Maximum allowed subdivision depth.
-    unsigned int max_boxes_per_depth; ///< Maximum boxes at a depth before declaring degeneracy.
+    double degeneracy_multiplier; ///< Multiplier for expected root count to detect degeneracy (default: 5.0).
 
     SubdivisionConfig()
-        : tolerance(1e-3),
+        : tolerance(1e-8),
           max_depth(20u),
-          max_boxes_per_depth(1000u)
+          degeneracy_multiplier(5.0)
     {
     }
 };
@@ -130,12 +130,29 @@ struct SubdivisionConfig {
  * @brief Resulting box from the subdivision solver.
  *
  * Each box represents a region in the normalized domain [0,1]^n.
+ * The center of the box is the estimated root, and the half-widths are the max errors.
  */
 struct SubdivisionBoxResult {
-    std::vector<double> lower; ///< Lower corner of the box in each dimension.
-    std::vector<double> upper; ///< Upper corner of the box in each dimension.
-    unsigned int depth;        ///< Subdivision depth at which this box was produced.
-    bool converged;            ///< True if the box was terminated because it was small enough.
+    std::vector<double> lower;      ///< Lower corner of the box in each dimension.
+    std::vector<double> upper;      ///< Upper corner of the box in each dimension.
+    std::vector<double> center;     ///< Center of the box (estimated root location).
+    std::vector<double> max_error;  ///< Half-width of the box in each dimension (max error).
+    unsigned int depth;             ///< Subdivision depth at which this box was produced.
+    bool converged;                 ///< True if the box was terminated because it was small enough.
+    bool is_degenerate;             ///< True if this box is marked as potentially degenerate.
+};
+
+/**
+ * @brief Complete result from the subdivision solver.
+ *
+ * Contains resolved roots (converged boxes) and unresolved roots (degenerate or max depth).
+ * The first `num_resolved` boxes are resolved roots with small error.
+ * The remaining boxes are unresolved (degenerate cases or max depth reached).
+ */
+struct SubdivisionSolverResult {
+    std::vector<SubdivisionBoxResult> boxes;  ///< All boxes (resolved first, then unresolved).
+    std::size_t num_resolved;                 ///< Number of resolved roots (first num_resolved boxes).
+    bool degeneracy_detected;                 ///< True if degeneracy was detected during solving.
 };
 
 /**
@@ -162,8 +179,13 @@ public:
      * depth, contracts them using a root bounding method, and either refines or
      * subdivides them, until all boxes are small enough or the maximum depth is
      * reached.
+     *
+     * Returns a result containing:
+     * - Resolved roots (converged boxes with error < tolerance)
+     * - Unresolved roots (degenerate cases or max depth reached)
+     * - A counter separating the two groups
      */
-    std::vector<SubdivisionBoxResult>
+    SubdivisionSolverResult
     subdivisionSolve(const PolynomialSystem& system,
                      const SubdivisionConfig& config,
                      RootBoundingMethod method = RootBoundingMethod::None) const;

@@ -40,20 +40,26 @@ int test_subdivision_solver_uniform_grid()
     config.tolerance = 0.25;       // Stop once boxes reach width 1/4.
     config.max_depth = 10u;        // Large enough to not be active here.
 
-    const std::vector<SubdivisionBoxResult> boxes =
+    const SubdivisionSolverResult result =
         solver.subdivisionSolve(system, config, RootBoundingMethod::None);
 
-    if (boxes.size() != 4u) {
+    if (result.boxes.size() != 4u) {
         std::cerr << "Subdivision solver: expected 4 final boxes, got "
-                  << boxes.size() << '\n';
+                  << result.boxes.size() << '\n';
+        return 1;
+    }
+
+    if (result.num_resolved != 4u) {
+        std::cerr << "Subdivision solver: expected 4 resolved boxes, got "
+                  << result.num_resolved << '\n';
         return 1;
     }
 
     const double expected_width = 0.25;
     const double eps = std::numeric_limits<double>::epsilon() * 1000.0;
 
-    for (std::size_t i = 0; i < boxes.size(); ++i) {
-        const SubdivisionBoxResult& box = boxes[i];
+    for (std::size_t i = 0; i < result.boxes.size(); ++i) {
+        const SubdivisionBoxResult& box = result.boxes[i];
 
         if (box.lower.size() != 1u || box.upper.size() != 1u) {
             std::cerr << "Subdivision solver: box dimension mismatch" << '\n';
@@ -125,28 +131,28 @@ int test_subdivision_solver_graph_hull_2d_quadratic()
     config.max_depth = 10u;
 
     // First solve with None method to get baseline.
-    const std::vector<SubdivisionBoxResult> boxes_none =
+    const SubdivisionSolverResult result_none =
         solver.subdivisionSolve(system, config, RootBoundingMethod::None);
 
     // Then solve with GraphHull method.
-    const std::vector<SubdivisionBoxResult> boxes_hull =
+    const SubdivisionSolverResult result_hull =
         solver.subdivisionSolve(system, config, RootBoundingMethod::GraphHull);
 
-    if (boxes_hull.empty()) {
+    if (result_hull.boxes.empty()) {
         std::cerr << "GraphHull 2D quadratic: expected at least one box" << '\n';
         return 1;
     }
 
     // With GraphHull, we should get fewer or equal number of boxes.
-    if (boxes_hull.size() > boxes_none.size()) {
+    if (result_hull.boxes.size() > result_none.boxes.size()) {
         std::cerr << "GraphHull 2D quadratic: expected fewer boxes than None method, got "
-                  << boxes_hull.size() << " vs " << boxes_none.size() << '\n';
+                  << result_hull.boxes.size() << " vs " << result_none.boxes.size() << '\n';
         return 1;
     }
 
     // Check that at least one box contains the root (0.5, 0.3).
     bool found_root = false;
-    for (const SubdivisionBoxResult& box : boxes_hull) {
+    for (const SubdivisionBoxResult& box : result_hull.boxes) {
         if (box.lower[0] <= 0.5 && box.upper[0] >= 0.5 &&
             box.lower[1] <= 0.3 && box.upper[1] >= 0.3) {
             found_root = true;
@@ -159,8 +165,8 @@ int test_subdivision_solver_graph_hull_2d_quadratic()
         return 1;
     }
 
-    std::cout << "GraphHull 2D quadratic: None method produced " << boxes_none.size()
-              << " boxes, GraphHull produced " << boxes_hull.size() << " boxes" << std::endl;
+    std::cout << "GraphHull 2D quadratic: None method produced " << result_none.boxes.size()
+              << " boxes, GraphHull produced " << result_hull.boxes.size() << " boxes" << std::endl;
 
     return 0;
 }
