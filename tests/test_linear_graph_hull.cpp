@@ -4,6 +4,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
+#include <limits>
 
 using namespace polynomial_solver;
 
@@ -96,7 +97,61 @@ int test_1d_linear_graph_hull() {
     
     // Check if bounding box is a single point at x = 0.5
     if (std::fabs(min_x - 0.5) < 1e-10 && std::fabs(max_x - 0.5) < 1e-10) {
-        std::cout << "  PASS: Bounding box is exactly the root!" << std::endl;
+        std::cout << "  Bounding box is exactly the root!" << std::endl;
+    } else {
+        std::cerr << "  FAIL: Bounding box is not the exact root" << std::endl;
+        return 1;
+    }
+
+    // Now test with the actual solver
+    std::cout << std::endl;
+    std::cout << "Testing with solver (GraphHull method):" << std::endl;
+
+    PolynomialSystem system({p});
+    Solver solver;
+    SubdivisionConfig config;
+    config.tolerance = 1e-8;
+    config.max_depth = 100;
+
+    SubdivisionSolverResult result = solver.subdivisionSolve(system, config, RootBoundingMethod::GraphHull);
+
+    std::cout << "  Found " << result.boxes.size() << " box(es), "
+              << result.num_resolved << " resolved" << std::endl;
+    std::cout << "  Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << std::endl;
+    std::cout << std::endl;
+
+    if (result.num_resolved != 1) {
+        std::cerr << "  FAIL: Expected 1 resolved root, got " << result.num_resolved << std::endl;
+        return 1;
+    }
+
+    const SubdivisionBoxResult& box = result.boxes[0];
+    std::cout << "  Root box:" << std::endl;
+    std::cout << "    Lower: " << box.lower[0] << std::endl;
+    std::cout << "    Upper: " << box.upper[0] << std::endl;
+    std::cout << "    Center: " << box.center[0] << std::endl;
+    std::cout << "    Max error: " << std::scientific << std::setprecision(16) << box.max_error[0] << std::endl;
+    std::cout << "    Depth: " << box.depth << std::endl;
+    std::cout << "    Converged: " << (box.converged ? "yes" : "no") << std::endl;
+    std::cout << std::endl;
+
+    // Check if error is machine epsilon
+    const double machine_eps = std::numeric_limits<double>::epsilon();
+    std::cout << "  Machine epsilon: " << std::scientific << std::setprecision(16) << machine_eps << std::endl;
+    std::cout << "  Error is machine epsilon: " << (box.max_error[0] == machine_eps ? "YES" : "NO") << std::endl;
+    std::cout << std::endl;
+
+    // Evaluate at the center
+    double eval_value = p.evaluate(box.center[0]);
+    std::cout << "  Evaluation at center:" << std::endl;
+    std::cout << "    p(" << std::fixed << std::setprecision(16) << box.center[0] << ") = "
+              << std::scientific << std::setprecision(16) << eval_value << std::endl;
+    std::cout << "    |p(center)| = " << std::fabs(eval_value) << std::endl;
+    std::cout << std::endl;
+
+    // Check if evaluation is close to zero
+    if (std::fabs(eval_value) < 1e-10) {
+        std::cout << "  PASS: Linear function gives exact root with machine epsilon error!" << std::endl;
         return 0;
     } else if (min_x <= 0.5 && max_x >= 0.5) {
         std::cout << "  PARTIAL: Bounding box contains the root but is not exact" << std::endl;
@@ -273,14 +328,73 @@ int test_2d_linear_graph_hull() {
     // Check if bounding box is exactly the root
     if (std::fabs(min_x - 0.5) < 1e-10 && std::fabs(max_x - 0.5) < 1e-10 &&
         std::fabs(min_y - 0.3) < 1e-10 && std::fabs(max_y - 0.3) < 1e-10) {
-        std::cout << "  PASS: Bounding box is exactly the root!" << std::endl;
-        return 0;
+        std::cout << "  Bounding box is exactly the root!" << std::endl;
     } else if (min_x <= 0.5 && max_x >= 0.5 && min_y <= 0.3 && max_y >= 0.3) {
-        std::cout << "  PARTIAL: Bounding box contains the root but is not exact" << std::endl;
-        std::cout << "  This means iterative contraction is needed" << std::endl;
-        return 0;
+        std::cout << "  Bounding box contains the root but is not exact" << std::endl;
     } else {
         std::cerr << "  FAIL: Bounding box does not contain the root" << std::endl;
+        return 1;
+    }
+
+    // Now test with the actual solver
+    std::cout << std::endl;
+    std::cout << "Testing with solver (GraphHull method):" << std::endl;
+
+    PolynomialSystem system({p1, p2});
+    Solver solver;
+    SubdivisionConfig config;
+    config.tolerance = 1e-8;
+    config.max_depth = 100;
+
+    SubdivisionSolverResult result = solver.subdivisionSolve(system, config, RootBoundingMethod::GraphHull);
+
+    std::cout << "  Found " << result.boxes.size() << " box(es), "
+              << result.num_resolved << " resolved" << std::endl;
+    std::cout << "  Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << std::endl;
+    std::cout << std::endl;
+
+    if (result.num_resolved != 1) {
+        std::cerr << "  FAIL: Expected 1 resolved root, got " << result.num_resolved << std::endl;
+        return 1;
+    }
+
+    const SubdivisionBoxResult& box = result.boxes[0];
+    std::cout << "  Root box:" << std::endl;
+    std::cout << "    Lower: (" << box.lower[0] << ", " << box.lower[1] << ")" << std::endl;
+    std::cout << "    Upper: (" << box.upper[0] << ", " << box.upper[1] << ")" << std::endl;
+    std::cout << "    Center: (" << box.center[0] << ", " << box.center[1] << ")" << std::endl;
+    std::cout << "    Max error: (" << std::scientific << std::setprecision(16)
+              << box.max_error[0] << ", " << box.max_error[1] << ")" << std::endl;
+    std::cout << "    Depth: " << box.depth << std::endl;
+    std::cout << "    Converged: " << (box.converged ? "yes" : "no") << std::endl;
+    std::cout << std::endl;
+
+    // Check if error is machine epsilon
+    const double machine_eps = std::numeric_limits<double>::epsilon();
+    std::cout << "  Machine epsilon: " << std::scientific << std::setprecision(16) << machine_eps << std::endl;
+    std::cout << "  Error is machine epsilon: ("
+              << (box.max_error[0] == machine_eps ? "YES" : "NO") << ", "
+              << (box.max_error[1] == machine_eps ? "YES" : "NO") << ")" << std::endl;
+    std::cout << std::endl;
+
+    // Evaluate at the center
+    std::vector<double> eval_values;
+    system.evaluate(box.center, eval_values);
+    std::cout << "  Evaluation at center:" << std::endl;
+    std::cout << "    p1(" << std::fixed << std::setprecision(16) << box.center[0] << ", " << box.center[1] << ") = "
+              << std::scientific << std::setprecision(16) << eval_values[0] << std::endl;
+    std::cout << "    p2(" << std::fixed << std::setprecision(16) << box.center[0] << ", " << box.center[1] << ") = "
+              << std::scientific << std::setprecision(16) << eval_values[1] << std::endl;
+    std::cout << "    |p1(center)| = " << std::scientific << std::fabs(eval_values[0]) << std::endl;
+    std::cout << "    |p2(center)| = " << std::fabs(eval_values[1]) << std::endl;
+    std::cout << std::endl;
+
+    // Check if evaluation is close to zero
+    if (std::fabs(eval_values[0]) < 1e-10 && std::fabs(eval_values[1]) < 1e-10) {
+        std::cout << "  PASS: Linear system gives exact root with machine epsilon error!" << std::endl;
+        return 0;
+    } else {
+        std::cerr << "  FAIL: Evaluation error too large" << std::endl;
         return 1;
     }
 }
