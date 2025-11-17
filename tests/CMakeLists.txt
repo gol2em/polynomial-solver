@@ -43,5 +43,9 @@ add_executable(test_projected_polyhedral test_projected_polyhedral.cpp)
 target_link_libraries(test_projected_polyhedral PRIVATE solver polynomial geometry de_casteljau)
 add_test(NAME ProjectedPolyhedralTest COMMAND test_projected_polyhedral)
 
+add_executable(test_method_comparison test_method_comparison.cpp)
+target_link_libraries(test_method_comparison PRIVATE solver polynomial geometry de_casteljau)
+# Note: This is a comparison tool, not added to ctest
+
 message(STATUS "Tests directory configured (conversion, graph, and system tests enabled)")
 
