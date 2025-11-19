@@ -739,14 +739,15 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 if (config.dump_geometry) {
                     // Determine decision based on strategy
                     std::ostringstream decision_stream;
+                    decision_stream << "BOUNDING (";
                     if (config.strategy == SubdivisionStrategy::ContractFirst) {
-                        decision_stream << "CONTRACT_FIRST";
+                        decision_stream << "ContractFirst";
                     } else if (config.strategy == SubdivisionStrategy::SubdivideFirst) {
-                        decision_stream << "SUBDIVIDE_FIRST";
+                        decision_stream << "SubdivideFirst";
                     } else if (config.strategy == SubdivisionStrategy::Simultaneous) {
-                        decision_stream << "SIMULTANEOUS";
+                        decision_stream << "Simultaneous";
                     }
-                    decision_stream << " (iter " << iter << ")";
+                    decision_stream << ", iter " << iter << ")";
 
                     // Use dump version
                     if (!compute_projected_polyhedral_bounds_with_dump(
@@ -774,6 +775,15 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
             if (!has_roots) {
                 // No roots in this box; discard it
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                    std::ofstream dump(dump_file.c_str(), std::ios::app);
+                    if (dump.is_open()) {
+                        dump << "# FINAL_DECISION: PRUNED (empty bounding box, no roots)\n\n";
+                        dump.close();
+                    }
+                }
+#endif
                 break;
             }
 
@@ -883,6 +893,15 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
             if (all_small) {
                 // Step 8: Box is small enough, converged
+#ifdef ENABLE_GEOMETRY_DUMP
+                if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                    std::ofstream dump(dump_file.c_str(), std::ios::app);
+                    if (dump.is_open()) {
+                        dump << "# FINAL_DECISION: CONTRACTED (box small enough, converged)\n\n";
+                        dump.close();
+                    }
+                }
+#endif
                 converged = true;
                 break;
             }
@@ -1006,28 +1025,20 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         // Dump subdivision decision
 #ifdef ENABLE_GEOMETRY_DUMP
         if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
-            std::ostringstream decision_str;
-            decision_str << "SUBDIVIDE [";
-            bool first = true;
-            for (std::size_t i = 0; i < dim; ++i) {
-                if (split_dim[i]) {
-                    if (!first) decision_str << ", ";
-                    decision_str << "axis " << i;
-                    first = false;
+            std::ofstream dump(dump_file.c_str(), std::ios::app);
+            if (dump.is_open()) {
+                dump << "# FINAL_DECISION: SUBDIVIDE in [";
+                bool first = true;
+                for (std::size_t i = 0; i < dim; ++i) {
+                    if (split_dim[i]) {
+                        if (!first) dump << ", ";
+                        dump << "axis " << i;
+                        first = false;
+                    }
                 }
+                dump << "]\n\n";
+                dump.close();
             }
-            decision_str << "]";
-
-            // Dummy call to dump the subdivision decision
-            std::vector<double> dummy_lower(dim, 0.0);
-            std::vector<double> dummy_upper(dim, 1.0);
-            compute_projected_polyhedral_bounds_with_dump(
-                node.polys, dim,
-                dummy_lower, dummy_upper,
-                dump_file,
-                node.box_lower, node.box_upper,
-                node.depth, dump_iteration++,
-                decision_str.str());
         }
 #endif
 

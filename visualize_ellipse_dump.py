@@ -65,7 +65,11 @@ def parse_dump_file(filename):
                     }
                     iterations.append(current_iter)
                 elif line.startswith('# Decision:') and current_iter:
-                    # Parse decision
+                    # Parse decision (bounding strategy info)
+                    decision_str = line.split(':', 1)[1].strip()
+                    current_iter['bounding_info'] = decision_str
+                elif line.startswith('# FINAL_DECISION:') and current_iter:
+                    # Parse final decision (what actually happened)
                     decision_str = line.split(':', 1)[1].strip()
                     current_iter['decision'] = decision_str
                 elif line.startswith('# Global box:') and current_iter:
@@ -383,7 +387,8 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
 
     iter_num = iteration['iteration']
     depth = iteration['depth']
-    decision = iteration.get('decision', 'CONTRACT')
+    bounding_info = iteration.get('bounding_info', '')
+    decision = iteration.get('decision', 'UNKNOWN')
     global_box = iteration['global_box']
     final_box = iteration.get('final_box', None)
 
@@ -413,8 +418,10 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
 
     # Create figure with 3 subplots (all 3D)
     fig = plt.figure(figsize=(20, 6))
-    fig.suptitle(f'Iteration {iter_num}: Depth {depth} - {decision}',
-                fontsize=16, fontweight='bold')
+    title = f'Iteration {iter_num} (Depth {depth}): {decision}'
+    if bounding_info:
+        title += f'\n{bounding_info}'
+    fig.suptitle(title, fontsize=16, fontweight='bold')
 
     # Subplot 1: Equation 1
     ax1 = fig.add_subplot(131, projection='3d')
