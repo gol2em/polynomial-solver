@@ -290,31 +290,6 @@ bool compute_projected_polyhedral_bounds_with_dump(
             const std::size_t num_coeffs = poly.coefficientCount();
             const std::size_t point_dim = dim + 1u;
 
-            // Renormalize z-component (function values) to [-1, 1] for numerical stability
-            // Find max absolute value of function values (last coordinate)
-            double max_abs_z = 0.0;
-            for (std::size_t i = 0; i < num_coeffs; ++i) {
-                double z = std::abs(control_points[i * point_dim + dim]);
-                if (z > max_abs_z) {
-                    max_abs_z = z;
-                }
-            }
-
-            // Scale all function values by 1/max_abs_z (if max_abs_z > 0)
-            double z_scale = 1.0;
-            if (max_abs_z > 1e-15) {
-                z_scale = 1.0 / max_abs_z;
-                for (std::size_t i = 0; i < num_coeffs; ++i) {
-                    control_points[i * point_dim + dim] *= z_scale;
-                }
-            }
-
-#ifdef ENABLE_GEOMETRY_DUMP
-            if (do_dump) {
-                dump << "Z_Normalization_Factor " << z_scale << "\n";
-            }
-#endif
-
             // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
             std::vector<std::vector<double>> projected_2d;
             projected_2d.reserve(num_coeffs);
@@ -509,24 +484,6 @@ bool compute_graph_hull_bounds(
         // Convert flat array to vector of points in R^{n+1}.
         const std::size_t num_coeffs = poly.coefficientCount();
         const std::size_t point_dim = dim + 1u;
-
-        // Renormalize z-component (function values) to [-1, 1] for numerical stability
-        // Find max absolute value of function values (last coordinate)
-        double max_abs_z = 0.0;
-        for (std::size_t i = 0; i < num_coeffs; ++i) {
-            double z = std::abs(control_points[i * point_dim + dim]);
-            if (z > max_abs_z) {
-                max_abs_z = z;
-            }
-        }
-
-        // Scale all function values by 1/max_abs_z (if max_abs_z > 0)
-        if (max_abs_z > 1e-15) {
-            double z_scale = 1.0 / max_abs_z;
-            for (std::size_t i = 0; i < num_coeffs; ++i) {
-                control_points[i * point_dim + dim] *= z_scale;
-            }
-        }
 
         std::vector<std::vector<double>> points;
         points.reserve(num_coeffs);

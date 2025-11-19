@@ -1,7 +1,33 @@
 #!/usr/bin/env python3
 """
-Visualize the ellipse intersection solving process step by step.
-Reads the geometry dump file and creates 3-subplot figures for each iteration.
+Polynomial Solver Geometry Visualizer
+
+Visualizes the polynomial solving process step by step from geometry dump files.
+Creates 3-subplot figures for each iteration showing:
+- Subplot 1: First equation with control points and projections
+- Subplot 2: Second equation with control points and projections
+- Subplot 3: Combined view with both equations and bounding boxes
+
+Usage:
+    python visualize_ellipse_dump.py <dump_file> [options]
+
+Arguments:
+    dump_file           Path to the geometry dump file (required)
+
+Options:
+    --max-steps N       Maximum number of iterations to visualize (default: all)
+    --output-dir DIR    Output directory for PNG files (default: visualization_output)
+    --help, -h          Show this help message
+
+Examples:
+    # Visualize all iterations
+    python visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt
+
+    # Visualize first 20 iterations
+    python visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt --max-steps 20
+
+    # Custom output directory
+    python visualize_ellipse_dump.py dump.txt --max-steps 10 --output-dir my_viz
 """
 
 import numpy as np
@@ -10,6 +36,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import sys
 import os
+import argparse
 
 def parse_dump_file(filename):
     """Parse the geometry dump file and extract iterations."""
@@ -33,8 +60,7 @@ def parse_dump_file(filename):
                     'projected_points': [],
                     'convex_hull': [],
                     'intersection': [],
-                    'interval': None,
-                    'z_normalization_factor': 1.0
+                    'interval': None
                 }
                 if current_dir:
                     current_dir['equations'].append(current_eq)
@@ -67,7 +93,8 @@ def parse_dump_file(filename):
                         'depth': depth,
                         'decision': None,
                         'global_box': None,
-                        'directions': []
+                        'directions': [],
+                        'accumulated_z_norm': {}  # Will store accumulated factors per equation
                     }
                     iterations.append(current_iter)
                 elif line.startswith('# Decision:') and current_iter:
@@ -126,15 +153,6 @@ def parse_dump_file(filename):
                     state = None
             elif line.startswith('Final_Interval'):
                 state = None
-            elif line.startswith('Z_Normalization_Factor'):
-                # Parse z normalization factor
-                if current_eq:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        try:
-                            current_eq['z_normalization_factor'] = float(parts[1])
-                        except ValueError:
-                            pass
             else:
                 # Parse coordinate data
                 parts = line.split()
@@ -157,11 +175,11 @@ def parse_dump_file(filename):
     return iterations
 
 def evaluate_polynomial_1(x, y):
-    """Evaluate f1(x,y) = x^2 + y^2 - 1"""
+    """Evaluate f1(x,y) = x^2 + y^2 - 1 (original polynomial)"""
     return x**2 + y**2 - 1
 
 def evaluate_polynomial_2(x, y):
-    """Evaluate f2(x,y) = x^2/4 + 4*y^2 - 1"""
+    """Evaluate f2(x,y) = x^2/4 + 4*y^2 - 1 (original polynomial)"""
     return x**2 / 4 + 4 * y**2 - 1
 
 def create_mesh_grid(box):
@@ -174,13 +192,15 @@ def create_mesh_grid(box):
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
-                  interval_dir0=None, interval_dir1=None, view_box=None, z_norm_factor=1.0):
+                  interval_dir0=None, interval_dir1=None, view_box=None):
     """Plot 3D graph of polynomial with control points and projections.
 
     Args:
         box: Current bounding box to draw
         view_box: Viewing scope (if None, uses box)
-        z_norm_factor: Z-axis normalization factor to apply to polynomial evaluation
+
+    Note: Control points are already normalized in the dump file (z-values in [-1,1]).
+          The polynomial surface is evaluated from the original polynomial (not normalized).
     """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -197,7 +217,9 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     x = np.linspace(vis_x_min, vis_x_max, 50)
     y = np.linspace(vis_y_min, vis_y_max, 50)
     X, Y = np.meshgrid(x, y)
-    Z = poly_func(X, Y) * z_norm_factor  # Apply normalization factor
+    # Note: We evaluate the original polynomial, not the subdivided one
+    # So we should NOT apply z_norm_factor here (it's for Bernstein coefficients on subdivided box)
+    Z = poly_func(X, Y)
 
     # Plot surface
     surf = ax.plot_surface(X, Y, Z, alpha=0.3, cmap='coolwarm', edgecolor='none')
@@ -324,15 +346,13 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     # Add legend
     ax.legend(loc='upper left', fontsize=7, framealpha=0.8)
 
-def plot_3d_combined(ax, box, final_box, decision, view_box=None, z_norm_eq0=1.0, z_norm_eq1=1.0):
+def plot_3d_combined(ax, box, final_box, decision, view_box=None):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes.
 
     Args:
         box: Current bounding box to draw
         final_box: PP bounds to draw
         view_box: Viewing scope (if None, uses [0,1]^2)
-        z_norm_eq0: Z-axis normalization factor for equation 0
-        z_norm_eq1: Z-axis normalization factor for equation 1
     """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -350,8 +370,9 @@ def plot_3d_combined(ax, box, final_box, decision, view_box=None, z_norm_eq0=1.0
     x = np.linspace(vis_x_min, vis_x_max, 50)
     y = np.linspace(vis_y_min, vis_y_max, 50)
     X, Y = np.meshgrid(x, y)
-    Z1 = evaluate_polynomial_1(X, Y) * z_norm_eq0
-    Z2 = evaluate_polynomial_2(X, Y) * z_norm_eq1
+    # Evaluate original polynomials (not subdivided, so no normalization needed)
+    Z1 = evaluate_polynomial_1(X, Y)
+    Z2 = evaluate_polynomial_2(X, Y)
 
     # Plot both surfaces with transparency
     ax.plot_surface(X, Y, Z1, alpha=0.2, color='blue', edgecolor='none')
@@ -459,18 +480,10 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
         vis_x_min, vis_x_max = view_box[0], view_box[1]
         vis_y_min, vis_y_max = view_box[2], view_box[3]
 
-        # Get z-normalization factors if available
-        z_norm_eq0 = 1.0
-        z_norm_eq1 = 1.0
-        if len(iteration['directions']) > 0 and len(iteration['directions'][0]['equations']) > 0:
-            z_norm_eq0 = iteration['directions'][0]['equations'][0].get('z_normalization_factor', 1.0)
-        if len(iteration['directions']) > 0 and len(iteration['directions'][0]['equations']) > 1:
-            z_norm_eq1 = iteration['directions'][0]['equations'][1].get('z_normalization_factor', 1.0)
-
         # Create mesh grid for the surfaces
         X, Y = create_mesh_grid(view_box)
-        Z1 = evaluate_polynomial_1(X, Y) * z_norm_eq0
-        Z2 = evaluate_polynomial_2(X, Y) * z_norm_eq1
+        Z1 = evaluate_polynomial_1(X, Y)
+        Z2 = evaluate_polynomial_2(X, Y)
 
         # Plot surfaces with transparency
         ax.plot_surface(X, Y, Z1, alpha=0.3, cmap='Blues', label='f1')
@@ -525,10 +538,6 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     dir1_eq0 = iteration['directions'][1]['equations'][0]
     dir1_eq1 = iteration['directions'][1]['equations'][1]
 
-    # Get z-normalization factors (use from direction 0, should be same for both directions)
-    z_norm_eq0 = dir0_eq0.get('z_normalization_factor', 1.0)
-    z_norm_eq1 = dir0_eq1.get('z_normalization_factor', 1.0)
-
     # Subplot 1: Equation 1
     ax1 = fig.add_subplot(131, projection='3d')
     plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
@@ -537,7 +546,7 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                  dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
                  dir0_eq0['intersection'], dir1_eq0['intersection'],
                  dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                 view_box=view_box, z_norm_factor=z_norm_eq0)
+                 view_box=view_box)
 
     # Subplot 2: Equation 2
     ax2 = fig.add_subplot(132, projection='3d')
@@ -547,12 +556,11 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                  dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
                  dir0_eq1['intersection'], dir1_eq1['intersection'],
                  dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                 view_box=view_box, z_norm_factor=z_norm_eq1)
+                 view_box=view_box)
 
     # Subplot 3: Combined 3D view
     ax3 = fig.add_subplot(133, projection='3d')
-    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box,
-                     z_norm_eq0=z_norm_eq0, z_norm_eq1=z_norm_eq1)
+    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
 
     plt.tight_layout()
 
@@ -563,29 +571,42 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     plt.close()
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python visualize_ellipse_dump.py <dump_file> [max_steps] [output_dir]")
-        print("  dump_file: Path to the geometry dump file")
-        print("  max_steps: Maximum number of steps to visualize (default: 20)")
-        print("  output_dir: Output directory for visualizations (default: visualization_output)")
+    parser = argparse.ArgumentParser(
+        description='Visualize polynomial solver geometry dump files',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  # Visualize all iterations
+  python visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt
+
+  # Visualize first 20 iterations
+  python visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt --max-steps 20
+
+  # Custom output directory
+  python visualize_ellipse_dump.py dump.txt --max-steps 10 --output-dir my_viz
+        '''
+    )
+
+    parser.add_argument('dump_file', help='Path to the geometry dump file')
+    parser.add_argument('--max-steps', type=int, default=None, metavar='N',
+                        help='Maximum number of iterations to visualize (default: all)')
+    parser.add_argument('--output-dir', default='visualization_output', metavar='DIR',
+                        help='Output directory for PNG files (default: visualization_output)')
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.dump_file):
+        print(f"Error: File not found: {args.dump_file}")
         sys.exit(1)
 
-    dump_file = sys.argv[1]
-    max_steps = int(sys.argv[2]) if len(sys.argv) > 2 else 20
-    output_dir = sys.argv[3] if len(sys.argv) > 3 else "visualization_output"
-
-    if not os.path.exists(dump_file):
-        print(f"Error: File not found: {dump_file}")
-        sys.exit(1)
-
-    print(f"Parsing dump file: {dump_file}")
-    iterations = parse_dump_file(dump_file)
+    print(f"Parsing dump file: {args.dump_file}")
+    iterations = parse_dump_file(args.dump_file)
     print(f"Found {len(iterations)} iterations")
 
     # Limit iterations if max_steps specified
-    if max_steps is not None and max_steps < len(iterations):
-        print(f"Limiting to first {max_steps} iterations")
-        iterations = iterations[:max_steps]
+    if args.max_steps is not None and args.max_steps < len(iterations):
+        print(f"Limiting to first {args.max_steps} iterations")
+        iterations = iterations[:args.max_steps]
 
     # Debug: print structure
     for i, iteration in enumerate(iterations):
@@ -595,14 +616,14 @@ def main():
         for j, direction in enumerate(iteration['directions']):
             print(f"    Direction {j}: equations={len(direction['equations'])}")
 
-    print(f"\nGenerating visualizations to: {output_dir}/")
+    print(f"\nGenerating visualizations to: {args.output_dir}/")
     for i, iteration in enumerate(iterations):
         # Pass previous iteration for viewing scope
         prev_iteration = iterations[i-1] if i > 0 else None
-        visualize_iteration(iteration, prev_iteration=prev_iteration, output_dir=output_dir)
+        visualize_iteration(iteration, prev_iteration=prev_iteration, output_dir=args.output_dir)
 
     print(f"\nDone! Generated {len(iterations)} visualization(s)")
-    print(f"Output directory: {output_dir}/")
+    print(f"Output directory: {args.output_dir}/")
 
 if __name__ == '__main__':
     main()

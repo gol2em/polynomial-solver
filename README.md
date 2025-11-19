@@ -89,6 +89,95 @@ polynomial-solver/
 6. Process boxes by depth (breadth-first)
 7. Degeneracy detection for degenerate cases
 
+## Visualization Tool
+
+The project includes a Python visualization tool to visualize the solving process step-by-step from geometry dump files.
+
+### Usage
+
+```bash
+# Visualize all iterations
+python3 visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt
+
+# Visualize first 20 iterations
+python3 visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt --max-steps 20
+
+# Custom output directory
+python3 visualize_ellipse_dump.py dump.txt --max-steps 10 --output-dir my_viz
+
+# Show help
+python3 visualize_ellipse_dump.py --help
+```
+
+### Generating Dump Files
+
+Enable geometry dumping when running tests:
+
+```bash
+# Run test with geometry dump enabled
+./build/bin/test_strategies
+
+# This generates dump files:
+# - strategy_ContractFirst_geometry.txt
+# - strategy_SubdivideFirst_geometry.txt
+# - strategy_Simultaneous_geometry.txt
+```
+
+Or enable in your code:
+
+```cpp
+SubdivisionConfig config;
+config.dump_geometry = true;
+config.dump_prefix = "my_dump";
+```
+
+### Visualization Output
+
+Each iteration generates a PNG file with 3 subplots:
+
+1. **Subplot 1 (Left)**: First equation
+   - Polynomial surface (blue/red colormap)
+   - Zero contour (blue line, the solution curve)
+   - Control points (orange/green dots)
+   - Convex hulls (yellow/cyan polygons)
+   - Intersections with z=0 plane (red lines)
+   - Bounding intervals (red thick lines with square markers)
+
+2. **Subplot 2 (Middle)**: Second equation
+   - Same visualization elements as subplot 1
+
+3. **Subplot 3 (Right)**: Combined view
+   - Both polynomial surfaces
+   - Both zero contours (the intersection is the solution)
+   - Current bounding box (red wireframe)
+   - Final contracted box (green wireframe)
+
+### Understanding the Visualization
+
+- **Control Points**: Bernstein coefficients in graph space (x, y, f(x,y))
+- **Convex Hull**: Convex hull of control points (used for root bounding)
+- **Intersection**: Where convex hull intersects z=0 plane (potential root region)
+- **Bounding Interval**: Projected interval on each axis (red thick line)
+- **Zero Contour**: Where polynomial equals zero (the actual solution curve)
+- **Solution**: Intersection of both zero contours in subplot 3
+
+### Visualization Features
+
+- **Automatic Z-axis Scaling**: Z-axis limits are automatically adjusted to show geometry clearly
+- **Progressive Zoom**: Each iteration shows the previous iteration's box for context
+- **Pruned Cases**: Boxes with empty bounding boxes are marked with red X
+- **Decision Labels**: Each iteration shows the decision (CONTRACT/SUBDIVIDE/PRUNE)
+
+### Requirements
+
+```bash
+# Install Python dependencies
+pip install numpy matplotlib
+
+# Or using uv (recommended)
+uv pip install numpy matplotlib
+```
+
 ## Test Suite
 
 All 11 test suites pass:
