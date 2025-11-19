@@ -52,6 +52,11 @@ def parse_dump_file(filename):
                 state = None
             elif line.startswith('#'):
                 if line.startswith('# Iteration'):
+                    # Before starting new iteration, finalize previous iteration's decision
+                    if current_iter and current_iter['decision'] is None:
+                        # No explicit decision means it contracted and continued iterating
+                        current_iter['decision'] = 'CONTRACTED (continuing iteration)'
+
                     # Start new iteration
                     parts = line.split(',')
                     iter_num = int(parts[0].split()[2])
@@ -59,7 +64,7 @@ def parse_dump_file(filename):
                     current_iter = {
                         'iteration': iter_num,
                         'depth': depth,
-                        'decision': 'CONTRACT',
+                        'decision': None,
                         'global_box': None,
                         'directions': []
                     }
@@ -68,10 +73,15 @@ def parse_dump_file(filename):
                     # Parse decision (bounding strategy info)
                     decision_str = line.split(':', 1)[1].strip()
                     current_iter['bounding_info'] = decision_str
-                elif line.startswith('# FINAL_DECISION:') and current_iter:
+                elif line.startswith('# FINAL_DECISION:'):
                     # Parse final decision (what actually happened)
+                    # This belongs to the current iteration if it has no decision yet,
+                    # otherwise it belongs to the previous iteration (late SUBDIVIDE decision)
                     decision_str = line.split(':', 1)[1].strip()
-                    current_iter['decision'] = decision_str
+                    if current_iter and current_iter['decision'] is None:
+                        current_iter['decision'] = decision_str
+                    elif len(iterations) > 1 and iterations[-2]['decision'] is None:
+                        iterations[-2]['decision'] = decision_str
                 elif line.startswith('# Global box:') and current_iter:
                     # Parse global box
                     box_str = line.split('[')[1].split(']')[0]
@@ -129,6 +139,10 @@ def parse_dump_file(filename):
                             current_eq['intersection'].append([x, y])
                     except ValueError:
                         pass
+
+    # Finalize last iteration's decision if needed
+    if current_iter and current_iter['decision'] is None:
+        current_iter['decision'] = 'CONTRACTED (continuing iteration)'
 
     return iterations
 
@@ -399,29 +413,96 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     else:
         view_box = global_box
 
-    # Check if we have enough data
-    if len(iteration['directions']) < 2:
-        print(f"  Skipping iteration {iter_num}: not enough directions")
-        return
-    if len(iteration['directions'][0]['equations']) < 2:
-        print(f"  Skipping iteration {iter_num}: not enough equations in direction 0")
-        return
-    if len(iteration['directions'][1]['equations']) < 2:
-        print(f"  Skipping iteration {iter_num}: not enough equations in direction 1")
-        return
+    # Check if this is a pruned case
+    is_pruned = 'PRUNED' in decision
 
-    # Extract data for each equation and direction
-    dir0_eq0 = iteration['directions'][0]['equations'][0]
-    dir0_eq1 = iteration['directions'][0]['equations'][1]
-    dir1_eq0 = iteration['directions'][1]['equations'][0]
-    dir1_eq1 = iteration['directions'][1]['equations'][1]
+    # For pruned cases, we can visualize even with incomplete data
+    # For non-pruned cases, we need complete data
+    if not is_pruned:
+        if len(iteration['directions']) < 2:
+            print(f"  Skipping iteration {iter_num}: not enough directions")
+            return
+        if len(iteration['directions'][0]['equations']) < 2:
+            print(f"  Skipping iteration {iter_num}: not enough equations in direction 0")
+            return
+        if len(iteration['directions'][1]['equations']) < 2:
+            print(f"  Skipping iteration {iter_num}: not enough equations in direction 1")
+            return
 
     # Create figure with 3 subplots (all 3D)
     fig = plt.figure(figsize=(20, 6))
     title = f'Iteration {iter_num} (Depth {depth}): {decision}'
-    if bounding_info:
-        title += f'\n{bounding_info}'
     fig.suptitle(title, fontsize=16, fontweight='bold')
+
+    # Handle pruned cases specially
+    if is_pruned:
+        # For pruned cases, show the box and indicate it was empty
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Draw the current box
+        x_min, x_max, y_min, y_max = global_box[0], global_box[1], global_box[2], global_box[3]
+
+        # Use view_box for plotting limits
+        vis_x_min, vis_x_max = view_box[0], view_box[1]
+        vis_y_min, vis_y_max = view_box[2], view_box[3]
+
+        # Create mesh grid for the surfaces
+        X, Y = create_mesh_grid(view_box)
+        Z1 = evaluate_polynomial_1(X, Y)
+        Z2 = evaluate_polynomial_2(X, Y)
+
+        # Plot surfaces with transparency
+        ax.plot_surface(X, Y, Z1, alpha=0.3, cmap='Blues', label='f1')
+        ax.plot_surface(X, Y, Z2, alpha=0.3, cmap='Reds', label='f2')
+
+        # Plot zero contours
+        ax.contour(X, Y, Z1, levels=[0], colors='blue', linewidths=2, offset=0)
+        ax.contour(X, Y, Z2, levels=[0], colors='red', linewidths=2, offset=0)
+
+        # Draw the current box in RED with X marks to indicate pruned
+        corners = [
+            [x_min, y_min, 0], [x_max, y_min, 0],
+            [x_max, y_max, 0], [x_min, y_max, 0],
+            [x_min, y_min, 0]
+        ]
+        corners = np.array(corners)
+        ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'r-', linewidth=4, label='Pruned box')
+
+        # Add X marks at corners
+        for i in range(4):
+            ax.scatter([corners[i, 0]], [corners[i, 1]], [corners[i, 2]],
+                      c='red', marker='x', s=200, linewidths=4)
+
+        # Add text annotation
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
+        ax.text(center_x, center_y, 0, 'EMPTY\nBOUNDING BOX',
+               fontsize=14, color='red', weight='bold',
+               ha='center', va='center',
+               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
+        ax.set_title('Pruned Box (No Roots)')
+        ax.set_xlim(vis_x_min, vis_x_max)
+        ax.set_ylim(vis_y_min, vis_y_max)
+        ax.legend(loc='upper left', fontsize=8)
+
+        plt.tight_layout()
+
+        # Save figure
+        output_file = os.path.join(output_dir, f'step_{iter_num:03d}_depth_{depth}.png')
+        plt.savefig(output_file, dpi=100, bbox_inches='tight')
+        plt.close()
+        print(f"Saved: {output_file}")
+        return
+
+    # Extract data for each equation and direction (non-pruned case)
+    dir0_eq0 = iteration['directions'][0]['equations'][0]
+    dir0_eq1 = iteration['directions'][0]['equations'][1]
+    dir1_eq0 = iteration['directions'][1]['equations'][0]
+    dir1_eq1 = iteration['directions'][1]['equations'][1]
 
     # Subplot 1: Equation 1
     ax1 = fig.add_subplot(131, projection='3d')
@@ -459,12 +540,12 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python visualize_ellipse_dump.py <dump_file> [max_steps] [output_dir]")
         print("  dump_file: Path to the geometry dump file")
-        print("  max_steps: Maximum number of steps to visualize (default: all)")
+        print("  max_steps: Maximum number of steps to visualize (default: 20)")
         print("  output_dir: Output directory for visualizations (default: visualization_output)")
         sys.exit(1)
 
     dump_file = sys.argv[1]
-    max_steps = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    max_steps = int(sys.argv[2]) if len(sys.argv) > 2 else 20
     output_dir = sys.argv[3] if len(sys.argv) > 3 else "visualization_output"
 
     if not os.path.exists(dump_file):
