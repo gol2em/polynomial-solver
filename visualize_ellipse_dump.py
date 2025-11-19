@@ -160,38 +160,38 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     contour = ax.contour(X, Y, Z, levels=[0], colors='blue', linewidths=3)
 
     # Plot projections on background planes
-    # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_min (front wall)
+    # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_max (back wall)
     if control_points_dir0:
         pts = np.array(control_points_dir0)
         # pts[:, 0] is x coordinate, pts[:, 1] is function value
-        ax.scatter(pts[:, 0], np.full(len(pts), vis_y_min), pts[:, 1],
+        ax.scatter(pts[:, 0], np.full(len(pts), vis_y_max), pts[:, 1],
                   c='orange', s=20, alpha=0.6)
         if hull_dir0:
             hull_pts = np.array(hull_dir0)
             # Close the hull for visualization
             hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
-            ax.plot(hull_pts_closed[:, 0], np.full(len(hull_pts_closed), vis_y_min), hull_pts_closed[:, 1],
+            ax.plot(hull_pts_closed[:, 0], np.full(len(hull_pts_closed), vis_y_max), hull_pts_closed[:, 1],
                    '-', color='orange', linewidth=2)
         if intersection_dir0:
             int_pts = np.array(intersection_dir0)
-            ax.plot(int_pts[:, 0], np.full(len(int_pts), vis_y_min), int_pts[:, 1],
+            ax.plot(int_pts[:, 0], np.full(len(int_pts), vis_y_max), int_pts[:, 1],
                    'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
 
-    # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_max (back wall)
+    # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_min (left wall)
     if control_points_dir1:
         pts = np.array(control_points_dir1)
         # pts[:, 0] is y coordinate, pts[:, 1] is function value
-        ax.scatter(np.full(len(pts), vis_x_max), pts[:, 0], pts[:, 1],
+        ax.scatter(np.full(len(pts), vis_x_min), pts[:, 0], pts[:, 1],
                   c='cyan', s=20, alpha=0.6)
         if hull_dir1:
             hull_pts = np.array(hull_dir1)
             # Close the hull for visualization
             hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
-            ax.plot(np.full(len(hull_pts_closed), vis_x_max), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
+            ax.plot(np.full(len(hull_pts_closed), vis_x_min), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
                    '-', color='cyan', linewidth=2)
         if intersection_dir1:
             int_pts = np.array(intersection_dir1)
-            ax.plot(np.full(len(int_pts), vis_x_max), int_pts[:, 0], int_pts[:, 1],
+            ax.plot(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
                    'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
 
     # Plot current box on z=0 plane
