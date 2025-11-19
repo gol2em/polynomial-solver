@@ -87,13 +87,20 @@ int main() {
         }
 
         std::cout << "  Geometry dump written to: " << config.dump_prefix << "_geometry.txt\n";
+
+        // Suggest visualization command
+        std::cout << "  Visualize: python3 ../visualize_ellipse_dump.py "
+                  << config.dump_prefix << "_geometry.txt 5 viz_" << strategy_names[s] << "\n";
     }
 
     std::cout << "\n=============================================================\n";
     std::cout << "All strategies tested successfully!\n";
     std::cout << "\nNext steps:\n";
-    std::cout << "1. Run: python3 ../visualize_strategies.py\n";
-    std::cout << "2. Compare the three approaches in the generated visualizations\n";
+    std::cout << "1. Visualize each strategy (first 5 steps):\n";
+    std::cout << "   python3 ../visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt 5 viz_ContractFirst\n";
+    std::cout << "   python3 ../visualize_ellipse_dump.py strategy_SubdivideFirst_geometry.txt 5 viz_SubdivideFirst\n";
+    std::cout << "   python3 ../visualize_ellipse_dump.py strategy_Simultaneous_geometry.txt 5 viz_Simultaneous\n";
+    std::cout << "2. Compare the visualizations to understand the differences\n";
 
     return 0;
 }

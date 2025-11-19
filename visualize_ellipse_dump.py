@@ -83,17 +83,32 @@ def parse_dump_file(filename):
                 state = 'projected'
                 count = int(line.split()[1])
             elif line.startswith('ConvexHull'):
-                state = 'hull'
-                count = int(line.split()[1])
+                parts = line.split()
+                if len(parts) > 1 and parts[1] == 'EMPTY':
+                    state = None
+                    count = 0
+                else:
+                    state = 'hull'
+                    count = int(parts[1])
             elif line.startswith('Intersection'):
-                state = 'intersection'
-                count = int(line.split()[1])
-            elif line.startswith('Interval'):
-                if current_eq:
+                parts = line.split()
+                if len(parts) > 1 and parts[1] == 'EMPTY':
+                    state = None
+                    count = 0
+                else:
+                    state = 'intersection'
+                    count = int(parts[1])
+            elif line.startswith('Interval') or line.startswith('Direction_Interval'):
+                if 'EMPTY' in line:
+                    # Empty interval, skip
+                    state = None
+                elif current_eq and '[' in line:
                     interval_str = line.split('[')[1].split(']')[0]
                     values = [float(x.strip()) for x in interval_str.split(',')]
                     current_eq['interval'] = values
-                state = None
+                    state = None
+                else:
+                    state = None
             elif line.startswith('Final_Interval'):
                 state = None
             else:
@@ -435,10 +450,16 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python visualize_ellipse_dump.py <dump_file>")
+        print("Usage: python visualize_ellipse_dump.py <dump_file> [max_steps] [output_dir]")
+        print("  dump_file: Path to the geometry dump file")
+        print("  max_steps: Maximum number of steps to visualize (default: all)")
+        print("  output_dir: Output directory for visualizations (default: visualization_output)")
         sys.exit(1)
 
     dump_file = sys.argv[1]
+    max_steps = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    output_dir = sys.argv[3] if len(sys.argv) > 3 else "visualization_output"
+
     if not os.path.exists(dump_file):
         print(f"Error: File not found: {dump_file}")
         sys.exit(1)
@@ -446,6 +467,11 @@ def main():
     print(f"Parsing dump file: {dump_file}")
     iterations = parse_dump_file(dump_file)
     print(f"Found {len(iterations)} iterations")
+
+    # Limit iterations if max_steps specified
+    if max_steps is not None and max_steps < len(iterations):
+        print(f"Limiting to first {max_steps} iterations")
+        iterations = iterations[:max_steps]
 
     # Debug: print structure
     for i, iteration in enumerate(iterations):
@@ -455,14 +481,14 @@ def main():
         for j, direction in enumerate(iteration['directions']):
             print(f"    Direction {j}: equations={len(direction['equations'])}")
 
-    print("\nGenerating visualizations...")
+    print(f"\nGenerating visualizations to: {output_dir}/")
     for i, iteration in enumerate(iterations):
         # Pass previous iteration for viewing scope
         prev_iteration = iterations[i-1] if i > 0 else None
-        visualize_iteration(iteration, prev_iteration=prev_iteration)
+        visualize_iteration(iteration, prev_iteration=prev_iteration, output_dir=output_dir)
 
     print(f"\nDone! Generated {len(iterations)} visualization(s)")
-    print(f"Output directory: visualization_output/")
+    print(f"Output directory: {output_dir}/")
 
 if __name__ == '__main__':
     main()
