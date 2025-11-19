@@ -719,6 +719,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         bool converged = false;
         const unsigned int max_iterations = 100u;  // Prevent infinite loops
         std::vector<bool> final_needs_subdivision(dim, false);  // Track which dimensions need subdivision
+        bool box_was_pruned = false;  // Track if box was pruned (to skip subdivision)
 
         for (unsigned int iter = 0; iter < max_iterations; ++iter) {
             // Step 1: Compute bounding box of roots in local [0,1]^n space
@@ -784,6 +785,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                     }
                 }
 #endif
+                box_was_pruned = true;
                 break;
             }
 
@@ -1001,6 +1003,11 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             box.depth = node.depth;
             box.converged = true;
             resolved_boxes.push_back(std::move(box));
+            continue;
+        }
+
+        // Skip subdivision if box was pruned
+        if (box_was_pruned) {
             continue;
         }
 
