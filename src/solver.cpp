@@ -718,6 +718,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
         bool converged = false;
         const unsigned int max_iterations = 100u;  // Prevent infinite loops
+        std::vector<bool> final_needs_subdivision(dim, false);  // Track which dimensions need subdivision
 
         for (unsigned int iter = 0; iter < max_iterations; ++iter) {
             // Step 1: Compute bounding box of roots in local [0,1]^n space
@@ -736,8 +737,17 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 // Use projected polyhedral method (direction-by-direction)
 #ifdef ENABLE_GEOMETRY_DUMP
                 if (config.dump_geometry) {
-                    // Determine decision: CONTRACT on first iteration, then check if we'll subdivide
-                    std::string decision = (iter == 0) ? "CONTRACT" : "CONTRACT";
+                    // Determine decision based on strategy
+                    std::ostringstream decision_stream;
+                    if (config.strategy == SubdivisionStrategy::ContractFirst) {
+                        decision_stream << "CONTRACT_FIRST";
+                    } else if (config.strategy == SubdivisionStrategy::SubdivideFirst) {
+                        decision_stream << "SUBDIVIDE_FIRST";
+                    } else if (config.strategy == SubdivisionStrategy::Simultaneous) {
+                        decision_stream << "SIMULTANEOUS";
+                    }
+                    decision_stream << " (iter " << iter << ")";
+
                     // Use dump version
                     if (!compute_projected_polyhedral_bounds_with_dump(
                             node.polys, dim,
@@ -745,7 +755,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                             dump_file,
                             node.box_lower, node.box_upper,
                             node.depth, dump_iteration++,
-                            decision)) {
+                            decision_stream.str())) {
                         // Step 2: If empty, quit (no roots in this box)
                         has_roots = false;
                     }
@@ -767,29 +777,101 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 break;
             }
 
-            // Step 3: Contract the box to the bounding box
-            // Make bounding box the new region
+            // Step 3: Analyze contraction per direction
+            std::vector<double> contraction_ratio(dim);
+            std::vector<bool> needs_subdivision(dim, false);
+            bool any_needs_subdivision = false;
+
             for (std::size_t i = 0; i < dim; ++i) {
-                const double a = local_bound_lower[i];
-                const double b = local_bound_upper[i];
+                const double old_width = node.box_upper[i] - node.box_lower[i];
+                const double new_width = (local_bound_upper[i] - local_bound_lower[i]) * old_width;
+                contraction_ratio[i] = (old_width > 0.0) ? (new_width / old_width) : 0.0;
 
-                const double old_low = node.box_lower[i];
-                const double old_high = node.box_upper[i];
-                const double old_width = old_high - old_low;
-
-                const double new_low = old_low + a * old_width;
-                const double new_high = old_low + b * old_width;
-
-                node.box_lower[i] = new_low;
-                node.box_upper[i] = new_high;
-
-                // Restrict polynomials to new interval
-                for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
-                    node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
+                // Check if this direction contracted enough
+                if (contraction_ratio[i] > config.contraction_threshold && old_width > tolerance) {
+                    needs_subdivision[i] = true;
+                    any_needs_subdivision = true;
                 }
             }
 
-            // Step 4: Check if contracted box is small enough
+#ifdef ENABLE_GEOMETRY_DUMP
+            // Dump contraction analysis
+            if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                std::ofstream dump(dump_file.c_str(), std::ios::app);
+                if (dump.is_open()) {
+                    dump << std::setprecision(6);
+                    dump << "# Contraction Analysis:\n";
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        dump << "#   Direction " << i << ": ratio=" << contraction_ratio[i]
+                             << " (threshold=" << config.contraction_threshold << ")";
+                        if (needs_subdivision[i]) {
+                            dump << " -> NEEDS_SUBDIVISION";
+                        } else {
+                            dump << " -> OK";
+                        }
+                        dump << "\n";
+                    }
+                    dump.close();
+                }
+            }
+#endif
+
+            // Step 4: Apply strategy-specific logic
+            bool should_subdivide_now = false;
+            bool should_contract = true;
+
+            if (config.strategy == SubdivisionStrategy::SubdivideFirst) {
+                // SubdivideFirst: If any direction didn't contract enough, subdivide immediately
+                if (any_needs_subdivision) {
+                    should_subdivide_now = true;
+                    should_contract = false;
+                }
+            } else if (config.strategy == SubdivisionStrategy::Simultaneous) {
+                // Simultaneous: Subdivide in non-contracting directions, contract in others
+                if (any_needs_subdivision) {
+                    should_subdivide_now = true;
+                    should_contract = true;  // Will contract only in directions that don't need subdivision
+                }
+            }
+            // ContractFirst: Always contract, will subdivide later if needed (default behavior)
+
+            // Step 5: Contract the box (if strategy allows)
+            if (should_contract) {
+                for (std::size_t i = 0; i < dim; ++i) {
+                    // For Simultaneous strategy, only contract directions that don't need subdivision
+                    if (config.strategy == SubdivisionStrategy::Simultaneous && needs_subdivision[i]) {
+                        continue;  // Skip contraction for this direction
+                    }
+
+                    const double a = local_bound_lower[i];
+                    const double b = local_bound_upper[i];
+
+                    const double old_low = node.box_lower[i];
+                    const double old_high = node.box_upper[i];
+                    const double old_width = old_high - old_low;
+
+                    const double new_low = old_low + a * old_width;
+                    const double new_high = old_low + b * old_width;
+
+                    node.box_lower[i] = new_low;
+                    node.box_upper[i] = new_high;
+
+                    // Restrict polynomials to new interval
+                    for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
+                        node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
+                    }
+                }
+            }
+
+            // Step 6: If strategy says subdivide now, break out of iteration loop
+            if (should_subdivide_now) {
+                // Save which dimensions need subdivision for later
+                final_needs_subdivision = needs_subdivision;
+                // Will subdivide after the iteration loop
+                break;
+            }
+
+            // Step 7: Check if contracted box is small enough
             bool all_small = true;
             for (std::size_t i = 0; i < dim; ++i) {
                 const double width = node.box_upper[i] - node.box_lower[i];
@@ -800,7 +882,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             }
 
             if (all_small) {
-                // Step 5: Box is small enough, converged
+                // Step 8: Box is small enough, converged
                 converged = true;
                 break;
             }
@@ -907,10 +989,17 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         // Subdivide along axes that are not small enough.
         // Only subdivide dimensions whose width is larger than tolerance.
         std::vector<bool> split_dim(dim, false);
-        for (std::size_t i = 0; i < dim; ++i) {
-            const double width = node.box_upper[i] - node.box_lower[i];
-            if (width > tolerance) {
-                split_dim[i] = true;
+
+        if (config.strategy == SubdivisionStrategy::Simultaneous) {
+            // For Simultaneous strategy, only subdivide dimensions that didn't contract enough
+            split_dim = final_needs_subdivision;
+        } else {
+            // For ContractFirst and SubdivideFirst, subdivide all dimensions not small enough
+            for (std::size_t i = 0; i < dim; ++i) {
+                const double width = node.box_upper[i] - node.box_lower[i];
+                if (width > tolerance) {
+                    split_dim[i] = true;
+                }
             }
         }
 
