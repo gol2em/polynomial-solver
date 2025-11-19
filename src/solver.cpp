@@ -95,6 +95,19 @@ Solver::~Solver() {
 
 namespace {
 
+// Forward declaration for internal helper function
+bool compute_projected_polyhedral_bounds_with_dump(
+    const std::vector<polynomial_solver::Polynomial>& polys,
+    std::size_t dim,
+    std::vector<double>& local_bound_lower,
+    std::vector<double>& local_bound_upper,
+    const std::string& dump_file,
+    const std::vector<double>& global_box_lower,
+    const std::vector<double>& global_box_upper,
+    unsigned int depth,
+    unsigned int iteration,
+    const std::string& decision);
+
 struct SubdivisionNode {
     std::vector<double> box_lower;  ///< Global box lower corner in [0,1]^n.
     std::vector<double> box_upper;  ///< Global box upper corner in [0,1]^n.
@@ -170,90 +183,15 @@ bool compute_projected_polyhedral_bounds(
     std::vector<double>& local_bound_lower,
     std::vector<double>& local_bound_upper)
 {
-    if (polys.empty() || dim == 0u) {
-        return false;
-    }
-
-    local_bound_lower.resize(dim);
-    local_bound_upper.resize(dim);
-
-    // Process each direction independently
-    for (std::size_t dir = 0; dir < dim; ++dir) {
-        // For this direction, we'll compute the intersection of intervals from all equations
-        double dir_min = 0.0;
-        double dir_max = 1.0;
-
-        for (const polynomial_solver::Polynomial& poly : polys) {
-            // Get graph control points in R^{n+1}
-            std::vector<double> control_points;
-            poly.graphControlPoints(control_points);
-
-            const std::size_t num_coeffs = poly.coefficientCount();
-            const std::size_t point_dim = dim + 1u;
-
-            // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
-            std::vector<std::vector<double>> projected_2d;
-            projected_2d.reserve(num_coeffs);
-
-            for (std::size_t i = 0; i < num_coeffs; ++i) {
-                std::vector<double> pt_2d(2);
-                pt_2d[0] = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
-                pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
-                projected_2d.push_back(pt_2d);
-            }
-
-            // Compute convex hull in 2D
-            polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
-
-            // Intersect with horizontal axis (y = 0, i.e., last coordinate = 0)
-            polynomial_solver::ConvexPolyhedron intersection_1d;
-            if (!polynomial_solver::intersect_convex_polyhedron_with_last_coordinate_zero(
-                    hull_2d, intersection_1d)) {
-                // No intersection with axis for this equation means no roots
-                return false;
-            }
-
-            // Project to 1D by taking the first coordinate (drop the second which is 0)
-            // Find min and max of the first coordinate
-            if (intersection_1d.vertices.empty()) {
-                return false;
-            }
-
-            double eq_min = intersection_1d.vertices[0][0];
-            double eq_max = intersection_1d.vertices[0][0];
-
-            for (const std::vector<double>& v : intersection_1d.vertices) {
-                if (v[0] < eq_min) eq_min = v[0];
-                if (v[0] > eq_max) eq_max = v[0];
-            }
-
-            // Intersect with current bounds for this direction
-            if (eq_min > dir_min) dir_min = eq_min;
-            if (eq_max < dir_max) dir_max = eq_max;
-
-            // Check if intersection is empty
-            if (dir_min > dir_max) {
-                return false;
-            }
-        }
-
-        // Store the bounds for this direction
-        local_bound_lower[dir] = dir_min;
-        local_bound_upper[dir] = dir_max;
-
-        // Clamp to [0, 1] (local parameter space)
-        if (local_bound_lower[dir] < 0.0) local_bound_lower[dir] = 0.0;
-        if (local_bound_upper[dir] > 1.0) local_bound_upper[dir] = 1.0;
-        if (local_bound_lower[dir] > 1.0) local_bound_lower[dir] = 1.0;
-        if (local_bound_upper[dir] < 0.0) local_bound_upper[dir] = 0.0;
-
-        // Check for empty interval
-        if (local_bound_lower[dir] > local_bound_upper[dir]) {
-            return false;
-        }
-    }
-
-    return true;
+    // Forward to the dump version with empty dump file
+    // This ensures we maintain a single implementation
+    std::vector<double> dummy_box_lower(dim, 0.0);
+    std::vector<double> dummy_box_upper(dim, 1.0);
+    return compute_projected_polyhedral_bounds_with_dump(
+        polys, dim, local_bound_lower, local_bound_upper,
+        "",  // empty dump file means no dumping
+        dummy_box_lower, dummy_box_upper,
+        0, 0, "CONTRACT");
 }
 
 /**
