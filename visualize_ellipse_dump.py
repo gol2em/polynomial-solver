@@ -131,15 +131,20 @@ def create_mesh_grid(box):
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
-                  interval_dir0=None, interval_dir1=None, show_full_domain=False):
-    """Plot 3D graph of polynomial with control points and projections."""
+                  interval_dir0=None, interval_dir1=None, view_box=None):
+    """Plot 3D graph of polynomial with control points and projections.
+
+    Args:
+        box: Current bounding box to draw
+        view_box: Viewing scope (if None, uses box)
+    """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
-    # For visualization, always show [0,1]^2 domain if requested
-    if show_full_domain:
-        vis_x_min, vis_x_max = 0.0, 1.0
-        vis_y_min, vis_y_max = 0.0, 1.0
+    # Use view_box for visualization scope (shows previous iteration's box)
+    if view_box:
+        vis_x_min, vis_x_max = view_box[0], view_box[1]
+        vis_y_min, vis_y_max = view_box[2], view_box[3]
     else:
         vis_x_min, vis_x_max = x_min, x_max
         vis_y_min, vis_y_max = y_min, y_max
@@ -250,14 +255,25 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     # Add legend
     ax.legend(loc='upper left', fontsize=7, framealpha=0.8)
 
-def plot_3d_combined(ax, box, final_box, decision):
-    """Plot both equations in 3D with surfaces, contours, and bounding boxes."""
+def plot_3d_combined(ax, box, final_box, decision, view_box=None):
+    """Plot both equations in 3D with surfaces, contours, and bounding boxes.
+
+    Args:
+        box: Current bounding box to draw
+        final_box: PP bounds to draw
+        view_box: Viewing scope (if None, uses [0,1]^2)
+    """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
-    # Always show [0,1]^2 domain
-    vis_x_min, vis_x_max = 0.0, 1.0
-    vis_y_min, vis_y_max = 0.0, 1.0
+    # Use view_box for visualization scope
+    if view_box:
+        vis_x_min, vis_x_max = view_box[0], view_box[1]
+        vis_y_min, vis_y_max = view_box[2], view_box[3]
+    else:
+        # Default to [0,1]^2 domain
+        vis_x_min, vis_x_max = 0.0, 1.0
+        vis_y_min, vis_y_max = 0.0, 1.0
 
     # Create mesh over full domain
     x = np.linspace(vis_x_min, vis_x_max, 50)
@@ -321,7 +337,7 @@ def plot_3d_combined(ax, box, final_box, decision):
 
     ax.legend(loc='upper left', fontsize=8)
 
-def visualize_iteration(iteration, output_dir='visualization_output'):
+def visualize_iteration(iteration, prev_iteration=None, output_dir='visualization_output'):
     """Create visualization for one iteration."""
     os.makedirs(output_dir, exist_ok=True)
 
@@ -330,6 +346,13 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
     decision = iteration.get('decision', 'CONTRACT')
     global_box = iteration['global_box']
     final_box = iteration.get('final_box', None)
+
+    # Use previous iteration's bounding box as the viewing scope (if available)
+    # This shows the contraction more clearly
+    if prev_iteration and prev_iteration.get('final_box'):
+        view_box = prev_iteration['final_box']
+    else:
+        view_box = global_box
 
     # Check if we have enough data
     if len(iteration['directions']) < 2:
@@ -361,7 +384,7 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
                  dir0_eq0['intersection'], dir1_eq0['intersection'],
                  dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                 show_full_domain=True)
+                 view_box=view_box)
 
     # Subplot 2: Equation 2
     ax2 = fig.add_subplot(132, projection='3d')
@@ -371,11 +394,11 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
                  dir0_eq1['intersection'], dir1_eq1['intersection'],
                  dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                 show_full_domain=True)
+                 view_box=view_box)
 
     # Subplot 3: Combined 3D view
     ax3 = fig.add_subplot(133, projection='3d')
-    plot_3d_combined(ax3, global_box, final_box, decision)
+    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
 
     plt.tight_layout()
 
@@ -408,8 +431,10 @@ def main():
             print(f"    Direction {j}: equations={len(direction['equations'])}")
 
     print("\nGenerating visualizations...")
-    for iteration in iterations:
-        visualize_iteration(iteration)
+    for i, iteration in enumerate(iterations):
+        # Pass previous iteration for viewing scope
+        prev_iteration = iterations[i-1] if i > 0 else None
+        visualize_iteration(iteration, prev_iteration=prev_iteration)
 
     print(f"\nDone! Generated {len(iterations)} visualization(s)")
     print(f"Output directory: visualization_output/")
