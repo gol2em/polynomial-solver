@@ -130,7 +130,8 @@ def create_mesh_grid(box):
     return X, Y
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
-                  hull_dir0, hull_dir1, intersection_dir0, intersection_dir1, show_full_domain=False):
+                  hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
+                  interval_dir0=None, interval_dir1=None, show_full_domain=False):
     """Plot 3D graph of polynomial with control points and projections."""
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -165,34 +166,46 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
         pts = np.array(control_points_dir0)
         # pts[:, 0] is x coordinate, pts[:, 1] is function value
         ax.scatter(pts[:, 0], np.full(len(pts), vis_y_max), pts[:, 1],
-                  c='orange', s=20, alpha=0.6)
+                  c='orange', s=20, alpha=0.6, label='X-proj points')
         if hull_dir0:
             hull_pts = np.array(hull_dir0)
             # Close the hull for visualization
             hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
             ax.plot(hull_pts_closed[:, 0], np.full(len(hull_pts_closed), vis_y_max), hull_pts_closed[:, 1],
-                   '-', color='orange', linewidth=2)
+                   '-', color='orange', linewidth=2, label='X-proj hull')
         if intersection_dir0:
             int_pts = np.array(intersection_dir0)
-            ax.plot(int_pts[:, 0], np.full(len(int_pts), vis_y_max), int_pts[:, 1],
-                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
+            # Highlight intersection points with axis (z=0)
+            ax.scatter(int_pts[:, 0], np.full(len(int_pts), vis_y_max), int_pts[:, 1],
+                      s=150, c='red', marker='o', edgecolors='darkred', linewidths=3,
+                      alpha=0.8, label='X-axis intersect', zorder=10)
+            # Draw lines from intersection points to x-axis on z=0 plane
+            for pt in int_pts:
+                ax.plot([pt[0], pt[0]], [vis_y_max, vis_y_max], [pt[1], 0],
+                       'r--', linewidth=2, alpha=0.7)
 
     # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_min (left wall)
     if control_points_dir1:
         pts = np.array(control_points_dir1)
         # pts[:, 0] is y coordinate, pts[:, 1] is function value
         ax.scatter(np.full(len(pts), vis_x_min), pts[:, 0], pts[:, 1],
-                  c='cyan', s=20, alpha=0.6)
+                  c='cyan', s=20, alpha=0.6, label='Y-proj points')
         if hull_dir1:
             hull_pts = np.array(hull_dir1)
             # Close the hull for visualization
             hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
             ax.plot(np.full(len(hull_pts_closed), vis_x_min), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
-                   '-', color='cyan', linewidth=2)
+                   '-', color='cyan', linewidth=2, label='Y-proj hull')
         if intersection_dir1:
             int_pts = np.array(intersection_dir1)
-            ax.plot(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
-                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
+            # Highlight intersection points with axis (z=0)
+            ax.scatter(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
+                      s=150, c='red', marker='o', edgecolors='darkred', linewidths=3,
+                      alpha=0.8, label='Y-axis intersect', zorder=10)
+            # Draw lines from intersection points to y-axis on z=0 plane
+            for pt in int_pts:
+                ax.plot([vis_x_min, vis_x_min], [pt[0], pt[0]], [pt[1], 0],
+                       'r--', linewidth=2, alpha=0.7)
 
     # Plot current box on z=0 plane
     corners = [
@@ -201,7 +214,26 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
         [x_min, y_min, 0]
     ]
     corners = np.array(corners)
-    ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=2)
+    ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=2, label='Current box')
+
+    # Highlight bounding intervals on axes (z=0 plane)
+    if interval_dir0:
+        # X-direction interval on x-axis (y=vis_y_max, z=0)
+        x_int_min, x_int_max = interval_dir0[0], interval_dir0[1]
+        ax.plot([x_int_min, x_int_max], [vis_y_max, vis_y_max], [0, 0],
+               'r-', linewidth=5, alpha=0.8, label=f'X-interval [{x_int_min:.3f}, {x_int_max:.3f}]')
+        # Mark endpoints
+        ax.scatter([x_int_min, x_int_max], [vis_y_max, vis_y_max], [0, 0],
+                  s=100, c='red', marker='s', edgecolors='darkred', linewidths=2, zorder=10)
+
+    if interval_dir1:
+        # Y-direction interval on y-axis (x=vis_x_min, z=0)
+        y_int_min, y_int_max = interval_dir1[0], interval_dir1[1]
+        ax.plot([vis_x_min, vis_x_min], [y_int_min, y_int_max], [0, 0],
+               'r-', linewidth=5, alpha=0.8, label=f'Y-interval [{y_int_min:.3f}, {y_int_max:.3f}]')
+        # Mark endpoints
+        ax.scatter([vis_x_min, vis_x_min], [y_int_min, y_int_max], [0, 0],
+                  s=100, c='red', marker='s', edgecolors='darkred', linewidths=2, zorder=10)
 
     ax.set_xlabel('x')
     ax.set_ylabel('y')
@@ -214,6 +246,9 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     z_min = min(Z.min(), -1.5)
     z_max = max(Z.max(), 1.5)
     ax.set_zlim(z_min, z_max)
+
+    # Add legend
+    ax.legend(loc='upper left', fontsize=7, framealpha=0.8)
 
 def plot_3d_combined(ax, box, final_box, decision):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes."""
@@ -325,6 +360,7 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  dir0_eq0['projected_points'], dir1_eq0['projected_points'],
                  dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
                  dir0_eq0['intersection'], dir1_eq0['intersection'],
+                 dir0_eq0.get('interval'), dir1_eq0.get('interval'),
                  show_full_domain=True)
 
     # Subplot 2: Equation 2
@@ -334,6 +370,7 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  dir0_eq1['projected_points'], dir1_eq1['projected_points'],
                  dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
                  dir0_eq1['intersection'], dir1_eq1['intersection'],
+                 dir0_eq1.get('interval'), dir1_eq1.get('interval'),
                  show_full_domain=True)
 
     # Subplot 3: Combined 3D view
