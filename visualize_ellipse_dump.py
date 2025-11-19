@@ -167,48 +167,68 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
 
     # Plot projections on background planes
     # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_max (back wall)
+    # NOTE: Projected points are in normalized [0,1] coordinates, need affine transformation
     if control_points_dir0:
         pts = np.array(control_points_dir0)
-        # pts[:, 0] is x coordinate, pts[:, 1] is function value
-        ax.scatter(pts[:, 0], np.full(len(pts), vis_y_max), pts[:, 1],
+        # Transform from [0,1] to [x_min, x_max]
+        pts_transformed = pts.copy()
+        pts_transformed[:, 0] = x_min + pts[:, 0] * (x_max - x_min)
+        # pts[:, 1] is function value (already in correct space)
+        ax.scatter(pts_transformed[:, 0], np.full(len(pts_transformed), vis_y_max), pts_transformed[:, 1],
                   c='orange', s=20, alpha=0.6, label='X-proj points')
         if hull_dir0:
             hull_pts = np.array(hull_dir0)
+            # Transform from [0,1] to [x_min, x_max]
+            hull_pts_transformed = hull_pts.copy()
+            hull_pts_transformed[:, 0] = x_min + hull_pts[:, 0] * (x_max - x_min)
             # Close the hull for visualization
-            hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
+            hull_pts_closed = np.vstack([hull_pts_transformed, hull_pts_transformed[0]])
             ax.plot(hull_pts_closed[:, 0], np.full(len(hull_pts_closed), vis_y_max), hull_pts_closed[:, 1],
                    '-', color='orange', linewidth=2, label='X-proj hull')
         if intersection_dir0:
             int_pts = np.array(intersection_dir0)
+            # Transform from [0,1] to [x_min, x_max]
+            int_pts_transformed = int_pts.copy()
+            int_pts_transformed[:, 0] = x_min + int_pts[:, 0] * (x_max - x_min)
             # Highlight intersection points with axis (z=0)
-            ax.scatter(int_pts[:, 0], np.full(len(int_pts), vis_y_max), int_pts[:, 1],
+            ax.scatter(int_pts_transformed[:, 0], np.full(len(int_pts_transformed), vis_y_max), int_pts_transformed[:, 1],
                       s=150, c='red', marker='o', edgecolors='darkred', linewidths=3,
                       alpha=0.8, label='X-axis intersect', zorder=10)
             # Draw lines from intersection points to x-axis on z=0 plane
-            for pt in int_pts:
+            for pt in int_pts_transformed:
                 ax.plot([pt[0], pt[0]], [vis_y_max, vis_y_max], [pt[1], 0],
                        'r--', linewidth=2, alpha=0.7)
 
     # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_min (left wall)
+    # NOTE: Projected points are in normalized [0,1] coordinates, need affine transformation
     if control_points_dir1:
         pts = np.array(control_points_dir1)
-        # pts[:, 0] is y coordinate, pts[:, 1] is function value
-        ax.scatter(np.full(len(pts), vis_x_min), pts[:, 0], pts[:, 1],
+        # Transform from [0,1] to [y_min, y_max]
+        pts_transformed = pts.copy()
+        pts_transformed[:, 0] = y_min + pts[:, 0] * (y_max - y_min)
+        # pts[:, 1] is function value (already in correct space)
+        ax.scatter(np.full(len(pts_transformed), vis_x_min), pts_transformed[:, 0], pts_transformed[:, 1],
                   c='cyan', s=20, alpha=0.6, label='Y-proj points')
         if hull_dir1:
             hull_pts = np.array(hull_dir1)
+            # Transform from [0,1] to [y_min, y_max]
+            hull_pts_transformed = hull_pts.copy()
+            hull_pts_transformed[:, 0] = y_min + hull_pts[:, 0] * (y_max - y_min)
             # Close the hull for visualization
-            hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
+            hull_pts_closed = np.vstack([hull_pts_transformed, hull_pts_transformed[0]])
             ax.plot(np.full(len(hull_pts_closed), vis_x_min), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
                    '-', color='cyan', linewidth=2, label='Y-proj hull')
         if intersection_dir1:
             int_pts = np.array(intersection_dir1)
+            # Transform from [0,1] to [y_min, y_max]
+            int_pts_transformed = int_pts.copy()
+            int_pts_transformed[:, 0] = y_min + int_pts[:, 0] * (y_max - y_min)
             # Highlight intersection points with axis (z=0)
-            ax.scatter(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
+            ax.scatter(np.full(len(int_pts_transformed), vis_x_min), int_pts_transformed[:, 0], int_pts_transformed[:, 1],
                       s=150, c='red', marker='o', edgecolors='darkred', linewidths=3,
                       alpha=0.8, label='Y-axis intersect', zorder=10)
             # Draw lines from intersection points to y-axis on z=0 plane
-            for pt in int_pts:
+            for pt in int_pts_transformed:
                 ax.plot([vis_x_min, vis_x_min], [pt[0], pt[0]], [pt[1], 0],
                        'r--', linewidth=2, alpha=0.7)
 
@@ -222,9 +242,12 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=2, label='Current box')
 
     # Highlight bounding intervals on axes (z=0 plane)
+    # NOTE: Intervals are in normalized [0,1] coordinates, need affine transformation
     if interval_dir0:
         # X-direction interval on x-axis (y=vis_y_max, z=0)
-        x_int_min, x_int_max = interval_dir0[0], interval_dir0[1]
+        # Transform from [0,1] to [x_min, x_max]
+        x_int_min = x_min + interval_dir0[0] * (x_max - x_min)
+        x_int_max = x_min + interval_dir0[1] * (x_max - x_min)
         ax.plot([x_int_min, x_int_max], [vis_y_max, vis_y_max], [0, 0],
                'r-', linewidth=5, alpha=0.8, label=f'X-interval [{x_int_min:.3f}, {x_int_max:.3f}]')
         # Mark endpoints
@@ -233,7 +256,9 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
 
     if interval_dir1:
         # Y-direction interval on y-axis (x=vis_x_min, z=0)
-        y_int_min, y_int_max = interval_dir1[0], interval_dir1[1]
+        # Transform from [0,1] to [y_min, y_max]
+        y_int_min = y_min + interval_dir1[0] * (y_max - y_min)
+        y_int_max = y_min + interval_dir1[1] * (y_max - y_min)
         ax.plot([vis_x_min, vis_x_min], [y_int_min, y_int_max], [0, 0],
                'r-', linewidth=5, alpha=0.8, label=f'Y-interval [{y_int_min:.3f}, {y_int_max:.3f}]')
         # Mark endpoints
