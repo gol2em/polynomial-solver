@@ -132,7 +132,8 @@ def create_mesh_grid(box):
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1, show_full_domain=False):
     """Plot 3D graph of polynomial with control points and projections."""
-    x_min, x_max, y_min, y_max = box
+    # Box format: [x_min, x_max, y_min, y_max]
+    x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
     # For visualization, always show [0,1]^2 domain if requested
     if show_full_domain:
@@ -159,7 +160,7 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     contour = ax.contour(X, Y, Z, levels=[0], colors='blue', linewidths=3)
 
     # Plot projections on background planes
-    # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_min
+    # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_min (front wall)
     if control_points_dir0:
         pts = np.array(control_points_dir0)
         # pts[:, 0] is x coordinate, pts[:, 1] is function value
@@ -176,21 +177,21 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
             ax.plot(int_pts[:, 0], np.full(len(int_pts), vis_y_min), int_pts[:, 1],
                    'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
 
-    # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_min
+    # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_max (back wall)
     if control_points_dir1:
         pts = np.array(control_points_dir1)
         # pts[:, 0] is y coordinate, pts[:, 1] is function value
-        ax.scatter(np.full(len(pts), vis_x_min), pts[:, 0], pts[:, 1],
+        ax.scatter(np.full(len(pts), vis_x_max), pts[:, 0], pts[:, 1],
                   c='cyan', s=20, alpha=0.6)
         if hull_dir1:
             hull_pts = np.array(hull_dir1)
             # Close the hull for visualization
             hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
-            ax.plot(np.full(len(hull_pts_closed), vis_x_min), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
+            ax.plot(np.full(len(hull_pts_closed), vis_x_max), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
                    '-', color='cyan', linewidth=2)
         if intersection_dir1:
             int_pts = np.array(intersection_dir1)
-            ax.plot(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
+            ax.plot(np.full(len(int_pts), vis_x_max), int_pts[:, 0], int_pts[:, 1],
                    'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
 
     # Plot current box on z=0 plane
@@ -216,7 +217,8 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
 
 def plot_3d_combined(ax, box, final_box, decision):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes."""
-    x_min, x_max, y_min, y_max = box
+    # Box format: [x_min, x_max, y_min, y_max]
+    x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
     # Always show [0,1]^2 domain
     vis_x_min, vis_x_max = 0.0, 1.0
@@ -252,7 +254,8 @@ def plot_3d_combined(ax, box, final_box, decision):
 
     # Plot final bounding box (PP bounds) if available
     if final_box:
-        fx_min, fx_max, fy_min, fy_max = final_box
+        # Box format: [x_min, x_max, y_min, y_max]
+        fx_min, fx_max, fy_min, fy_max = final_box[0], final_box[1], final_box[2], final_box[3]
         pp_corners = [
             [fx_min, fy_min, 0], [fx_max, fy_min, 0],
             [fx_max, fy_max, 0], [fx_min, fy_max, 0],
