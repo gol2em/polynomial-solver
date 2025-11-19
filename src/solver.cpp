@@ -275,7 +275,8 @@ bool compute_projected_polyhedral_bounds_with_dump(
     const std::vector<double>& global_box_lower,
     const std::vector<double>& global_box_upper,
     unsigned int depth,
-    unsigned int iteration)
+    unsigned int iteration,
+    const std::string& decision = "CONTRACT")
 {
     if (polys.empty() || dim == 0u) {
         return false;
@@ -291,6 +292,7 @@ bool compute_projected_polyhedral_bounds_with_dump(
         } else {
             dump << std::setprecision(16);
             dump << "# Iteration " << iteration << ", Depth " << depth << "\n";
+            dump << "# Decision: " << decision << "\n";
             dump << "# Global box: [";
             for (std::size_t i = 0; i < dim; ++i) {
                 if (i > 0) dump << ", ";
@@ -750,13 +752,16 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             } else if (method == RootBoundingMethod::ProjectedPolyhedral) {
                 // Use projected polyhedral method (direction-by-direction)
                 if (config.dump_geometry) {
+                    // Determine decision: CONTRACT on first iteration, then check if we'll subdivide
+                    std::string decision = (iter == 0) ? "CONTRACT" : "CONTRACT";
                     // Use dump version
                     if (!compute_projected_polyhedral_bounds_with_dump(
                             node.polys, dim,
                             local_bound_lower, local_bound_upper,
                             dump_file,
                             node.box_lower, node.box_upper,
-                            node.depth, dump_iteration++)) {
+                            node.depth, dump_iteration++,
+                            decision)) {
                         // Step 2: If empty, quit (no roots in this box)
                         has_roots = false;
                     }
@@ -921,6 +926,32 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             if (width > tolerance) {
                 split_dim[i] = true;
             }
+        }
+
+        // Dump subdivision decision
+        if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+            std::ostringstream decision_str;
+            decision_str << "SUBDIVIDE [";
+            bool first = true;
+            for (std::size_t i = 0; i < dim; ++i) {
+                if (split_dim[i]) {
+                    if (!first) decision_str << ", ";
+                    decision_str << "axis " << i;
+                    first = false;
+                }
+            }
+            decision_str << "]";
+
+            // Dummy call to dump the subdivision decision
+            std::vector<double> dummy_lower(dim, 0.0);
+            std::vector<double> dummy_upper(dim, 1.0);
+            compute_projected_polyhedral_bounds_with_dump(
+                node.polys, dim,
+                dummy_lower, dummy_upper,
+                dump_file,
+                node.box_lower, node.box_upper,
+                node.depth, dump_iteration++,
+                decision_str.str());
         }
 
         // Seed for children: start from the (possibly contracted) node.

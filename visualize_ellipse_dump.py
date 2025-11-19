@@ -59,10 +59,15 @@ def parse_dump_file(filename):
                     current_iter = {
                         'iteration': iter_num,
                         'depth': depth,
+                        'decision': 'CONTRACT',
                         'global_box': None,
                         'directions': []
                     }
                     iterations.append(current_iter)
+                elif line.startswith('# Decision:') and current_iter:
+                    # Parse decision
+                    decision_str = line.split(':', 1)[1].strip()
+                    current_iter['decision'] = decision_str
                 elif line.startswith('# Global box:') and current_iter:
                     # Parse global box
                     box_str = line.split('[')[1].split(']')[0]
@@ -124,131 +129,159 @@ def create_mesh_grid(box):
     X, Y = np.meshgrid(x, y)
     return X, Y
 
-def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1, 
-                  hull_dir0, hull_dir1, intersection_dir0, intersection_dir1):
+def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
+                  hull_dir0, hull_dir1, intersection_dir0, intersection_dir1, show_full_domain=False):
     """Plot 3D graph of polynomial with control points and projections."""
     x_min, x_max, y_min, y_max = box
-    
-    # Create mesh for surface
-    X, Y = create_mesh_grid(box)
+
+    # For visualization, always show [0,1]^2 domain if requested
+    if show_full_domain:
+        vis_x_min, vis_x_max = 0.0, 1.0
+        vis_y_min, vis_y_max = 0.0, 1.0
+    else:
+        vis_x_min, vis_x_max = x_min, x_max
+        vis_y_min, vis_y_max = y_min, y_max
+
+    # Create mesh for surface over visible domain
+    x = np.linspace(vis_x_min, vis_x_max, 50)
+    y = np.linspace(vis_y_min, vis_y_max, 50)
+    X, Y = np.meshgrid(x, y)
     Z = poly_func(X, Y)
-    
+
     # Plot surface
     surf = ax.plot_surface(X, Y, Z, alpha=0.3, cmap='coolwarm', edgecolor='none')
-    
+
     # Plot z=0 plane
     Z_plane = np.zeros_like(X)
     ax.plot_surface(X, Y, Z_plane, alpha=0.2, color='gray')
-    
-    # Plot control points in 3D
-    if control_points_dir0 and control_points_dir1:
-        # Reconstruct 3D control points from 2D projections
-        # This is approximate - we use the projected points
-        pass
-    
-    # Plot projections on background planes
-    # X-direction projection (on x-z plane at y=y_min)
-    if control_points_dir0:
-        pts = np.array(control_points_dir0)
-        ax.scatter(pts[:, 0], np.full(len(pts), y_min), pts[:, 1],
-                  c='orange', s=20, alpha=0.6, label='Proj X')
-        if hull_dir0:
-            hull_pts = np.array(hull_dir0)
-            ax.plot(hull_pts[:, 0], np.full(len(hull_pts), y_min), hull_pts[:, 1],
-                   'o-', color='orange', linewidth=2, markersize=4)
-        if intersection_dir0:
-            int_pts = np.array(intersection_dir0)
-            ax.plot(int_pts[:, 0], np.full(len(int_pts), y_min), int_pts[:, 1],
-                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
-
-    # Y-direction projection (on y-z plane at x=x_min)
-    if control_points_dir1:
-        pts = np.array(control_points_dir1)
-        ax.scatter(np.full(len(pts), x_min), pts[:, 0], pts[:, 1],
-                  c='orange', s=20, alpha=0.6, label='Proj Y')
-        if hull_dir1:
-            hull_pts = np.array(hull_dir1)
-            ax.plot(np.full(len(hull_pts), x_min), hull_pts[:, 0], hull_pts[:, 1],
-                   'o-', color='orange', linewidth=2, markersize=4)
-        if intersection_dir1:
-            int_pts = np.array(intersection_dir1)
-            ax.plot(np.full(len(int_pts), x_min), int_pts[:, 0], int_pts[:, 1],
-                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
 
     # Plot zero contour (intersection with z=0)
     contour = ax.contour(X, Y, Z, levels=[0], colors='blue', linewidths=3)
 
-    # Plot current box
-    # Draw box edges
+    # Plot projections on background planes
+    # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_min
+    if control_points_dir0:
+        pts = np.array(control_points_dir0)
+        # pts[:, 0] is x coordinate, pts[:, 1] is function value
+        ax.scatter(pts[:, 0], np.full(len(pts), vis_y_min), pts[:, 1],
+                  c='orange', s=20, alpha=0.6)
+        if hull_dir0:
+            hull_pts = np.array(hull_dir0)
+            # Close the hull for visualization
+            hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
+            ax.plot(hull_pts_closed[:, 0], np.full(len(hull_pts_closed), vis_y_min), hull_pts_closed[:, 1],
+                   '-', color='orange', linewidth=2)
+        if intersection_dir0:
+            int_pts = np.array(intersection_dir0)
+            ax.plot(int_pts[:, 0], np.full(len(int_pts), vis_y_min), int_pts[:, 1],
+                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
+
+    # Direction 1 projects along y-axis: (y, f(x,y)) - plot on y-z plane at x=vis_x_min
+    if control_points_dir1:
+        pts = np.array(control_points_dir1)
+        # pts[:, 0] is y coordinate, pts[:, 1] is function value
+        ax.scatter(np.full(len(pts), vis_x_min), pts[:, 0], pts[:, 1],
+                  c='cyan', s=20, alpha=0.6)
+        if hull_dir1:
+            hull_pts = np.array(hull_dir1)
+            # Close the hull for visualization
+            hull_pts_closed = np.vstack([hull_pts, hull_pts[0]])
+            ax.plot(np.full(len(hull_pts_closed), vis_x_min), hull_pts_closed[:, 0], hull_pts_closed[:, 1],
+                   '-', color='cyan', linewidth=2)
+        if intersection_dir1:
+            int_pts = np.array(intersection_dir1)
+            ax.plot(np.full(len(int_pts), vis_x_min), int_pts[:, 0], int_pts[:, 1],
+                   'o', color='red', markersize=8, markeredgewidth=2, markerfacecolor='none')
+
+    # Plot current box on z=0 plane
     corners = [
         [x_min, y_min, 0], [x_max, y_min, 0],
         [x_max, y_max, 0], [x_min, y_max, 0],
         [x_min, y_min, 0]
     ]
     corners = np.array(corners)
-    ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=2, label='Current box')
+    ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=2)
 
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
     ax.set_title(title)
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
+    ax.set_xlim(vis_x_min, vis_x_max)
+    ax.set_ylim(vis_y_min, vis_y_max)
 
     # Set z limits to show the surface well
-    z_min = min(Z.min(), -1)
-    z_max = max(Z.max(), 1)
+    z_min = min(Z.min(), -1.5)
+    z_max = max(Z.max(), 1.5)
     ax.set_zlim(z_min, z_max)
 
-def plot_2d_combined(ax, box, final_box, iteration, depth):
-    """Plot both equations in 2D with contours and bounding boxes."""
+def plot_3d_combined(ax, box, final_box, decision):
+    """Plot both equations in 3D with surfaces, contours, and bounding boxes."""
     x_min, x_max, y_min, y_max = box
 
-    # Create mesh
-    X, Y = create_mesh_grid(box)
+    # Always show [0,1]^2 domain
+    vis_x_min, vis_x_max = 0.0, 1.0
+    vis_y_min, vis_y_max = 0.0, 1.0
+
+    # Create mesh over full domain
+    x = np.linspace(vis_x_min, vis_x_max, 50)
+    y = np.linspace(vis_y_min, vis_y_max, 50)
+    X, Y = np.meshgrid(x, y)
     Z1 = evaluate_polynomial_1(X, Y)
     Z2 = evaluate_polynomial_2(X, Y)
 
-    # Plot contours
-    ax.contour(X, Y, Z1, levels=[0], colors='blue', linewidths=2, label='Eq1')
-    ax.contour(X, Y, Z2, levels=[0], colors='red', linewidths=2, label='Eq2')
+    # Plot both surfaces with transparency
+    ax.plot_surface(X, Y, Z1, alpha=0.2, color='blue', edgecolor='none')
+    ax.plot_surface(X, Y, Z2, alpha=0.2, color='red', edgecolor='none')
 
-    # Plot current box
-    rect = plt.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
-                         fill=False, edgecolor='black', linewidth=2, label='Current box')
-    ax.add_patch(rect)
+    # Plot z=0 plane
+    Z_plane = np.zeros_like(X)
+    ax.plot_surface(X, Y, Z_plane, alpha=0.15, color='gray')
 
-    # Plot final bounding box (PP bounds)
+    # Plot zero contours on z=0 plane
+    ax.contour(X, Y, Z1, levels=[0], colors='blue', linewidths=3, offset=0)
+    ax.contour(X, Y, Z2, levels=[0], colors='red', linewidths=3, offset=0)
+
+    # Plot current box on z=0 plane
+    corners = [
+        [x_min, y_min, 0], [x_max, y_min, 0],
+        [x_max, y_max, 0], [x_min, y_max, 0],
+        [x_min, y_min, 0]
+    ]
+    corners = np.array(corners)
+    ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'k-', linewidth=3, label='Current box')
+
+    # Plot final bounding box (PP bounds) if available
     if final_box:
         fx_min, fx_max, fy_min, fy_max = final_box
-        rect_final = plt.Rectangle((fx_min, fy_min), fx_max - fx_min, fy_max - fy_min,
-                                   fill=True, facecolor='purple', alpha=0.2,
-                                   edgecolor='purple', linewidth=2, label='PP bounds')
-        ax.add_patch(rect_final)
+        pp_corners = [
+            [fx_min, fy_min, 0], [fx_max, fy_min, 0],
+            [fx_max, fy_max, 0], [fx_min, fy_max, 0],
+            [fx_min, fy_min, 0]
+        ]
+        pp_corners = np.array(pp_corners)
+        ax.plot(pp_corners[:, 0], pp_corners[:, 1], pp_corners[:, 2],
+               color='purple', linewidth=3, linestyle='--', label='PP bounds')
 
     # Plot expected solution (analytical)
     # Solve: x^2 + y^2 = 1 and x^2/4 + 4*y^2 = 1
-    # From eq1: x^2 = 1 - y^2
-    # Substitute into eq2: (1-y^2)/4 + 4*y^2 = 1
-    # => 1/4 - y^2/4 + 4*y^2 = 1
-    # => 15*y^2/4 = 3/4
-    # => y^2 = 1/5 = 0.2
-    # => y = sqrt(0.2) ≈ 0.447 (in [0,1])
-    # => x^2 = 1 - 0.2 = 0.8
-    # => x = sqrt(0.8) ≈ 0.894 (in [0,1])
     y_sol = np.sqrt(0.2)
     x_sol = np.sqrt(0.8)
-    ax.plot(x_sol, y_sol, 'k*', markersize=15, label='Expected solution',
-            markeredgewidth=2, markerfacecolor='yellow')
+    ax.plot([x_sol], [y_sol], [0], 'k*', markersize=15,
+            markeredgewidth=2, markerfacecolor='yellow', label='Expected solution')
 
     ax.set_xlabel('x')
     ax.set_ylabel('y')
-    ax.set_title(f'Both Equations + Bounds')
-    ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_min, y_max)
-    ax.set_aspect('equal')
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc='upper right', fontsize=8)
+    ax.set_zlabel('z')
+    ax.set_title(f'Both Equations + Bounds\n{decision}')
+    ax.set_xlim(vis_x_min, vis_x_max)
+    ax.set_ylim(vis_y_min, vis_y_max)
+
+    # Set z limits
+    z_min = min(Z1.min(), Z2.min(), -1.5)
+    z_max = max(Z1.max(), Z2.max(), 1.5)
+    ax.set_zlim(z_min, z_max)
+
+    ax.legend(loc='upper left', fontsize=8)
 
 def visualize_iteration(iteration, output_dir='visualization_output'):
     """Create visualization for one iteration."""
@@ -256,6 +289,7 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
 
     iter_num = iteration['iteration']
     depth = iteration['depth']
+    decision = iteration.get('decision', 'CONTRACT')
     global_box = iteration['global_box']
     final_box = iteration.get('final_box', None)
 
@@ -276,9 +310,10 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
     dir1_eq0 = iteration['directions'][1]['equations'][0]
     dir1_eq1 = iteration['directions'][1]['equations'][1]
 
-    # Create figure with 3 subplots
-    fig = plt.figure(figsize=(18, 6))
-    fig.suptitle(f'Step {iter_num + 1}: Depth {depth} - SUBDIVIDE', fontsize=16, fontweight='bold')
+    # Create figure with 3 subplots (all 3D)
+    fig = plt.figure(figsize=(20, 6))
+    fig.suptitle(f'Iteration {iter_num}: Depth {depth} - {decision}',
+                fontsize=16, fontweight='bold')
 
     # Subplot 1: Equation 1
     ax1 = fig.add_subplot(131, projection='3d')
@@ -286,7 +321,8 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  f'Equation 1: x² + y² - 1 = 0',
                  dir0_eq0['projected_points'], dir1_eq0['projected_points'],
                  dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
-                 dir0_eq0['intersection'], dir1_eq0['intersection'])
+                 dir0_eq0['intersection'], dir1_eq0['intersection'],
+                 show_full_domain=True)
 
     # Subplot 2: Equation 2
     ax2 = fig.add_subplot(132, projection='3d')
@@ -294,11 +330,12 @@ def visualize_iteration(iteration, output_dir='visualization_output'):
                  f'Equation 2: x²/4 + 4y² - 1 = 0',
                  dir0_eq1['projected_points'], dir1_eq1['projected_points'],
                  dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
-                 dir0_eq1['intersection'], dir1_eq1['intersection'])
+                 dir0_eq1['intersection'], dir1_eq1['intersection'],
+                 show_full_domain=True)
 
-    # Subplot 3: Combined 2D view
-    ax3 = fig.add_subplot(133)
-    plot_2d_combined(ax3, global_box, final_box, iter_num, depth)
+    # Subplot 3: Combined 3D view
+    ax3 = fig.add_subplot(133, projection='3d')
+    plot_3d_combined(ax3, global_box, final_box, decision)
 
     plt.tight_layout()
 
