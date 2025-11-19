@@ -15,7 +15,7 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
 - **Intelligent Degeneracy Detection**: Automatically detects degenerate cases (multiple roots, infinite solutions)
 - **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
 - **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
-- **Comprehensive Test Suite**: 11 test suites covering all major functionality
+- **Comprehensive Test Suite**: 12 test suites covering all major functionality
 - **Python Visualization**: Optional visualization tools for graphs and control points
 
 ## Quick Start
@@ -55,7 +55,7 @@ polynomial-solver/
 │   ├── geometry.cpp
 │   ├── de_casteljau.cpp
 │   └── main.cpp
-├── tests/                # Test suite (11 tests)
+├── tests/                # Test suite (12 tests)
 ├── python/               # Python visualization tools
 ├── docs/                 # Documentation
 ├── build.sh              # Automated build script
@@ -180,7 +180,7 @@ uv pip install numpy matplotlib
 
 ## Test Suite
 
-All 11 test suites pass:
+All 12 test suites pass:
 
 | Test | Description |
 |------|-------------|

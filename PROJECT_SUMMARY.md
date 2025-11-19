@@ -99,7 +99,7 @@ cd polynomial-solver
 ### Performance
 
 **Build Time**: 4 seconds (Release, 4 cores)
-**Test Time**: 0.02 seconds (all 11 tests)
+**Test Time**: 0.02 seconds (all 12 tests)
 **Package Size**: 492KB (standard)
 
 ### Test Results
