@@ -28,24 +28,24 @@ int main() {
     // Convert to Bernstein form on [0,1]^2
 
     // f1(x,y) = x^2 + y^2 - 1
-    // Degrees: (2, 2)
-    // Power coefficients in order: 1, x, x^2, y, xy, x^2y, y^2, xy^2, x^2y^2
-    // f1 = -1 + 0*x + 1*x^2 + 0*y + 0*xy + 0*x^2y + 1*y^2 + 0*xy^2 + 0*x^2y^2
+    // Degrees: (2, 2) where first is x, second is y
+    // Storage order with y varying fastest: 1, y, y^2, x, xy, xy^2, x^2, x^2y, x^2y^2
+    // f1 = -1 + 0*y + 1*y^2 + 0*x + 0*xy + 0*xy^2 + 1*x^2 + 0*x^2y + 0*x^2y^2
     std::vector<unsigned int> degrees1{2u, 2u};
     std::vector<double> power_coeffs1{
-        -1.0,  0.0,  1.0,   // 1, x, x^2
-         0.0,  0.0,  0.0,   // y, xy, x^2y
-         1.0,  0.0,  0.0    // y^2, xy^2, x^2y^2
+        -1.0,  0.0,  1.0,   // 1, y, y^2
+         0.0,  0.0,  0.0,   // x, xy, xy^2
+         1.0,  0.0,  0.0    // x^2, x^2y, x^2y^2
     };
     Polynomial p1 = Polynomial::fromPower(degrees1, power_coeffs1);
 
     // f2(x,y) = x^2/4 + 4*y^2 - 1
-    // f2 = -1 + 0*x + 0.25*x^2 + 0*y + 0*xy + 0*x^2y + 4*y^2 + 0*xy^2 + 0*x^2y^2
+    // f2 = -1 + 0*y + 4*y^2 + 0*x + 0*xy + 0*xy^2 + 0.25*x^2 + 0*x^2y + 0*x^2y^2
     std::vector<unsigned int> degrees2{2u, 2u};
     std::vector<double> power_coeffs2{
-        -1.0,   0.0,  0.25,  // 1, x, x^2
-         0.0,   0.0,  0.0,   // y, xy, x^2y
-         4.0,   0.0,  0.0    // y^2, xy^2, x^2y^2
+        -1.0,   0.0,  4.0,   // 1, y, y^2
+         0.0,   0.0,  0.0,   // x, xy, xy^2
+         0.25,  0.0,  0.0    // x^2, x^2y, x^2y^2
     };
     Polynomial p2 = Polynomial::fromPower(degrees2, power_coeffs2);
 

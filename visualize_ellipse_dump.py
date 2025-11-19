@@ -132,7 +132,7 @@ def create_mesh_grid(box):
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1, show_full_domain=False):
     """Plot 3D graph of polynomial with control points and projections."""
-    # Box format: [x_min, x_max, y_min, y_max]
+    # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
     # For visualization, always show [0,1]^2 domain if requested
@@ -217,7 +217,7 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
 
 def plot_3d_combined(ax, box, final_box, decision):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes."""
-    # Box format: [x_min, x_max, y_min, y_max]
+    # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
 
     # Always show [0,1]^2 domain
@@ -254,7 +254,7 @@ def plot_3d_combined(ax, box, final_box, decision):
 
     # Plot final bounding box (PP bounds) if available
     if final_box:
-        # Box format: [x_min, x_max, y_min, y_max]
+        # Box format from solver: [x_min, x_max, y_min, y_max]
         fx_min, fx_max, fy_min, fy_max = final_box[0], final_box[1], final_box[2], final_box[3]
         pp_corners = [
             [fx_min, fy_min, 0], [fx_max, fy_min, 0],
