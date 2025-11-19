@@ -56,21 +56,30 @@ This generates a text file with detailed geometric information that can be visua
 
 ### Implementation Details
 
-The feature uses C++11 preprocessor macros:
+The feature uses C++11 preprocessor macros to conditionally compile dump I/O operations:
 
 ```cpp
+bool compute_projected_polyhedral_bounds_with_dump(...) {
+    // Core algorithm (always compiled)
+
 #ifdef ENABLE_GEOMETRY_DUMP
-    // Dump-specific code here
-#else
-    // Optimized code without dump
+    if (do_dump) {
+        // Dump I/O operations (only compiled when enabled)
+        dump << "data...";
+    }
 #endif
+
+    // More core algorithm (always compiled)
+}
 ```
 
 **Key Design Decisions:**
 
-1. **Single Implementation**: When dump is enabled, the regular function forwards to the dump version with an empty filename
-2. **Compile-Time Selection**: Preprocessor macros ensure zero runtime cost when disabled
-3. **Backward Compatible**: Code works identically in both modes (except dump output)
+1. **Single Implementation**: The algorithm exists in one place, always compiled the same way
+2. **Conditional I/O**: Only the dump I/O operations are wrapped in `#ifdef` blocks
+3. **Minimal Fragmentation**: Macros are used sparingly, only around I/O code
+4. **Zero Overhead**: When disabled, dump I/O code is completely removed at compile time
+5. **Synchronized Features**: Algorithm changes automatically apply to both dump and non-dump modes
 
 ### Performance Impact
 

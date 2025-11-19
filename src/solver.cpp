@@ -95,8 +95,8 @@ Solver::~Solver() {
 
 namespace {
 
-#ifdef ENABLE_GEOMETRY_DUMP
-// Forward declaration for internal helper function (only when dump is enabled)
+// Forward declaration for internal helper function
+// This function is always available, but dump I/O is only compiled when ENABLE_GEOMETRY_DUMP is defined
 bool compute_projected_polyhedral_bounds_with_dump(
     const std::vector<polynomial_solver::Polynomial>& polys,
     std::size_t dim,
@@ -108,7 +108,6 @@ bool compute_projected_polyhedral_bounds_with_dump(
     unsigned int depth,
     unsigned int iteration,
     const std::string& decision);
-#endif
 
 struct SubdivisionNode {
     std::vector<double> box_lower;  ///< Global box lower corner in [0,1]^n.
@@ -179,8 +178,18 @@ int analyze_box_dimension(const std::vector<double>& lower,
  *
  * Returns true if a non-empty bounding box is found, false otherwise.
  */
-#ifdef ENABLE_GEOMETRY_DUMP
-// When dump is enabled, forward the regular function to the dump version
+/**
+ * @brief Compute root bounding box using the projected polyhedral method.
+ *
+ * This function implements the following workflow for each direction i:
+ * 1. For each equation, project all graph control points to 2D (coordinate i + function value).
+ * 2. For each equation, compute convex hull of these 2D points.
+ * 3. For each equation, intersect with horizontal axis (function value = 0).
+ * 4. For each equation, project to 1D to get an interval.
+ * 5. Intersect all intervals from all equations to get the bound in direction i.
+ *
+ * Returns true if a non-empty bounding box is found, false otherwise.
+ */
 bool compute_projected_polyhedral_bounds(
     const std::vector<polynomial_solver::Polynomial>& polys,
     std::size_t dim,
@@ -189,6 +198,7 @@ bool compute_projected_polyhedral_bounds(
 {
     // Forward to the dump version with empty dump file
     // This ensures we maintain a single implementation
+    // When ENABLE_GEOMETRY_DUMP is disabled, the dump I/O code is compiled out
     std::vector<double> dummy_box_lower(dim, 0.0);
     std::vector<double> dummy_box_upper(dim, 1.0);
     return compute_projected_polyhedral_bounds_with_dump(
@@ -202,11 +212,13 @@ bool compute_projected_polyhedral_bounds(
  * @brief Compute root bounding box using projected polyhedral method with optional geometry dump.
  *
  * Same as compute_projected_polyhedral_bounds but with optional dump of geometric data.
- * If dump_file is not empty, writes:
+ * If dump_file is not empty AND ENABLE_GEOMETRY_DUMP is defined, writes:
  * - Projected 2D points for each direction and equation
  * - Convex hull vertices
  * - Intersection with axis
  * - Final bounding box
+ *
+ * When ENABLE_GEOMETRY_DUMP is not defined, all dump I/O code is removed at compile time.
  */
 bool compute_projected_polyhedral_bounds_with_dump(
     const std::vector<polynomial_solver::Polynomial>& polys,
@@ -224,6 +236,8 @@ bool compute_projected_polyhedral_bounds_with_dump(
         return false;
     }
 
+#ifdef ENABLE_GEOMETRY_DUMP
+    // Dump I/O setup (only compiled when dump is enabled)
     std::ofstream dump;
     bool do_dump = !dump_file.empty();
     if (do_dump) {
@@ -243,15 +257,18 @@ bool compute_projected_polyhedral_bounds_with_dump(
             dump << "]\n";
         }
     }
+#endif
 
     local_bound_lower.resize(dim);
     local_bound_upper.resize(dim);
 
     // Process each direction independently
     for (std::size_t dir = 0; dir < dim; ++dir) {
+#ifdef ENABLE_GEOMETRY_DUMP
         if (do_dump) {
             dump << "\n## Direction " << dir << "\n";
         }
+#endif
 
         // For this direction, we'll compute the intersection of intervals from all equations
         double dir_min = 0.0;
@@ -260,9 +277,11 @@ bool compute_projected_polyhedral_bounds_with_dump(
         for (std::size_t eq_idx = 0; eq_idx < polys.size(); ++eq_idx) {
             const polynomial_solver::Polynomial& poly = polys[eq_idx];
 
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "\n### Equation " << eq_idx << "\n";
             }
+#endif
 
             // Get graph control points in R^{n+1}
             std::vector<double> control_points;
@@ -275,9 +294,11 @@ bool compute_projected_polyhedral_bounds_with_dump(
             std::vector<std::vector<double>> projected_2d;
             projected_2d.reserve(num_coeffs);
 
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "Projected_Points " << num_coeffs << "\n";
             }
+#endif
 
             for (std::size_t i = 0; i < num_coeffs; ++i) {
                 std::vector<double> pt_2d(2);
@@ -285,46 +306,56 @@ bool compute_projected_polyhedral_bounds_with_dump(
                 pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
                 projected_2d.push_back(pt_2d);
 
+#ifdef ENABLE_GEOMETRY_DUMP
                 if (do_dump) {
                     dump << pt_2d[0] << " " << pt_2d[1] << "\n";
                 }
+#endif
             }
 
             // Compute convex hull in 2D
             polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
 
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "ConvexHull " << hull_2d.vertices.size() << "\n";
                 for (const std::vector<double>& v : hull_2d.vertices) {
                     dump << v[0] << " " << v[1] << "\n";
                 }
             }
+#endif
 
             // Intersect with horizontal axis (y = 0, i.e., last coordinate = 0)
             polynomial_solver::ConvexPolyhedron intersection_1d;
             if (!polynomial_solver::intersect_convex_polyhedron_with_last_coordinate_zero(
                     hull_2d, intersection_1d)) {
                 // No intersection with axis for this equation means no roots
+#ifdef ENABLE_GEOMETRY_DUMP
                 if (do_dump) {
                     dump << "Intersection EMPTY\n";
                     dump.close();
                 }
+#endif
                 return false;
             }
 
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "Intersection " << intersection_1d.vertices.size() << "\n";
                 for (const std::vector<double>& v : intersection_1d.vertices) {
                     dump << v[0] << " " << v[1] << "\n";
                 }
             }
+#endif
 
             // Project to 1D by taking the first coordinate (drop the second which is 0)
             // Find min and max of the first coordinate
             if (intersection_1d.vertices.empty()) {
+#ifdef ENABLE_GEOMETRY_DUMP
                 if (do_dump) {
                     dump.close();
                 }
+#endif
                 return false;
             }
 
@@ -336,9 +367,11 @@ bool compute_projected_polyhedral_bounds_with_dump(
                 if (v[0] > eq_max) eq_max = v[0];
             }
 
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "Interval [" << eq_min << ", " << eq_max << "]\n";
             }
+#endif
 
             // Intersect with current bounds for this direction
             if (eq_min > dir_min) dir_min = eq_min;
@@ -346,10 +379,12 @@ bool compute_projected_polyhedral_bounds_with_dump(
 
             // Check if intersection is empty
             if (dir_min > dir_max) {
+#ifdef ENABLE_GEOMETRY_DUMP
                 if (do_dump) {
                     dump << "Direction_Interval EMPTY\n";
                     dump.close();
                 }
+#endif
                 return false;
             }
         }
@@ -366,18 +401,23 @@ bool compute_projected_polyhedral_bounds_with_dump(
 
         // Check for empty interval
         if (local_bound_lower[dir] > local_bound_upper[dir]) {
+#ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "Final_Interval EMPTY\n";
                 dump.close();
             }
+#endif
             return false;
         }
 
+#ifdef ENABLE_GEOMETRY_DUMP
         if (do_dump) {
             dump << "Final_Interval [" << local_bound_lower[dir] << ", " << local_bound_upper[dir] << "]\n";
         }
+#endif
     }
 
+#ifdef ENABLE_GEOMETRY_DUMP
     if (do_dump) {
         dump << "\n# Bounding Box (local): [";
         for (std::size_t i = 0; i < dim; ++i) {
@@ -398,106 +438,10 @@ bool compute_projected_polyhedral_bounds_with_dump(
 
         dump.close();
     }
+#endif
 
     return true;
 }
-
-#else  // !ENABLE_GEOMETRY_DUMP
-
-// When dump is disabled, provide a standalone efficient implementation
-bool compute_projected_polyhedral_bounds(
-    const std::vector<polynomial_solver::Polynomial>& polys,
-    std::size_t dim,
-    std::vector<double>& local_bound_lower,
-    std::vector<double>& local_bound_upper)
-{
-    if (polys.empty() || dim == 0u) {
-        return false;
-    }
-
-    local_bound_lower.resize(dim);
-    local_bound_upper.resize(dim);
-
-    // Process each direction independently
-    for (std::size_t dir = 0; dir < dim; ++dir) {
-        // For this direction, we'll compute the intersection of intervals from all equations
-        double dir_min = 0.0;
-        double dir_max = 1.0;
-
-        for (const polynomial_solver::Polynomial& poly : polys) {
-            // Get graph control points in R^{n+1}
-            std::vector<double> control_points;
-            poly.graphControlPoints(control_points);
-
-            const std::size_t num_coeffs = poly.coefficientCount();
-            const std::size_t point_dim = dim + 1u;
-
-            // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
-            std::vector<std::vector<double>> projected_2d;
-            projected_2d.reserve(num_coeffs);
-
-            for (std::size_t i = 0; i < num_coeffs; ++i) {
-                std::vector<double> pt_2d(2);
-                pt_2d[0] = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
-                pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
-                projected_2d.push_back(pt_2d);
-            }
-
-            // Compute convex hull in 2D
-            polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
-
-            // Intersect with horizontal axis (y = 0, i.e., last coordinate = 0)
-            polynomial_solver::ConvexPolyhedron intersection_1d;
-            if (!polynomial_solver::intersect_convex_polyhedron_with_last_coordinate_zero(
-                    hull_2d, intersection_1d)) {
-                // No intersection with axis for this equation means no roots
-                return false;
-            }
-
-            // Project to 1D by taking the first coordinate (drop the second which is 0)
-            // Find min and max of the first coordinate
-            if (intersection_1d.vertices.empty()) {
-                return false;
-            }
-
-            double eq_min = intersection_1d.vertices[0][0];
-            double eq_max = intersection_1d.vertices[0][0];
-
-            for (const std::vector<double>& v : intersection_1d.vertices) {
-                if (v[0] < eq_min) eq_min = v[0];
-                if (v[0] > eq_max) eq_max = v[0];
-            }
-
-            // Intersect with current bounds for this direction
-            if (eq_min > dir_min) dir_min = eq_min;
-            if (eq_max < dir_max) dir_max = eq_max;
-
-            // Check if intersection is empty
-            if (dir_min > dir_max) {
-                return false;
-            }
-        }
-
-        // Store the bounds for this direction
-        local_bound_lower[dir] = dir_min;
-        local_bound_upper[dir] = dir_max;
-
-        // Clamp to [0, 1] (local parameter space)
-        if (local_bound_lower[dir] < 0.0) local_bound_lower[dir] = 0.0;
-        if (local_bound_upper[dir] > 1.0) local_bound_upper[dir] = 1.0;
-        if (local_bound_lower[dir] > 1.0) local_bound_lower[dir] = 1.0;
-        if (local_bound_upper[dir] < 0.0) local_bound_upper[dir] = 0.0;
-
-        // Check for empty interval
-        if (local_bound_lower[dir] > local_bound_upper[dir]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-#endif  // ENABLE_GEOMETRY_DUMP
 
 /**
  * @brief Compute root bounding box using graph convex hull method.
