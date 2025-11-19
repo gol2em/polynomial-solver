@@ -33,7 +33,8 @@ def parse_dump_file(filename):
                     'projected_points': [],
                     'convex_hull': [],
                     'intersection': [],
-                    'interval': None
+                    'interval': None,
+                    'z_normalization_factor': 1.0
                 }
                 if current_dir:
                     current_dir['equations'].append(current_eq)
@@ -125,6 +126,15 @@ def parse_dump_file(filename):
                     state = None
             elif line.startswith('Final_Interval'):
                 state = None
+            elif line.startswith('Z_Normalization_Factor'):
+                # Parse z normalization factor
+                if current_eq:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            current_eq['z_normalization_factor'] = float(parts[1])
+                        except ValueError:
+                            pass
             else:
                 # Parse coordinate data
                 parts = line.split()
@@ -164,12 +174,13 @@ def create_mesh_grid(box):
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
-                  interval_dir0=None, interval_dir1=None, view_box=None):
+                  interval_dir0=None, interval_dir1=None, view_box=None, z_norm_factor=1.0):
     """Plot 3D graph of polynomial with control points and projections.
 
     Args:
         box: Current bounding box to draw
         view_box: Viewing scope (if None, uses box)
+        z_norm_factor: Z-axis normalization factor to apply to polynomial evaluation
     """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -186,7 +197,7 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     x = np.linspace(vis_x_min, vis_x_max, 50)
     y = np.linspace(vis_y_min, vis_y_max, 50)
     X, Y = np.meshgrid(x, y)
-    Z = poly_func(X, Y)
+    Z = poly_func(X, Y) * z_norm_factor  # Apply normalization factor
 
     # Plot surface
     surf = ax.plot_surface(X, Y, Z, alpha=0.3, cmap='coolwarm', edgecolor='none')
@@ -313,13 +324,15 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     # Add legend
     ax.legend(loc='upper left', fontsize=7, framealpha=0.8)
 
-def plot_3d_combined(ax, box, final_box, decision, view_box=None):
+def plot_3d_combined(ax, box, final_box, decision, view_box=None, z_norm_eq0=1.0, z_norm_eq1=1.0):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes.
 
     Args:
         box: Current bounding box to draw
         final_box: PP bounds to draw
         view_box: Viewing scope (if None, uses [0,1]^2)
+        z_norm_eq0: Z-axis normalization factor for equation 0
+        z_norm_eq1: Z-axis normalization factor for equation 1
     """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -337,8 +350,8 @@ def plot_3d_combined(ax, box, final_box, decision, view_box=None):
     x = np.linspace(vis_x_min, vis_x_max, 50)
     y = np.linspace(vis_y_min, vis_y_max, 50)
     X, Y = np.meshgrid(x, y)
-    Z1 = evaluate_polynomial_1(X, Y)
-    Z2 = evaluate_polynomial_2(X, Y)
+    Z1 = evaluate_polynomial_1(X, Y) * z_norm_eq0
+    Z2 = evaluate_polynomial_2(X, Y) * z_norm_eq1
 
     # Plot both surfaces with transparency
     ax.plot_surface(X, Y, Z1, alpha=0.2, color='blue', edgecolor='none')
@@ -446,10 +459,18 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
         vis_x_min, vis_x_max = view_box[0], view_box[1]
         vis_y_min, vis_y_max = view_box[2], view_box[3]
 
+        # Get z-normalization factors if available
+        z_norm_eq0 = 1.0
+        z_norm_eq1 = 1.0
+        if len(iteration['directions']) > 0 and len(iteration['directions'][0]['equations']) > 0:
+            z_norm_eq0 = iteration['directions'][0]['equations'][0].get('z_normalization_factor', 1.0)
+        if len(iteration['directions']) > 0 and len(iteration['directions'][0]['equations']) > 1:
+            z_norm_eq1 = iteration['directions'][0]['equations'][1].get('z_normalization_factor', 1.0)
+
         # Create mesh grid for the surfaces
         X, Y = create_mesh_grid(view_box)
-        Z1 = evaluate_polynomial_1(X, Y)
-        Z2 = evaluate_polynomial_2(X, Y)
+        Z1 = evaluate_polynomial_1(X, Y) * z_norm_eq0
+        Z2 = evaluate_polynomial_2(X, Y) * z_norm_eq1
 
         # Plot surfaces with transparency
         ax.plot_surface(X, Y, Z1, alpha=0.3, cmap='Blues', label='f1')
@@ -504,6 +525,10 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     dir1_eq0 = iteration['directions'][1]['equations'][0]
     dir1_eq1 = iteration['directions'][1]['equations'][1]
 
+    # Get z-normalization factors (use from direction 0, should be same for both directions)
+    z_norm_eq0 = dir0_eq0.get('z_normalization_factor', 1.0)
+    z_norm_eq1 = dir0_eq1.get('z_normalization_factor', 1.0)
+
     # Subplot 1: Equation 1
     ax1 = fig.add_subplot(131, projection='3d')
     plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
@@ -512,7 +537,7 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                  dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
                  dir0_eq0['intersection'], dir1_eq0['intersection'],
                  dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                 view_box=view_box)
+                 view_box=view_box, z_norm_factor=z_norm_eq0)
 
     # Subplot 2: Equation 2
     ax2 = fig.add_subplot(132, projection='3d')
@@ -522,11 +547,12 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                  dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
                  dir0_eq1['intersection'], dir1_eq1['intersection'],
                  dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                 view_box=view_box)
+                 view_box=view_box, z_norm_factor=z_norm_eq1)
 
     # Subplot 3: Combined 3D view
     ax3 = fig.add_subplot(133, projection='3d')
-    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
+    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box,
+                     z_norm_eq0=z_norm_eq0, z_norm_eq1=z_norm_eq1)
 
     plt.tight_layout()
 

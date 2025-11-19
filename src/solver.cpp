@@ -309,6 +309,12 @@ bool compute_projected_polyhedral_bounds_with_dump(
                 }
             }
 
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Z_Normalization_Factor " << z_scale << "\n";
+            }
+#endif
+
             // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
             std::vector<std::vector<double>> projected_2d;
             projected_2d.reserve(num_coeffs);
