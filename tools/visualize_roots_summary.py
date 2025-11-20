@@ -43,9 +43,17 @@ def parse_result_dump(dump_file):
 
             # Parse section headers
             if line.startswith('## Resolved Boxes'):
+                # Save previous box before switching sections
+                if current_box and current_section:
+                    boxes[current_section].append(current_box)
+                    current_box = {}
                 current_section = 'resolved'
                 continue
             elif line.startswith('## Unresolved Boxes'):
+                # Save previous box before switching sections
+                if current_box and current_section:
+                    boxes[current_section].append(current_box)
+                    current_box = {}
                 current_section = 'unresolved'
                 continue
 
