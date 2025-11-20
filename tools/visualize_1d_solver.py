@@ -122,15 +122,16 @@ def evaluate_bernstein_1d(control_points, num_samples=200):
     
     return t_vals, p_vals
 
-def visualize_1d_iteration(iteration, output_dir='visualizations', show_function=True):
+def visualize_1d_iteration(iteration, output_dir='visualizations', show_function=True, expected_roots=None):
     """
     Visualize a single iteration of 1D polynomial solving.
-    
+
     Args:
         iteration: Dictionary containing iteration data
         output_dir: Output directory for PNG files
         show_function: Whether to plot the actual polynomial curve
-        
+        expected_roots: List of expected root locations to mark on the plot
+
     Returns:
         Path to saved PNG file
     """
@@ -199,11 +200,18 @@ def visualize_1d_iteration(iteration, output_dir='visualizations', show_function
     # Plot y=0 line
     ax.axhline(0, color='black', linestyle='-', linewidth=1.5, alpha=0.6, zorder=3)
 
-    # Set labels and title (match 2D version format)
+    # Plot expected roots if provided
+    if expected_roots is not None:
+        for root in expected_roots:
+            ax.axvline(root, color='darkgreen', linestyle=':', linewidth=2.5, alpha=0.7, zorder=8)
+        # Add to legend (only once)
+        ax.plot([], [], color='darkgreen', linestyle=':', linewidth=2.5, alpha=0.7, label='Expected Roots')
+
+    # Set labels and title
     ax.set_xlabel('x', fontsize=14, fontweight='bold')
     ax.set_ylabel('p(x)', fontsize=14, fontweight='bold')
 
-    title = f'Iteration {iteration["iteration"]} (Depth {iteration["depth"]}): {decision}'
+    title = f'Iteration {iteration["iteration"]} (Depth {iteration["depth"]})'
     ax.set_title(title, fontsize=16, fontweight='bold')
 
     ax.legend(loc='best', fontsize=11, framealpha=0.9)
@@ -231,7 +239,7 @@ def visualize_1d_iteration(iteration, output_dir='visualizations', show_function
 
     return output_file
 
-def visualize_1d_solver(dump_file, output_dir, max_steps=None, show_function=True):
+def visualize_1d_solver(dump_file, output_dir, max_steps=None, show_function=True, expected_roots=None):
     """
     Visualize 1D polynomial solver geometry dump.
 
@@ -240,6 +248,7 @@ def visualize_1d_solver(dump_file, output_dir, max_steps=None, show_function=Tru
         output_dir: Output directory for PNG files
         max_steps: Maximum number of iterations to visualize (default: all)
         show_function: Whether to plot the actual polynomial curve (default: True)
+        expected_roots: List of expected root locations to mark on the plot (default: None)
 
     Returns:
         Number of iterations visualized
@@ -255,7 +264,7 @@ def visualize_1d_solver(dump_file, output_dir, max_steps=None, show_function=Tru
 
     # Visualize each iteration
     for iteration in iterations:
-        visualize_1d_iteration(iteration, output_dir, show_function=show_function)
+        visualize_1d_iteration(iteration, output_dir, show_function=show_function, expected_roots=expected_roots)
 
     return len(iterations)
 
@@ -272,7 +281,7 @@ def get_1d_iteration_count(dump_file):
     iterations = parse_1d_dump_file(dump_file)
     return len(iterations)
 
-def visualize_1d_single_iteration(dump_file, iteration_num, output_dir, show_function=True):
+def visualize_1d_single_iteration(dump_file, iteration_num, output_dir, show_function=True, expected_roots=None):
     """
     Visualize a single iteration from a 1D dump file.
 
@@ -281,6 +290,7 @@ def visualize_1d_single_iteration(dump_file, iteration_num, output_dir, show_fun
         iteration_num: Iteration number to visualize (0-indexed)
         output_dir: Output directory for PNG file
         show_function: Whether to plot the actual polynomial curve (default: True)
+        expected_roots: List of expected root locations to mark on the plot (default: None)
 
     Returns:
         Path to saved PNG file, or None if iteration not found
@@ -291,7 +301,7 @@ def visualize_1d_single_iteration(dump_file, iteration_num, output_dir, show_fun
         print(f"Error: Iteration {iteration_num} not found (file has {len(iterations)} iterations)")
         return None
 
-    return visualize_1d_iteration(iterations[iteration_num], output_dir, show_function=show_function)
+    return visualize_1d_iteration(iterations[iteration_num], output_dir, show_function=show_function, expected_roots=expected_roots)
 
 
 

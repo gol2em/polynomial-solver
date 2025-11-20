@@ -40,7 +40,7 @@ def detect_dimension(dump_file):
                 return int(dim_str)
     return None
 
-def visualize_solver(dump_file, output_dir, max_steps=None):
+def visualize_solver(dump_file, output_dir, max_steps=None, expected_roots=None):
     """
     Visualize polynomial solver geometry dump (auto-detects 1D or 2D).
 
@@ -48,12 +48,13 @@ def visualize_solver(dump_file, output_dir, max_steps=None):
         dump_file: Path to geometry dump file (e.g., 'dumps/strategy_ContractFirst_geometry.txt')
         output_dir: Output directory for PNG files (e.g., 'visualizations/viz_ContractFirst/')
         max_steps: Maximum number of iterations to visualize (default: all)
+        expected_roots: List of expected root locations to mark on 1D plots (default: None)
 
     Returns:
         Number of iterations visualized
 
     Example:
-        >>> visualize_solver('dumps/example.txt', 'output/', max_steps=10)
+        >>> visualize_solver('dumps/example.txt', 'output/', max_steps=10, expected_roots=[0.2, 0.5, 0.8])
         Detected 1D problem
         Visualized 10 iterations
         10
@@ -63,7 +64,7 @@ def visualize_solver(dump_file, output_dir, max_steps=None):
 
     if dimension == 1:
         print(f"Detected 1D problem")
-        return visualize_1d_solver(dump_file, output_dir, max_steps=max_steps)
+        return visualize_1d_solver(dump_file, output_dir, max_steps=max_steps, expected_roots=expected_roots)
     elif dimension == 2:
         print(f"Detected 2D problem")
         # Create output directory if it doesn't exist
@@ -114,7 +115,7 @@ def get_iteration_count(dump_file):
         raise ValueError(f"Unsupported dimension: {dimension}")
 
 
-def visualize_single_iteration(dump_file, iteration_num, output_dir):
+def visualize_single_iteration(dump_file, iteration_num, output_dir, expected_roots=None):
     """
     Visualize a single iteration from a dump file (auto-detects 1D or 2D).
 
@@ -122,14 +123,15 @@ def visualize_single_iteration(dump_file, iteration_num, output_dir):
         dump_file: Path to geometry dump file
         iteration_num: Iteration number to visualize (0-based index)
         output_dir: Output directory for PNG file
+        expected_roots: List of expected root locations to mark on 1D plots (default: None)
 
     Example:
-        >>> visualize_single_iteration('dumps/example.txt', 5, 'output/')
+        >>> visualize_single_iteration('dumps/example.txt', 5, 'output/', expected_roots=[0.2, 0.5, 0.8])
     """
     dimension = detect_dimension(dump_file)
 
     if dimension == 1:
-        return visualize_1d_single_iteration(dump_file, iteration_num, output_dir)
+        return visualize_1d_single_iteration(dump_file, iteration_num, output_dir, expected_roots=expected_roots)
     elif dimension == 2:
         iterations = parse_dump_file(dump_file)
 
