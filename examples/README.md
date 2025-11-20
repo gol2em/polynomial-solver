@@ -66,9 +66,12 @@ python examples/visualize_cubic_1d.py
 ```
 
 **Results:**
-- SubdivideFirst: 15 iterations, finds 2 roots (0.2, 0.8)
-- Simultaneous: 15 iterations, finds 2 roots (0.2, 0.8)
-- ContractFirst: 304 iterations, finds 0 roots (contracts away all roots)
+All three strategies now perform identically:
+- SubdivideFirst: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+- Simultaneous: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+- ContractFirst: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+
+Note: Each root at 0.5 appears twice because two boxes converge to it (expected behavior).
 
 ### visualize_circle_ellipse.py
 
