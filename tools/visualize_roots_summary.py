@@ -16,137 +16,137 @@ import numpy as np
 from pathlib import Path
 
 
-def parse_geometry_dump(dump_file):
-    """Parse geometry dump file to extract box information."""
-    
+def parse_result_dump(dump_file):
+    """Parse result dump file to extract box information."""
+
     boxes = {
-        'converged': [],
-        'pruned': [],
-        'subdivided': []
+        'resolved': [],
+        'unresolved': []
     }
-    
+
     dimension = None
-    current_box = None
-    current_depth = None
-    
+    degeneracy_detected = False
+    current_section = None
+    current_box = {}
+
     with open(dump_file, 'r') as f:
         for line in f:
             line = line.strip()
-            
+
             # Parse dimension
             if line.startswith('# Dimension:'):
                 dimension = int(line.split(':')[1].strip())
-            
-            # Parse iteration header
-            if line.startswith('# Iteration'):
-                match = re.search(r'Depth (\d+)', line)
-                if match:
-                    current_depth = int(match.group(1))
-            
-            # Parse global box
-            if line.startswith('# Global box:'):
-                box_str = line.split(':', 1)[1].strip()
-                box_str = box_str.strip('[]')
-                coords = [float(x) for x in box_str.split(',')]
-                current_box = {
-                    'coords': coords,
-                    'depth': current_depth
-                }
-            
-            # Parse final decision
-            if line.startswith('# FINAL_DECISION:'):
-                if current_box is not None:
-                    if 'CONVERGED' in line:
-                        # Extract iteration count
-                        iter_match = re.search(r'iter=(\d+)', line)
-                        current_box['iters'] = int(iter_match.group(1)) if iter_match else 0
-                        boxes['converged'].append(current_box)
-                    elif 'PRUNED' in line:
-                        boxes['pruned'].append(current_box)
-                    elif 'SUBDIVIDE' in line:
-                        boxes['subdivided'].append(current_box)
-                    current_box = None
-    
-    return dimension, boxes
+
+            # Parse degeneracy
+            if line.startswith('# Degeneracy detected:'):
+                degeneracy_detected = 'yes' in line
+
+            # Parse section headers
+            if line.startswith('## Resolved Boxes'):
+                current_section = 'resolved'
+                continue
+            elif line.startswith('## Unresolved Boxes'):
+                current_section = 'unresolved'
+                continue
+
+            # Parse box data
+            if line.startswith('Box '):
+                # Save previous box if exists
+                if current_box and current_section:
+                    boxes[current_section].append(current_box)
+                current_box = {}
+            elif line.startswith('Lower:'):
+                values = line.split(':')[1].strip().split()
+                current_box['lower'] = [float(v) for v in values]
+            elif line.startswith('Upper:'):
+                values = line.split(':')[1].strip().split()
+                current_box['upper'] = [float(v) for v in values]
+            elif line.startswith('Center:'):
+                values = line.split(':')[1].strip().split()
+                current_box['center'] = [float(v) for v in values]
+            elif line.startswith('Depth:'):
+                current_box['depth'] = int(line.split(':')[1].strip())
+            elif line.startswith('Converged:'):
+                current_box['converged'] = 'yes' in line
+
+    # Save last box
+    if current_box and current_section:
+        boxes[current_section].append(current_box)
+
+    return dimension, boxes, degeneracy_detected
 
 
 def visualize_1d_summary(boxes, expected_roots=None, output_file=None):
     """Visualize 1D root finding summary."""
-    
+
     fig, ax = plt.subplots(figsize=(14, 8))
-    
+
     # Plot all boxes at different y-levels based on depth
     max_depth = max(
-        max([b['depth'] for b in boxes['converged']] or [0]),
-        max([b['depth'] for b in boxes['pruned']] or [0]),
-        max([b['depth'] for b in boxes['subdivided']] or [0])
+        max([b['depth'] for b in boxes['resolved']] or [0]),
+        max([b['depth'] for b in boxes['unresolved']] or [0])
     )
-    
-    # Plot subdivided boxes (gray)
-    for box in boxes['subdivided']:
-        x_min, x_max = box['coords'][0], box['coords'][1]
+
+    # Plot unresolved boxes (red)
+    for box in boxes['unresolved']:
+        x_min, x_max = box['lower'][0], box['upper'][0]
         y = box['depth']
-        rect = patches.Rectangle((x_min, y - 0.3), x_max - x_min, 0.6,
-                                 linewidth=1, edgecolor='gray', facecolor='lightgray', alpha=0.3)
-        ax.add_patch(rect)
-    
-    # Plot pruned boxes (red)
-    for box in boxes['pruned']:
-        x_min, x_max = box['coords'][0], box['coords'][1]
-        y = box['depth']
+        x_center = (x_min + x_max) / 2
         rect = patches.Rectangle((x_min, y - 0.3), x_max - x_min, 0.6,
                                  linewidth=2, edgecolor='red', facecolor='pink', alpha=0.5)
         ax.add_patch(rect)
-    
-    # Plot converged boxes (green)
-    for box in boxes['converged']:
-        x_min, x_max = box['coords'][0], box['coords'][1]
+
+        # Mark center
+        ax.plot(x_center, y, 'ro', markersize=8, markeredgecolor='darkred', markeredgewidth=2)
+
+    # Plot resolved boxes (green)
+    for box in boxes['resolved']:
+        x_min, x_max = box['lower'][0], box['upper'][0]
         y = box['depth']
         x_center = (x_min + x_max) / 2
         rect = patches.Rectangle((x_min, y - 0.3), x_max - x_min, 0.6,
                                  linewidth=2, edgecolor='darkgreen', facecolor='lightgreen', alpha=0.7)
         ax.add_patch(rect)
-        
+
         # Mark root center
         ax.plot(x_center, y, 'go', markersize=10, markeredgecolor='darkgreen', markeredgewidth=2)
-        
-        # Add iteration count label
-        iters = box.get('iters', 0)
-        ax.text(x_center, y + 0.5, f'iter={iters}', ha='center', va='bottom', fontsize=8)
-    
+
+        # Add width label
+        width = x_max - x_min
+        ax.text(x_center, y + 0.5, f'w={width:.2e}', ha='center', va='bottom', fontsize=8)
+
     # Plot expected roots if provided
     if expected_roots:
         for root in expected_roots:
             ax.axvline(root, color='blue', linestyle='--', linewidth=2, alpha=0.6, zorder=1)
             ax.plot(root, -0.5, 'b*', markersize=15, markeredgecolor='darkblue', markeredgewidth=1.5)
-    
+
     # Set axis properties
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-1, max_depth + 1)
     ax.set_xlabel('x', fontsize=14)
     ax.set_ylabel('Subdivision Depth', fontsize=14)
-    ax.set_title('Root Finding Summary: Boxes and Degeneracy', fontsize=16, fontweight='bold')
+    ax.set_title('Root Finding Summary: Resolved and Unresolved Boxes', fontsize=16, fontweight='bold')
     ax.grid(True, alpha=0.3)
-    
+
     # Add legend
     legend_elements = [
-        patches.Patch(facecolor='lightgreen', edgecolor='darkgreen', label=f'Converged ({len(boxes["converged"])})'),
-        patches.Patch(facecolor='pink', edgecolor='red', label=f'Pruned ({len(boxes["pruned"])})'),
-        patches.Patch(facecolor='lightgray', edgecolor='gray', label=f'Subdivided ({len(boxes["subdivided"])})'),
+        patches.Patch(facecolor='lightgreen', edgecolor='darkgreen', label=f'Resolved ({len(boxes["resolved"])})'),
+        patches.Patch(facecolor='pink', edgecolor='red', label=f'Unresolved ({len(boxes["unresolved"])})'),
     ]
     if expected_roots:
-        legend_elements.append(plt.Line2D([0], [0], color='blue', linestyle='--', linewidth=2, 
+        legend_elements.append(plt.Line2D([0], [0], color='blue', linestyle='--', linewidth=2,
                                          label=f'Expected Roots ({len(expected_roots)})'))
     ax.legend(handles=legend_elements, loc='upper right', fontsize=10)
-    
+
     plt.tight_layout()
-    
+
     if output_file:
         plt.savefig(output_file, dpi=150, bbox_inches='tight')
         print(f"Saved to: {output_file}")
     else:
         plt.show()
-    
+
     plt.close()
 
 
@@ -155,24 +155,23 @@ def visualize_2d_summary(boxes, expected_roots=None, output_file=None):
 
     fig, ax = plt.subplots(figsize=(12, 12))
 
-    # Plot all boxes
-    # Plot subdivided boxes (gray) - lowest layer
-    for box in boxes['subdivided']:
-        x_min, x_max, y_min, y_max = box['coords']
-        rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
-                                 linewidth=0.5, edgecolor='gray', facecolor='lightgray', alpha=0.2)
-        ax.add_patch(rect)
-
-    # Plot pruned boxes (red)
-    for box in boxes['pruned']:
-        x_min, x_max, y_min, y_max = box['coords']
+    # Plot unresolved boxes (red)
+    for box in boxes['unresolved']:
+        x_min, x_max = box['lower'][0], box['upper'][0]
+        y_min, y_max = box['lower'][1], box['upper'][1]
+        x_center = (x_min + x_max) / 2
+        y_center = (y_min + y_max) / 2
         rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
                                  linewidth=1.5, edgecolor='red', facecolor='pink', alpha=0.4)
         ax.add_patch(rect)
 
-    # Plot converged boxes (green) - top layer
-    for box in boxes['converged']:
-        x_min, x_max, y_min, y_max = box['coords']
+        # Mark center
+        ax.plot(x_center, y_center, 'ro', markersize=8, markeredgecolor='darkred', markeredgewidth=2)
+
+    # Plot resolved boxes (green) - top layer
+    for box in boxes['resolved']:
+        x_min, x_max = box['lower'][0], box['upper'][0]
+        y_min, y_max = box['lower'][1], box['upper'][1]
         x_center = (x_min + x_max) / 2
         y_center = (y_min + y_max) / 2
         rect = patches.Rectangle((x_min, y_min), x_max - x_min, y_max - y_min,
@@ -182,9 +181,9 @@ def visualize_2d_summary(boxes, expected_roots=None, output_file=None):
         # Mark root center
         ax.plot(x_center, y_center, 'go', markersize=10, markeredgecolor='darkgreen', markeredgewidth=2)
 
-        # Add iteration count label
-        iters = box.get('iters', 0)
-        ax.text(x_center, y_center, f'{iters}', ha='center', va='center',
+        # Add depth label
+        depth = box['depth']
+        ax.text(x_center, y_center, f'd={depth}', ha='center', va='center',
                fontsize=8, fontweight='bold', color='darkgreen')
 
     # Plot expected roots if provided
@@ -198,15 +197,14 @@ def visualize_2d_summary(boxes, expected_roots=None, output_file=None):
     ax.set_ylim(-0.05, 1.05)
     ax.set_xlabel('x', fontsize=14)
     ax.set_ylabel('y', fontsize=14)
-    ax.set_title('Root Finding Summary: Boxes and Degeneracy', fontsize=16, fontweight='bold')
+    ax.set_title('Root Finding Summary: Resolved and Unresolved Boxes', fontsize=16, fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.set_aspect('equal')
 
     # Add legend
     legend_elements = [
-        patches.Patch(facecolor='lightgreen', edgecolor='darkgreen', label=f'Converged ({len(boxes["converged"])})'),
-        patches.Patch(facecolor='pink', edgecolor='red', label=f'Pruned ({len(boxes["pruned"])})'),
-        patches.Patch(facecolor='lightgray', edgecolor='gray', label=f'Subdivided ({len(boxes["subdivided"])})'),
+        patches.Patch(facecolor='lightgreen', edgecolor='darkgreen', label=f'Resolved ({len(boxes["resolved"])})'),
+        patches.Patch(facecolor='pink', edgecolor='red', label=f'Unresolved ({len(boxes["unresolved"])})'),
     ]
     if expected_roots:
         legend_elements.append(plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='blue',
@@ -224,45 +222,64 @@ def visualize_2d_summary(boxes, expected_roots=None, output_file=None):
     plt.close()
 
 
-def print_summary(dimension, boxes):
+def print_summary(dimension, boxes, degeneracy_detected):
     """Print text summary of results."""
     print("\n" + "=" * 60)
     print("ROOT FINDING SUMMARY")
     print("=" * 60)
     print(f"Dimension: {dimension}D")
-    print(f"\nTotal boxes processed:")
-    print(f"  Converged:  {len(boxes['converged']):4d} (found roots)")
-    print(f"  Pruned:     {len(boxes['pruned']):4d} (no roots)")
-    print(f"  Subdivided: {len(boxes['subdivided']):4d} (intermediate)")
+    print(f"Degeneracy detected: {'YES' if degeneracy_detected else 'NO'}")
+    print(f"\nTotal boxes:")
+    print(f"  Resolved:   {len(boxes['resolved']):4d} (found roots)")
+    print(f"  Unresolved: {len(boxes['unresolved']):4d} (degeneracy/max depth)")
     print(f"\nTotal:        {sum(len(v) for v in boxes.values()):4d}")
 
-    if boxes['converged']:
-        print(f"\nConverged boxes details:")
-        for i, box in enumerate(boxes['converged'], 1):
+    if boxes['resolved']:
+        print(f"\nResolved boxes details:")
+        for i, box in enumerate(boxes['resolved'], 1):
             if dimension == 1:
-                x_min, x_max = box['coords']
-                x_center = (x_min + x_max) / 2
+                x_min, x_max = box['lower'][0], box['upper'][0]
+                x_center = box['center'][0]
                 width = x_max - x_min
-                print(f"  Root {i}: x = {x_center:.10f} (width: {width:.3e}, depth: {box['depth']}, iters: {box.get('iters', 0)})")
+                print(f"  Root {i}: x = {x_center:.10f} (width: {width:.3e}, depth: {box['depth']})")
             else:
-                x_min, x_max, y_min, y_max = box['coords']
-                x_center = (x_min + x_max) / 2
-                y_center = (y_min + y_max) / 2
+                x_min, x_max = box['lower'][0], box['upper'][0]
+                y_min, y_max = box['lower'][1], box['upper'][1]
+                x_center = box['center'][0]
+                y_center = box['center'][1]
                 width_x = x_max - x_min
                 width_y = y_max - y_min
                 print(f"  Root {i}: ({x_center:.10f}, {y_center:.10f}) " +
-                      f"(width: {width_x:.3e} x {width_y:.3e}, depth: {box['depth']}, iters: {box.get('iters', 0)})")
+                      f"(width: {width_x:.3e} x {width_y:.3e}, depth: {box['depth']})")
+
+    if boxes['unresolved']:
+        print(f"\nUnresolved boxes details:")
+        for i, box in enumerate(boxes['unresolved'], 1):
+            if dimension == 1:
+                x_min, x_max = box['lower'][0], box['upper'][0]
+                x_center = box['center'][0]
+                width = x_max - x_min
+                print(f"  Box {i}: x = {x_center:.10f} (width: {width:.3e}, depth: {box['depth']})")
+            else:
+                x_min, x_max = box['lower'][0], box['upper'][0]
+                y_min, y_max = box['lower'][1], box['upper'][1]
+                x_center = box['center'][0]
+                y_center = box['center'][1]
+                width_x = x_max - x_min
+                width_y = y_max - y_min
+                print(f"  Box {i}: ({x_center:.10f}, {y_center:.10f}) " +
+                      f"(width: {width_x:.3e} x {width_y:.3e}, depth: {box['depth']})")
 
     # Check for degeneracy indicators
-    if boxes['converged']:
-        depths = [b['depth'] for b in boxes['converged']]
+    if boxes['resolved']:
+        depths = [b['depth'] for b in boxes['resolved']]
         max_depth = max(depths)
         if max_depth > 10:
             print(f"\n⚠️  WARNING: Maximum depth {max_depth} suggests possible degeneracy")
 
         # Check for multiple roots at similar locations
-        if dimension == 1 and len(boxes['converged']) > 1:
-            centers = [(b['coords'][0] + b['coords'][1]) / 2 for b in boxes['converged']]
+        if dimension == 1 and len(boxes['resolved']) > 1:
+            centers = [b['center'][0] for b in boxes['resolved']]
             centers.sort()
             for i in range(len(centers) - 1):
                 dist = centers[i+1] - centers[i]
@@ -275,8 +292,8 @@ def print_summary(dimension, boxes):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description='Visualize root finding summary from geometry dump')
-    parser.add_argument('dump_file', help='Path to geometry dump file')
+    parser = argparse.ArgumentParser(description='Visualize root finding summary from result dump')
+    parser.add_argument('dump_file', help='Path to result dump file')
     parser.add_argument('--output', '-o', help='Output image file (default: show plot)')
     parser.add_argument('--expected-roots', nargs='+', type=float,
                        help='Expected root locations (1D: x1 x2 ..., 2D: x1 y1 x2 y2 ...)')
@@ -284,10 +301,10 @@ def main():
     args = parser.parse_args()
 
     # Parse dump file
-    dimension, boxes = parse_geometry_dump(args.dump_file)
+    dimension, boxes, degeneracy_detected = parse_result_dump(args.dump_file)
 
     # Print summary
-    print_summary(dimension, boxes)
+    print_summary(dimension, boxes, degeneracy_detected)
 
     # Parse expected roots
     expected_roots = None
