@@ -6,6 +6,8 @@
 #include <sstream>
 #include <iomanip>
 #include <limits>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 
 /**
@@ -14,6 +16,20 @@
  */
 
 namespace polynomial_solver {
+
+// Helper function to create directory if it doesn't exist
+static void ensure_directory_exists(const std::string& path) {
+    std::size_t pos = path.find_last_of("/\\");
+    if (pos != std::string::npos) {
+        std::string dir = path.substr(0, pos);
+        // Try to create directory (ignore errors if it already exists)
+        #ifdef _WIN32
+            _mkdir(dir.c_str());
+        #else
+            mkdir(dir.c_str(), 0755);
+        #endif
+    }
+}
 
 PolynomialSystem::PolynomialSystem()
     : dimension_(0u)
@@ -608,6 +624,8 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     unsigned int dump_iteration = 0;
     if (config.dump_geometry) {
         dump_file = config.dump_prefix + "_geometry.txt";
+        // Ensure directory exists
+        ensure_directory_exists(dump_file);
         // Clear the file
         std::ofstream clear_dump(dump_file.c_str());
         if (clear_dump.is_open()) {

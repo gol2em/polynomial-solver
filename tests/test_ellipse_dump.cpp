@@ -61,7 +61,7 @@ int main() {
     config.tolerance = 1e-6;
     config.max_depth = 50;
     config.dump_geometry = true;
-    config.dump_prefix = "ellipse_test";
+    config.dump_prefix = "dumps/ellipse_test";
 
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Tolerance: " << config.tolerance << std::endl;

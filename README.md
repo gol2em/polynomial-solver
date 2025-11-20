@@ -96,17 +96,18 @@ The project includes a Python visualization tool to visualize the solving proces
 ### Usage
 
 ```bash
-# Visualize all iterations
-python3 visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt
+# Visualize all iterations (using venv)
+.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt
+
+# Visualize first 5 iterations with custom output directory
+.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt \
+    --max-steps 5 --output-dir visualizations/viz_ContractFirst
 
 # Visualize first 20 iterations
-python3 visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt --max-steps 20
-
-# Custom output directory
-python3 visualize_ellipse_dump.py dump.txt --max-steps 10 --output-dir my_viz
+.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt --max-steps 20
 
 # Show help
-python3 visualize_ellipse_dump.py --help
+.venv/bin/python visualize_ellipse_dump.py --help
 ```
 
 ### Generating Dump Files
@@ -117,10 +118,10 @@ Enable geometry dumping when running tests:
 # Run test with geometry dump enabled
 ./build/bin/test_strategies
 
-# This generates dump files:
-# - strategy_ContractFirst_geometry.txt
-# - strategy_SubdivideFirst_geometry.txt
-# - strategy_Simultaneous_geometry.txt
+# This generates dump files in build/dumps/:
+# - build/dumps/strategy_ContractFirst_geometry.txt
+# - build/dumps/strategy_SubdivideFirst_geometry.txt
+# - build/dumps/strategy_Simultaneous_geometry.txt
 ```
 
 Or enable in your code:
@@ -128,8 +129,10 @@ Or enable in your code:
 ```cpp
 SubdivisionConfig config;
 config.dump_geometry = true;
-config.dump_prefix = "my_dump";
+config.dump_prefix = "dumps/my_dump";  // Directory will be created automatically
 ```
+
+**Note**: Dump files are created relative to the working directory. When running tests from `build/`, files are saved to `build/dumps/`. The solver automatically creates the directory if it doesn't exist.
 
 ### Visualization Output
 

@@ -62,7 +62,7 @@ int main() {
         config.contraction_threshold = 0.9;  // If new_width/old_width > 0.9, consider it insufficient
         config.strategy = strategies[s];
         config.dump_geometry = true;
-        config.dump_prefix = std::string("strategy_") + strategy_names[s];
+        config.dump_prefix = std::string("dumps/strategy_") + strategy_names[s];
 
         SubdivisionSolverResult result = solver.subdivisionSolve(
             system, config, RootBoundingMethod::ProjectedPolyhedral);
@@ -89,17 +89,17 @@ int main() {
         std::cout << "  Geometry dump written to: " << config.dump_prefix << "_geometry.txt\n";
 
         // Suggest visualization command
-        std::cout << "  Visualize: python3 visualize_ellipse_dump.py "
-                  << config.dump_prefix << "_geometry.txt --max-steps 5 --output-dir viz_" << strategy_names[s] << "\n";
+        std::cout << "  Visualize: .venv/bin/python visualize_ellipse_dump.py "
+                  << config.dump_prefix << "_geometry.txt --max-steps 5 --output-dir visualizations/viz_" << strategy_names[s] << "\n";
     }
 
     std::cout << "\n=============================================================\n";
     std::cout << "All strategies tested successfully!\n";
     std::cout << "\nNext steps:\n";
     std::cout << "1. Visualize each strategy (first 5 steps):\n";
-    std::cout << "   python3 visualize_ellipse_dump.py strategy_ContractFirst_geometry.txt --max-steps 5 --output-dir viz_ContractFirst\n";
-    std::cout << "   python3 visualize_ellipse_dump.py strategy_SubdivideFirst_geometry.txt --max-steps 5 --output-dir viz_SubdivideFirst\n";
-    std::cout << "   python3 visualize_ellipse_dump.py strategy_Simultaneous_geometry.txt --max-steps 5 --output-dir viz_Simultaneous\n";
+    std::cout << "   .venv/bin/python visualize_ellipse_dump.py dumps/strategy_ContractFirst_geometry.txt --max-steps 5 --output-dir visualizations/viz_ContractFirst\n";
+    std::cout << "   .venv/bin/python visualize_ellipse_dump.py dumps/strategy_SubdivideFirst_geometry.txt --max-steps 5 --output-dir visualizations/viz_SubdivideFirst\n";
+    std::cout << "   .venv/bin/python visualize_ellipse_dump.py dumps/strategy_Simultaneous_geometry.txt --max-steps 5 --output-dir visualizations/viz_Simultaneous\n";
     std::cout << "2. Compare the visualizations to understand the differences\n";
 
     return 0;
