@@ -200,12 +200,14 @@ def visualize_1d_iteration(iteration, output_dir='visualizations', show_function
     # Plot y=0 line
     ax.axhline(0, color='black', linestyle='-', linewidth=1.5, alpha=0.6, zorder=3)
 
-    # Plot expected roots if provided
+    # Plot expected roots if provided - mark as points on the x-axis
     if expected_roots is not None:
         for root in expected_roots:
-            ax.axvline(root, color='darkgreen', linestyle=':', linewidth=2.5, alpha=0.7, zorder=8)
+            ax.scatter([root], [0], c='darkgreen', s=150, marker='o',
+                      edgecolors='black', linewidths=2, zorder=9, alpha=0.8)
         # Add to legend (only once)
-        ax.plot([], [], color='darkgreen', linestyle=':', linewidth=2.5, alpha=0.7, label='Expected Roots')
+        ax.scatter([], [], c='darkgreen', s=150, marker='o',
+                  edgecolors='black', linewidths=2, label='Expected Roots')
 
     # Set labels and title
     ax.set_xlabel('x', fontsize=14, fontweight='bold')

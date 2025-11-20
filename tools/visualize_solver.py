@@ -468,68 +468,11 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     title = f'Iteration {iter_num} (Depth {depth}): {decision}'
     fig.suptitle(title, fontsize=16, fontweight='bold')
 
-    # Handle pruned cases specially
+    # Handle pruned cases specially - skip visualization for pruned boxes
     if is_pruned:
-        # For pruned cases, show the box and indicate it was empty
-        ax = fig.add_subplot(111, projection='3d')
-
-        # Draw the current box
-        x_min, x_max, y_min, y_max = global_box[0], global_box[1], global_box[2], global_box[3]
-
-        # Use view_box for plotting limits
-        vis_x_min, vis_x_max = view_box[0], view_box[1]
-        vis_y_min, vis_y_max = view_box[2], view_box[3]
-
-        # Create mesh grid for the surfaces
-        X, Y = create_mesh_grid(view_box)
-        Z1 = evaluate_polynomial_1(X, Y)
-        Z2 = evaluate_polynomial_2(X, Y)
-
-        # Plot surfaces with transparency
-        ax.plot_surface(X, Y, Z1, alpha=0.3, cmap='Blues', label='f1')
-        ax.plot_surface(X, Y, Z2, alpha=0.3, cmap='Reds', label='f2')
-
-        # Plot zero contours
-        ax.contour(X, Y, Z1, levels=[0], colors='blue', linewidths=2, offset=0)
-        ax.contour(X, Y, Z2, levels=[0], colors='red', linewidths=2, offset=0)
-
-        # Draw the current box in RED with X marks to indicate pruned
-        corners = [
-            [x_min, y_min, 0], [x_max, y_min, 0],
-            [x_max, y_max, 0], [x_min, y_max, 0],
-            [x_min, y_min, 0]
-        ]
-        corners = np.array(corners)
-        ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'r-', linewidth=4, label='Pruned box')
-
-        # Add X marks at corners
-        for i in range(4):
-            ax.scatter([corners[i, 0]], [corners[i, 1]], [corners[i, 2]],
-                      c='red', marker='x', s=200, linewidths=4)
-
-        # Add text annotation
-        center_x = (x_min + x_max) / 2
-        center_y = (y_min + y_max) / 2
-        ax.text(center_x, center_y, 0, 'EMPTY\nBOUNDING BOX',
-               fontsize=14, color='red', weight='bold',
-               ha='center', va='center',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        ax.set_title('Pruned Box (No Roots)')
-        ax.set_xlim(vis_x_min, vis_x_max)
-        ax.set_ylim(vis_y_min, vis_y_max)
-        ax.legend(loc='upper left', fontsize=8)
-
-        plt.tight_layout()
-
-        # Save figure
-        output_file = os.path.join(output_dir, f'step_{iter_num:03d}_depth_{depth}.png')
-        plt.savefig(output_file, dpi=100, bbox_inches='tight')
-        plt.close()
-        print(f"Saved: {output_file}")
+        # For pruned cases, don't create a visualization
+        # Just close the figure and return
+        plt.close(fig)
         return
 
     # Extract data for each equation and direction (non-pruned case)

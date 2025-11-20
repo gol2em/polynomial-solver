@@ -924,7 +924,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                 if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
                     std::ofstream dump(dump_file.c_str(), std::ios::app);
                     if (dump.is_open()) {
-                        dump << "# FINAL_DECISION: CONTRACTED (box small enough, converged)\n\n";
+                        dump << "# FINAL_DECISION: CONVERGED (iter=" << iter << ")\n\n";
                         dump.close();
                     }
                 }
