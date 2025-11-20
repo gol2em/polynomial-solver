@@ -70,29 +70,43 @@ int main() {
     }
     std::cout << "\n";
     
-    // Test all three strategies
+    // Test all three strategies with both bounding methods
     const char* strategy_names[] = {"ContractFirst", "SubdivideFirst", "Simultaneous"};
     SubdivisionStrategy strategies[] = {
         SubdivisionStrategy::ContractFirst,
         SubdivisionStrategy::SubdivideFirst,
         SubdivisionStrategy::Simultaneous
     };
-    
+
+    const char* method_names[] = {"ProjectedPolyhedral", "GraphHull"};
+    RootBoundingMethod methods[] = {
+        RootBoundingMethod::ProjectedPolyhedral,
+        RootBoundingMethod::GraphHull
+    };
+
     Solver solver;
-    
-    for (int s = 0; s < 3; ++s) {
-        SubdivisionConfig config;
-        config.tolerance = 1e-8;
-        config.max_depth = 100;
-        config.contraction_threshold = 0.9;
-        config.strategy = strategies[s];
-        config.dump_geometry = true;
-        config.dump_prefix = std::string("dumps/cubic_1d_") + strategy_names[s];
-        
-        SubdivisionSolverResult result = solver.subdivisionSolve(
-            system, config, RootBoundingMethod::ProjectedPolyhedral);
-        
-        print_result(strategy_names[s], result);
+
+    // Test each strategy with each bounding method
+    for (int m = 0; m < 2; ++m) {
+        std::cout << "\n" << std::string(60, '=') << "\n";
+        std::cout << "Bounding Method: " << method_names[m] << "\n";
+        std::cout << std::string(60, '=') << "\n";
+
+        for (int s = 0; s < 3; ++s) {
+            SubdivisionConfig config;
+            config.tolerance = 1e-8;
+            config.max_depth = 100;
+            config.contraction_threshold = 0.8;  // Set to 0.8 as recommended
+            config.strategy = strategies[s];
+            config.dump_geometry = true;
+            config.dump_prefix = std::string("dumps/cubic_1d_") +
+                                method_names[m] + "_" + strategy_names[s];
+
+            SubdivisionSolverResult result = solver.subdivisionSolve(
+                system, config, methods[m]);
+
+            print_result(strategy_names[s], result);
+        }
     }
     
     std::cout << "\n" << std::string(60, '=') << "\n";
