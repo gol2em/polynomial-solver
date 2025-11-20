@@ -280,10 +280,6 @@ source .venv/bin/activate
 git clone https://github.com/gol2em/polynomial-solver.git
 cd polynomial-solver
 
-# Configure Git
-git config user.name "gol2em"
-git config user.email "wenyd@lsec.cc.ac.cn"
-
 # Build in debug mode
 ./build.sh --debug --test
 ```
