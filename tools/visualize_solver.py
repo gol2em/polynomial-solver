@@ -440,15 +440,18 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     global_box = iteration['global_box']
     final_box = iteration.get('final_box', None)
 
+    # Check if this is a pruned case
+    is_pruned = 'PRUNED' in decision
+
     # Use previous iteration's bounding box as the viewing scope (if available)
     # This shows the contraction more clearly
-    if prev_iteration and prev_iteration.get('final_box'):
+    # BUT for pruned cases, use the current global_box to show the box being evaluated
+    if is_pruned:
+        view_box = global_box
+    elif prev_iteration and prev_iteration.get('final_box'):
         view_box = prev_iteration['final_box']
     else:
         view_box = global_box
-
-    # Check if this is a pruned case
-    is_pruned = 'PRUNED' in decision
 
     # For pruned cases, we can visualize even with incomplete data
     # For non-pruned cases, we need complete data
@@ -468,42 +471,49 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     title = f'Iteration {iter_num} (Depth {depth}): {decision}'
     fig.suptitle(title, fontsize=16, fontweight='bold')
 
-    # Handle pruned cases specially - skip visualization for pruned boxes
+    # Handle pruned cases specially - just show combined view
     if is_pruned:
-        # For pruned cases, don't create a visualization
-        # Just close the figure and return
+        # For pruned cases, only show the combined view (single subplot)
         plt.close(fig)
-        return
+        fig = plt.figure(figsize=(8, 6))
+        title = f'Iteration {iter_num} (Depth {depth}): {decision}'
+        fig.suptitle(title, fontsize=16, fontweight='bold')
 
-    # Extract data for each equation and direction (non-pruned case)
-    dir0_eq0 = iteration['directions'][0]['equations'][0]
-    dir0_eq1 = iteration['directions'][0]['equations'][1]
-    dir1_eq0 = iteration['directions'][1]['equations'][0]
-    dir1_eq1 = iteration['directions'][1]['equations'][1]
+        # Single subplot: Combined 3D view without PP bounds
+        ax = fig.add_subplot(111, projection='3d')
+        plot_3d_combined(ax, global_box, None, decision, view_box=view_box)
 
-    # Subplot 1: Equation 1
-    ax1 = fig.add_subplot(131, projection='3d')
-    plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
-                 f'Equation 1: x² + y² - 1 = 0',
-                 dir0_eq0['projected_points'], dir1_eq0['projected_points'],
-                 dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
-                 dir0_eq0['intersection'], dir1_eq0['intersection'],
-                 dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                 view_box=view_box)
+    else:
+        # Non-pruned case: show all three subplots
+        # Extract data for each equation and direction
+        dir0_eq0 = iteration['directions'][0]['equations'][0]
+        dir0_eq1 = iteration['directions'][0]['equations'][1]
+        dir1_eq0 = iteration['directions'][1]['equations'][0]
+        dir1_eq1 = iteration['directions'][1]['equations'][1]
 
-    # Subplot 2: Equation 2
-    ax2 = fig.add_subplot(132, projection='3d')
-    plot_3d_graph(ax2, evaluate_polynomial_2, global_box,
-                 f'Equation 2: x²/4 + 4y² - 1 = 0',
-                 dir0_eq1['projected_points'], dir1_eq1['projected_points'],
-                 dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
-                 dir0_eq1['intersection'], dir1_eq1['intersection'],
-                 dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                 view_box=view_box)
+        # Subplot 1: Equation 1
+        ax1 = fig.add_subplot(131, projection='3d')
+        plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
+                     f'Equation 1: x² + y² - 1 = 0',
+                     dir0_eq0['projected_points'], dir1_eq0['projected_points'],
+                     dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
+                     dir0_eq0['intersection'], dir1_eq0['intersection'],
+                     dir0_eq0.get('interval'), dir1_eq0.get('interval'),
+                     view_box=view_box)
 
-    # Subplot 3: Combined 3D view
-    ax3 = fig.add_subplot(133, projection='3d')
-    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
+        # Subplot 2: Equation 2
+        ax2 = fig.add_subplot(132, projection='3d')
+        plot_3d_graph(ax2, evaluate_polynomial_2, global_box,
+                     f'Equation 2: x²/4 + 4y² - 1 = 0',
+                     dir0_eq1['projected_points'], dir1_eq1['projected_points'],
+                     dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
+                     dir0_eq1['intersection'], dir1_eq1['intersection'],
+                     dir0_eq1.get('interval'), dir1_eq1.get('interval'),
+                     view_box=view_box)
+
+        # Subplot 3: Combined 3D view
+        ax3 = fig.add_subplot(133, projection='3d')
+        plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
 
     plt.tight_layout()
 
