@@ -282,7 +282,7 @@ cd polynomial-solver
 
 # Configure Git
 git config user.name "gol2em"
-git config user.email "664862601@qq.com"
+git config user.email "wenyd@lsec.cc.ac.cn"
 
 # Build in debug mode
 ./build.sh --debug --test
@@ -421,7 +421,7 @@ For algorithm details, see documentation in [docs/](docs/).
 
 ## Support
 
-- **Email**: 664862601@qq.com
+- **Email**: wenyd@lsec.cc.ac.cn
 - **GitHub**: https://github.com/gol2em/polynomial-solver
 - **Issues**: https://github.com/gol2em/polynomial-solver/issues
 

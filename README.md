@@ -297,7 +297,7 @@ All dependencies are standard C++11 libraries. No external libraries required.
 ## Author
 
 - **User**: gol2em
-- **Email**: 664862601@qq.com
+- **Email**: wenyd@lsec.cc.ac.cn
 
 ## License
 

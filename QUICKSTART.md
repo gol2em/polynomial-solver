@@ -247,6 +247,6 @@ ctest --output-on-failure --verbose
 ## Support
 
 For issues or questions:
-- Email: 664862601@qq.com
+- Email: wenyd@lsec.cc.ac.cn
 - GitHub: https://github.com/gol2em/polynomial-solver
 

@@ -242,7 +242,7 @@ The visualization API is designed to support:
 ## Support
 
 - **Author**: gol2em
-- **Email**: 664862601@qq.com
+- **Email**: wenyd@lsec.cc.ac.cn
 - **GitHub**: https://github.com/gol2em/polynomial-solver
 
 ## License
