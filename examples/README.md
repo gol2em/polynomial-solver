@@ -35,7 +35,23 @@ of a circle and an ellipse.
 **Visualize results:**
 ```bash
 source .venv/bin/activate
-python tools/visualize_solver.py dumps/example_ContractFirst_geometry.txt --output-dir viz_example
+python examples/visualize_circle_ellipse.py
+```
+
+### visualize_circle_ellipse.py
+
+Python script for visualizing circle-ellipse intersection results using the visualization API.
+
+**Usage:**
+```bash
+# Visualize all strategies
+python examples/visualize_circle_ellipse.py
+
+# Visualize first 20 iterations
+python examples/visualize_circle_ellipse.py --max-steps 20
+
+# Visualize specific strategy
+python examples/visualize_circle_ellipse.py --strategy ContractFirst
 ```
 
 ## Building Examples

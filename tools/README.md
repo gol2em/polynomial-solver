@@ -1,18 +1,50 @@
 # Visualization Tools
 
-This directory contains visualization tools for the polynomial solver.
+This directory contains visualization tools and API for the polynomial solver.
 
-## Available Tools
+## Python API
+
+### solver_viz_api.py
+
+Python API for programmatic visualization of solver geometry dumps.
+
+**Functions:**
+
+- `visualize_solver(dump_file, output_dir, max_steps=None)`: Visualize all or limited iterations
+- `get_iteration_count(dump_file)`: Get number of iterations without visualizing
+- `visualize_single_iteration(dump_file, iteration_num, output_file)`: Visualize single iteration
+
+**Example usage:**
+
+```python
+from tools.solver_viz_api import visualize_solver
+
+# Visualize all iterations
+visualize_solver('dumps/example.txt', 'output/')
+
+# Visualize first 20 iterations
+visualize_solver('dumps/example.txt', 'output/', max_steps=20)
+
+# Get iteration count
+from tools.solver_viz_api import get_iteration_count
+count = get_iteration_count('dumps/example.txt')
+print(f"Total iterations: {count}")
+```
+
+**Command-line usage:**
+
+```bash
+python tools/solver_viz_api.py dumps/example.txt --output-dir output/ --max-steps 20
+```
+
+## Core Visualization Engine
 
 ### visualize_solver.py
 
-Main visualization tool for solver geometry dumps. Supports visualization of:
-- 2D polynomial system solving process
-- Subdivision strategies (ContractFirst, SubdivideFirst, Simultaneous)
-- Root bounding methods (ProjectedPolyhedral, GraphHull)
-- Contraction and subdivision steps
+Core visualization engine that renders geometry dumps. This is used internally by the API
+but can also be used directly from command line.
 
-**Usage:**
+**Command-line usage:**
 ```bash
 python tools/visualize_solver.py <dump_file> [options]
 

@@ -28,29 +28,60 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 ./check_prerequisites.sh
 ```
 
-### 2. Build
+### 2. Build the Project
 
 ```bash
+# Build with tests and examples
 ./build.sh --test
+
+# Or build without tests
+./build.sh
 ```
 
-### 3. Run Standard Verification
+### 3. Run Circle-Ellipse Intersection Example
 
 ```bash
-./verify_solver.sh
-```
-
-This runs the circle-ellipse intersection test with all strategies and generates visualizations.
-
-### 4. Run Examples
-
-```bash
-# Circle-ellipse intersection example
+# Run the example (generates geometry dumps)
 ./build/bin/example_circle_ellipse
 
-# Method comparison
-./build/bin/test_method_comparison
+# Or run the test version
+./build/bin/test_strategies
 ```
+
+This generates geometry dump files in `dumps/` directory:
+- `dumps/strategy_ContractFirst_geometry.txt`
+- `dumps/strategy_SubdivideFirst_geometry.txt`
+- `dumps/strategy_Simultaneous_geometry.txt`
+
+### 4. Visualize the Results
+
+First, set up Python environment (one-time setup):
+
+```bash
+# Create virtual environment using uv
+uv venv .venv
+
+# Activate virtual environment
+source .venv/bin/activate
+
+# Install dependencies
+uv pip install numpy matplotlib
+```
+
+Then visualize:
+
+```bash
+# Visualize all strategies
+python examples/visualize_circle_ellipse.py
+
+# Visualize first 20 iterations only
+python examples/visualize_circle_ellipse.py --max-steps 20
+
+# Visualize specific strategy
+python examples/visualize_circle_ellipse.py --strategy ContractFirst
+```
+
+Visualizations are saved to `visualizations/viz_*/` directories as PNG files.
 
 ## Project Structure
 
@@ -68,15 +99,16 @@ polynomial-solver/
 │   ├── de_casteljau.cpp
 │   └── main.cpp
 ├── tests/                # Test suite (12 tests)
-├── examples/             # Example programs
-│   └── circle_ellipse_intersection.cpp
-├── tools/                # Visualization tools
-│   ├── visualize_solver.py
-│   └── README.md
+├── examples/             # Example programs and scripts
+│   ├── circle_ellipse_intersection.cpp  # C++ example
+│   └── visualize_circle_ellipse.py      # Python visualization script
+├── tools/                # Visualization tools and API
+│   ├── visualize_solver.py              # Core visualization engine
+│   ├── solver_viz_api.py                # Python API for visualization
+│   └── README.md                        # API documentation
 ├── python/               # Python visualization tools (legacy)
 ├── docs/                 # Documentation
 ├── build.sh              # Automated build script
-├── verify_solver.sh      # Standard verification script
 ├── check_prerequisites.sh # Prerequisite checker
 └── QUICKSTART.md         # Quick start guide
 ```
@@ -107,55 +139,62 @@ polynomial-solver/
 6. Process boxes by depth (breadth-first)
 7. Degeneracy detection for degenerate cases
 
-## Standard Verification
-
-The project includes a standard verification script that tests the solver with
-circle-ellipse intersection and generates visualizations:
-
-```bash
-./verify_solver.sh
-```
-
-This script:
-1. Runs `test_strategies` with all three subdivision strategies
-2. Generates geometry dumps in `dumps/`
-3. Creates visualizations in `visualizations/viz_*/`
-4. Verifies convergence to the expected root
-
-Expected output:
-- Root at approximately (0.894, 0.447)
-- 12-14 iterations per strategy
-- Machine epsilon precision (~10⁻⁷)
-
 ## Examples
 
 See [examples/README.md](examples/README.md) for detailed documentation.
 
 ### Circle-Ellipse Intersection
 
+The circle-ellipse intersection example demonstrates solving the system:
+- f₁(x,y) = x² + y² - 1 = 0 (unit circle)
+- f₂(x,y) = x²/4 + 4y² - 1 = 0 (ellipse)
+
+Expected root: (2/√5, 1/√5) ≈ (0.894427, 0.447214)
+
+**Run the example:**
 ```bash
 ./build/bin/example_circle_ellipse
 ```
 
-Demonstrates solving the intersection of a circle and ellipse with all three
-subdivision strategies. Generates geometry dumps for visualization.
+This generates geometry dumps in `dumps/` for all three strategies:
+- ContractFirst: Pure contraction approach
+- SubdivideFirst: Subdivision-first approach
+- Simultaneous: Balanced approach
 
-## Visualization Tools
-
-The project includes visualization tools in `tools/` directory. See [tools/README.md](tools/README.md)
-for detailed API documentation.
-
-### Basic Usage
-
+**Visualize the results:**
 ```bash
+# Activate Python environment
+source .venv/bin/activate
+
+# Visualize all strategies
+python examples/visualize_circle_ellipse.py
+
+# Or visualize specific strategy with limited steps
+python examples/visualize_circle_ellipse.py --strategy ContractFirst --max-steps 10
+```
+
+## Visualization API
+
+The project provides a Python API for visualizing solver output. See [tools/README.md](tools/README.md)
+for detailed documentation.
+
+### Using the API
+
+```python
+from tools.solver_viz_api import visualize_solver
+
 # Visualize all iterations
-python tools/visualize_solver.py dumps/strategy_ContractFirst_geometry.txt
+visualize_solver('dumps/strategy_ContractFirst_geometry.txt', 'output/')
 
 # Visualize first 20 iterations
-python tools/visualize_solver.py dumps/strategy_ContractFirst_geometry.txt --max-steps 20
+visualize_solver('dumps/example.txt', 'output/', max_steps=20)
+```
 
-# Custom output directory
-python tools/visualize_solver.py dumps/example.txt --output-dir my_viz
+### Command-line Usage
+
+```bash
+# Visualize using the API directly
+python tools/solver_viz_api.py dumps/example.txt --output-dir output/ --max-steps 20
 ```
 
 ### Generating Dump Files
