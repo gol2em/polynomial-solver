@@ -944,8 +944,10 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                         center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
                     }
 
-                    // Create a PolynomialSystem from the current polynomials
-                    PolynomialSystem local_system(node.polys);
+                    // IMPORTANT: Use the ORIGINAL system, not the restricted polynomials!
+                    // After many iterations of restriction, node.polys may have accumulated
+                    // numerical errors. We need to evaluate the original system at the
+                    // center point to accurately check if it's a root.
 
                     // Check if center is approximately a root
                     // Use a tolerance based on the box size
@@ -958,7 +960,36 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                     }
                     const double root_tolerance = std::max(1e-6, max_box_width);
 
-                    if (local_system.isApproximateRoot(center, root_tolerance)) {
+                    // Evaluate ORIGINAL polynomial at center to check if it's a root
+                    std::vector<double> poly_values;
+                    system.evaluate(center, poly_values);
+
+                    bool is_root = system.isApproximateRoot(center, root_tolerance);
+
+#ifdef ENABLE_GEOMETRY_DUMP
+                    if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                        std::ofstream dump(dump_file.c_str(), std::ios::app);
+                        if (dump.is_open()) {
+                            dump << "# Root verification at center: [";
+                            for (std::size_t i = 0; i < dim; ++i) {
+                                if (i > 0) dump << ", ";
+                                dump << center[i];
+                            }
+                            dump << "]\n";
+                            dump << "#   Polynomial values: [";
+                            for (std::size_t i = 0; i < poly_values.size(); ++i) {
+                                if (i > 0) dump << ", ";
+                                dump << poly_values[i];
+                            }
+                            dump << "]\n";
+                            dump << "#   Root tolerance: " << root_tolerance << "\n";
+                            dump << "#   Is root: " << (is_root ? "YES" : "NO") << "\n";
+                            dump.close();
+                        }
+                    }
+#endif
+
+                    if (is_root) {
                         // It's a root, add to results
                         SubdivisionBoxResult box;
                         box.lower = node.box_lower;
