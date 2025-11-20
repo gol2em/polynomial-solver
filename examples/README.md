@@ -38,6 +38,41 @@ source .venv/bin/activate
 python examples/visualize_circle_ellipse.py
 ```
 
+### cubic_1d_roots.cpp
+
+Demonstrates solving a 1D cubic polynomial with 3 known roots.
+
+**Problem:**
+- p(x) = (x - 0.2)(x - 0.5)(x - 0.8) = x³ - 1.5x² + 0.66x - 0.08
+- Expected roots: x = 0.2, 0.5, 0.8
+- Domain: [0, 1]
+
+**Features demonstrated:**
+- 1D polynomial root finding
+- Convex hull bounding in 2D (graph control points)
+- Comparison of subdivision strategies
+- Visualization of all solving steps
+
+**Build and run:**
+```bash
+./build.sh
+./build/bin/example_cubic_1d
+```
+
+**Visualize results:**
+```bash
+source .venv/bin/activate
+python examples/visualize_cubic_1d.py
+```
+
+**Results:**
+All three strategies now perform identically:
+- SubdivideFirst: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+- Simultaneous: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+- ContractFirst: 14 iterations, finds all 3 roots (0.2, 0.5, 0.8)
+
+Note: Each root at 0.5 appears twice because two boxes converge to it (expected behavior).
+
 ### visualize_circle_ellipse.py
 
 Python script for visualizing circle-ellipse intersection results using the visualization API.
@@ -52,6 +87,29 @@ python examples/visualize_circle_ellipse.py --max-steps 20
 
 # Visualize specific strategy
 python examples/visualize_circle_ellipse.py --strategy ContractFirst
+```
+
+### visualize_cubic_1d.py
+
+Python script for visualizing 1D polynomial solving process.
+
+**Features:**
+- 2D plots showing polynomial graph (x vs p(x))
+- Control points in Bernstein basis
+- Convex hull of control points
+- Intersection with y=0 axis (roots)
+- Bounding interval visualization
+
+**Usage:**
+```bash
+# Visualize all strategies
+python examples/visualize_cubic_1d.py
+
+# Visualize first 10 iterations
+python examples/visualize_cubic_1d.py --max-steps 10
+
+# Visualize specific strategy
+python examples/visualize_cubic_1d.py --strategy SubdivideFirst
 ```
 
 ## Building Examples
@@ -121,6 +179,20 @@ int main() {
     return 0;
 }
 ```
+
+## Visualization
+
+All examples support geometry dumps that can be visualized using Python scripts.
+
+**1D Problems:**
+- Use `visualize_cubic_1d.py` for 1D polynomial root finding
+- Shows 2D plots: x vs p(x)
+- Displays control points, convex hull, and bounding intervals
+
+**2D Problems:**
+- Use `visualize_circle_ellipse.py` for 2D system solving
+- Shows 3D surface plots for each equation
+- Displays projected control points and convex hulls
 
 ## Example Ideas
 

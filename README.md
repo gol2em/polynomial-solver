@@ -38,7 +38,9 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 ./build.sh
 ```
 
-### 3. Run Circle-Ellipse Intersection Example
+### 3. Run Examples
+
+**2D Example: Circle-Ellipse Intersection**
 
 ```bash
 # Run the example (generates geometry dumps)
@@ -52,6 +54,18 @@ This generates geometry dump files in `dumps/` directory:
 - `dumps/strategy_ContractFirst_geometry.txt`
 - `dumps/strategy_SubdivideFirst_geometry.txt`
 - `dumps/strategy_Simultaneous_geometry.txt`
+
+**1D Example: Cubic Polynomial with 3 Roots**
+
+```bash
+# Run the 1D example
+./build/bin/example_cubic_1d
+```
+
+This generates 1D geometry dumps:
+- `dumps/cubic_1d_ContractFirst_geometry.txt`
+- `dumps/cubic_1d_SubdivideFirst_geometry.txt`
+- `dumps/cubic_1d_Simultaneous_geometry.txt`
 
 ### 4. Visualize the Results
 
@@ -70,6 +84,8 @@ uv pip install numpy matplotlib
 
 Then visualize:
 
+**2D Visualization (Circle-Ellipse):**
+
 ```bash
 # Visualize all strategies
 python examples/visualize_circle_ellipse.py
@@ -79,6 +95,19 @@ python examples/visualize_circle_ellipse.py --max-steps 20
 
 # Visualize specific strategy
 python examples/visualize_circle_ellipse.py --strategy ContractFirst
+```
+
+**1D Visualization (Cubic Polynomial):**
+
+```bash
+# Visualize all strategies
+python examples/visualize_cubic_1d.py
+
+# Visualize first 10 iterations only
+python examples/visualize_cubic_1d.py --max-steps 10
+
+# Visualize specific strategy
+python examples/visualize_cubic_1d.py --strategy SubdivideFirst
 ```
 
 Visualizations are saved to `visualizations/viz_*/` directories as PNG files.

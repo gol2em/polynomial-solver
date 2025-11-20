@@ -192,12 +192,13 @@ def create_mesh_grid(box):
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
-                  interval_dir0=None, interval_dir1=None, view_box=None):
+                  interval_dir0=None, interval_dir1=None, view_box=None, z_limit=None):
     """Plot 3D graph of polynomial with control points and projections.
 
     Args:
         box: Current bounding box to draw
         view_box: Viewing scope (if None, uses box)
+        z_limit: Z-axis limit (if None, computed from control points)
 
     Note: Control points are already normalized in the dump file (z-values in [-1,1]).
           The polynomial surface is evaluated from the original polynomial (not normalized).
@@ -338,21 +339,38 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
     ax.set_xlim(vis_x_min, vis_x_max)
     ax.set_ylim(vis_y_min, vis_y_max)
 
-    # Set z limits to show the surface well
-    z_min = min(Z.min(), -1.5)
-    z_max = max(Z.max(), 1.5)
-    ax.set_zlim(z_min, z_max)
+    # Set z limits - use provided z_limit if available, otherwise compute from control points
+    if z_limit is not None:
+        ax.set_zlim(-z_limit, z_limit)
+    else:
+        # Compute from control points
+        z_values = []
+        if control_points_dir0:
+            z_values.extend([pt[1] for pt in control_points_dir0])
+        if control_points_dir1:
+            z_values.extend([pt[1] for pt in control_points_dir1])
+
+        if z_values:
+            max_abs_z = max(abs(z) for z in z_values)
+            computed_z_limit = max(max_abs_z * 1.2, 0.1)  # Add 20% margin, minimum 0.1
+            ax.set_zlim(-computed_z_limit, computed_z_limit)
+        else:
+            # Fallback to surface-based limits
+            z_min = min(Z.min(), -1.5)
+            z_max = max(Z.max(), 1.5)
+            ax.set_zlim(z_min, z_max)
 
     # Add legend
     ax.legend(loc='upper left', fontsize=7, framealpha=0.8)
 
-def plot_3d_combined(ax, box, final_box, decision, view_box=None):
+def plot_3d_combined(ax, box, final_box, decision, view_box=None, z_limit=None):
     """Plot both equations in 3D with surfaces, contours, and bounding boxes.
 
     Args:
         box: Current bounding box to draw
         final_box: PP bounds to draw
         view_box: Viewing scope (if None, uses [0,1]^2)
+        z_limit: Z-axis limit (if None, computed from box corners)
     """
     # Box format from solver: [x_min, x_max, y_min, y_max]
     x_min, x_max, y_min, y_max = box[0], box[1], box[2], box[3]
@@ -422,10 +440,27 @@ def plot_3d_combined(ax, box, final_box, decision, view_box=None):
     ax.set_xlim(vis_x_min, vis_x_max)
     ax.set_ylim(vis_y_min, vis_y_max)
 
-    # Set z limits
-    z_min = min(Z1.min(), Z2.min(), -1.5)
-    z_max = max(Z1.max(), Z2.max(), 1.5)
-    ax.set_zlim(z_min, z_max)
+    # Set z limits - use provided z_limit if available, otherwise compute from box corners
+    if z_limit is not None:
+        ax.set_zlim(-z_limit, z_limit)
+    else:
+        # Compute from polynomial values at the current box corners
+        box_corners_x = [x_min, x_max, x_min, x_max]
+        box_corners_y = [y_min, y_min, y_max, y_max]
+        z_values = []
+        for bx, by in zip(box_corners_x, box_corners_y):
+            z_values.append(evaluate_polynomial_1(bx, by))
+            z_values.append(evaluate_polynomial_2(bx, by))
+
+        if z_values:
+            max_abs_z = max(abs(z) for z in z_values)
+            computed_z_limit = max(max_abs_z * 1.5, 0.1)  # Add 50% margin, minimum 0.1
+            ax.set_zlim(-computed_z_limit, computed_z_limit)
+        else:
+            # Fallback
+            z_min = min(Z1.min(), Z2.min(), -1.5)
+            z_max = max(Z1.max(), Z2.max(), 1.5)
+            ax.set_zlim(z_min, z_max)
 
     ax.legend(loc='upper left', fontsize=8)
 
@@ -440,15 +475,18 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     global_box = iteration['global_box']
     final_box = iteration.get('final_box', None)
 
+    # Check if this is a pruned case
+    is_pruned = 'PRUNED' in decision
+
     # Use previous iteration's bounding box as the viewing scope (if available)
     # This shows the contraction more clearly
-    if prev_iteration and prev_iteration.get('final_box'):
+    # BUT for pruned cases, use the current global_box to show the box being evaluated
+    if is_pruned:
+        view_box = global_box
+    elif prev_iteration and prev_iteration.get('final_box'):
         view_box = prev_iteration['final_box']
     else:
         view_box = global_box
-
-    # Check if this is a pruned case
-    is_pruned = 'PRUNED' in decision
 
     # For pruned cases, we can visualize even with incomplete data
     # For non-pruned cases, we need complete data
@@ -468,99 +506,72 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
     title = f'Iteration {iter_num} (Depth {depth}): {decision}'
     fig.suptitle(title, fontsize=16, fontweight='bold')
 
-    # Handle pruned cases specially
+    # Compute z-limits from all control points (for consistent scaling across subplots)
+    z_limit = None
+    if not is_pruned:
+        # Collect all z-values from control points
+        z_values = []
+        dir0_eq0 = iteration['directions'][0]['equations'][0]
+        dir0_eq1 = iteration['directions'][0]['equations'][1]
+        dir1_eq0 = iteration['directions'][1]['equations'][0]
+        dir1_eq1 = iteration['directions'][1]['equations'][1]
+
+        # Collect z-values from all control points
+        for pts in [dir0_eq0.get('projected_points', []), dir0_eq1.get('projected_points', []),
+                    dir1_eq0.get('projected_points', []), dir1_eq1.get('projected_points', [])]:
+            if pts:
+                z_values.extend([pt[1] for pt in pts])
+
+        if z_values:
+            max_abs_z = max(abs(z) for z in z_values)
+            # Add 20% margin, but scale with the box size to maintain proper aspect ratio
+            # Use the larger of x_range or y_range as reference
+            x_range = global_box[1] - global_box[0]
+            y_range = global_box[3] - global_box[2]
+            xy_scale = max(x_range, y_range)
+            # Minimum z_limit should be proportional to xy_scale to avoid flat appearance
+            min_z_limit = xy_scale * 0.1
+            z_limit = max(max_abs_z * 1.2, min_z_limit)
+
+    # Handle pruned cases specially - just show combined view
     if is_pruned:
-        # For pruned cases, show the box and indicate it was empty
+        # For pruned cases, only show the combined view (single subplot)
+        plt.close(fig)
+        fig = plt.figure(figsize=(8, 6))
+        title = f'Iteration {iter_num} (Depth {depth}): {decision}'
+        fig.suptitle(title, fontsize=16, fontweight='bold')
+
+        # Single subplot: Combined 3D view without PP bounds
         ax = fig.add_subplot(111, projection='3d')
+        plot_3d_combined(ax, global_box, None, decision, view_box=view_box, z_limit=z_limit)
 
-        # Draw the current box
-        x_min, x_max, y_min, y_max = global_box[0], global_box[1], global_box[2], global_box[3]
+    else:
+        # Non-pruned case: show all three subplots
+        # Extract data for each equation and direction (already extracted above for z-limit computation)
 
-        # Use view_box for plotting limits
-        vis_x_min, vis_x_max = view_box[0], view_box[1]
-        vis_y_min, vis_y_max = view_box[2], view_box[3]
+        # Subplot 1: Equation 1
+        ax1 = fig.add_subplot(131, projection='3d')
+        plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
+                     f'Equation 1: x² + y² - 1 = 0',
+                     dir0_eq0['projected_points'], dir1_eq0['projected_points'],
+                     dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
+                     dir0_eq0['intersection'], dir1_eq0['intersection'],
+                     dir0_eq0.get('interval'), dir1_eq0.get('interval'),
+                     view_box=view_box, z_limit=z_limit)
 
-        # Create mesh grid for the surfaces
-        X, Y = create_mesh_grid(view_box)
-        Z1 = evaluate_polynomial_1(X, Y)
-        Z2 = evaluate_polynomial_2(X, Y)
+        # Subplot 2: Equation 2
+        ax2 = fig.add_subplot(132, projection='3d')
+        plot_3d_graph(ax2, evaluate_polynomial_2, global_box,
+                     f'Equation 2: x²/4 + 4y² - 1 = 0',
+                     dir0_eq1['projected_points'], dir1_eq1['projected_points'],
+                     dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
+                     dir0_eq1['intersection'], dir1_eq1['intersection'],
+                     dir0_eq1.get('interval'), dir1_eq1.get('interval'),
+                     view_box=view_box, z_limit=z_limit)
 
-        # Plot surfaces with transparency
-        ax.plot_surface(X, Y, Z1, alpha=0.3, cmap='Blues', label='f1')
-        ax.plot_surface(X, Y, Z2, alpha=0.3, cmap='Reds', label='f2')
-
-        # Plot zero contours
-        ax.contour(X, Y, Z1, levels=[0], colors='blue', linewidths=2, offset=0)
-        ax.contour(X, Y, Z2, levels=[0], colors='red', linewidths=2, offset=0)
-
-        # Draw the current box in RED with X marks to indicate pruned
-        corners = [
-            [x_min, y_min, 0], [x_max, y_min, 0],
-            [x_max, y_max, 0], [x_min, y_max, 0],
-            [x_min, y_min, 0]
-        ]
-        corners = np.array(corners)
-        ax.plot(corners[:, 0], corners[:, 1], corners[:, 2], 'r-', linewidth=4, label='Pruned box')
-
-        # Add X marks at corners
-        for i in range(4):
-            ax.scatter([corners[i, 0]], [corners[i, 1]], [corners[i, 2]],
-                      c='red', marker='x', s=200, linewidths=4)
-
-        # Add text annotation
-        center_x = (x_min + x_max) / 2
-        center_y = (y_min + y_max) / 2
-        ax.text(center_x, center_y, 0, 'EMPTY\nBOUNDING BOX',
-               fontsize=14, color='red', weight='bold',
-               ha='center', va='center',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        ax.set_title('Pruned Box (No Roots)')
-        ax.set_xlim(vis_x_min, vis_x_max)
-        ax.set_ylim(vis_y_min, vis_y_max)
-        ax.legend(loc='upper left', fontsize=8)
-
-        plt.tight_layout()
-
-        # Save figure
-        output_file = os.path.join(output_dir, f'step_{iter_num:03d}_depth_{depth}.png')
-        plt.savefig(output_file, dpi=100, bbox_inches='tight')
-        plt.close()
-        print(f"Saved: {output_file}")
-        return
-
-    # Extract data for each equation and direction (non-pruned case)
-    dir0_eq0 = iteration['directions'][0]['equations'][0]
-    dir0_eq1 = iteration['directions'][0]['equations'][1]
-    dir1_eq0 = iteration['directions'][1]['equations'][0]
-    dir1_eq1 = iteration['directions'][1]['equations'][1]
-
-    # Subplot 1: Equation 1
-    ax1 = fig.add_subplot(131, projection='3d')
-    plot_3d_graph(ax1, evaluate_polynomial_1, global_box,
-                 f'Equation 1: x² + y² - 1 = 0',
-                 dir0_eq0['projected_points'], dir1_eq0['projected_points'],
-                 dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
-                 dir0_eq0['intersection'], dir1_eq0['intersection'],
-                 dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                 view_box=view_box)
-
-    # Subplot 2: Equation 2
-    ax2 = fig.add_subplot(132, projection='3d')
-    plot_3d_graph(ax2, evaluate_polynomial_2, global_box,
-                 f'Equation 2: x²/4 + 4y² - 1 = 0',
-                 dir0_eq1['projected_points'], dir1_eq1['projected_points'],
-                 dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
-                 dir0_eq1['intersection'], dir1_eq1['intersection'],
-                 dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                 view_box=view_box)
-
-    # Subplot 3: Combined 3D view
-    ax3 = fig.add_subplot(133, projection='3d')
-    plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box)
+        # Subplot 3: Combined 3D view
+        ax3 = fig.add_subplot(133, projection='3d')
+        plot_3d_combined(ax3, global_box, final_box, decision, view_box=view_box, z_limit=z_limit)
 
     plt.tight_layout()
 

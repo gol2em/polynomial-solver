@@ -41,6 +41,12 @@ add_library(de_casteljau STATIC
 )
 target_link_libraries(de_casteljau polynomial geometry)
 
+# Build differentiation library
+add_library(differentiation STATIC
+    src/differentiation.cpp
+)
+target_link_libraries(differentiation polynomial)
+
 # Build solver library
 add_library(solver STATIC
     src/solver.cpp
