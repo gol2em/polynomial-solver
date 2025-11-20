@@ -57,6 +57,15 @@ target_link_libraries(polynomial_solver_app solver polynomial geometry de_castel
 enable_testing()
 add_subdirectory(tests)
 
+# Optional: Build examples
+option(BUILD_EXAMPLES "Build example programs" ON)
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+    message(STATUS "Examples: ENABLED")
+else()
+    message(STATUS "Examples: DISABLED")
+endif()
+
 # Print configuration summary
 message(STATUS "")
 message(STATUS "========== Build Configuration ==========")

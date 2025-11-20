@@ -34,9 +34,21 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 ./build.sh --test
 ```
 
-### 3. Run Examples
+### 3. Run Standard Verification
 
 ```bash
+./verify_solver.sh
+```
+
+This runs the circle-ellipse intersection test with all strategies and generates visualizations.
+
+### 4. Run Examples
+
+```bash
+# Circle-ellipse intersection example
+./build/bin/example_circle_ellipse
+
+# Method comparison
 ./build/bin/test_method_comparison
 ```
 
@@ -56,9 +68,15 @@ polynomial-solver/
 │   ├── de_casteljau.cpp
 │   └── main.cpp
 ├── tests/                # Test suite (12 tests)
-├── python/               # Python visualization tools
+├── examples/             # Example programs
+│   └── circle_ellipse_intersection.cpp
+├── tools/                # Visualization tools
+│   ├── visualize_solver.py
+│   └── README.md
+├── python/               # Python visualization tools (legacy)
 ├── docs/                 # Documentation
 ├── build.sh              # Automated build script
+├── verify_solver.sh      # Standard verification script
 ├── check_prerequisites.sh # Prerequisite checker
 └── QUICKSTART.md         # Quick start guide
 ```
@@ -89,50 +107,70 @@ polynomial-solver/
 6. Process boxes by depth (breadth-first)
 7. Degeneracy detection for degenerate cases
 
-## Visualization Tool
+## Standard Verification
 
-The project includes a Python visualization tool to visualize the solving process step-by-step from geometry dump files.
-
-### Usage
+The project includes a standard verification script that tests the solver with
+circle-ellipse intersection and generates visualizations:
 
 ```bash
-# Visualize all iterations (using venv)
-.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt
+./verify_solver.sh
+```
 
-# Visualize first 5 iterations with custom output directory
-.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt \
-    --max-steps 5 --output-dir visualizations/viz_ContractFirst
+This script:
+1. Runs `test_strategies` with all three subdivision strategies
+2. Generates geometry dumps in `dumps/`
+3. Creates visualizations in `visualizations/viz_*/`
+4. Verifies convergence to the expected root
+
+Expected output:
+- Root at approximately (0.894, 0.447)
+- 12-14 iterations per strategy
+- Machine epsilon precision (~10⁻⁷)
+
+## Examples
+
+See [examples/README.md](examples/README.md) for detailed documentation.
+
+### Circle-Ellipse Intersection
+
+```bash
+./build/bin/example_circle_ellipse
+```
+
+Demonstrates solving the intersection of a circle and ellipse with all three
+subdivision strategies. Generates geometry dumps for visualization.
+
+## Visualization Tools
+
+The project includes visualization tools in `tools/` directory. See [tools/README.md](tools/README.md)
+for detailed API documentation.
+
+### Basic Usage
+
+```bash
+# Visualize all iterations
+python tools/visualize_solver.py dumps/strategy_ContractFirst_geometry.txt
 
 # Visualize first 20 iterations
-.venv/bin/python visualize_ellipse_dump.py build/dumps/strategy_ContractFirst_geometry.txt --max-steps 20
+python tools/visualize_solver.py dumps/strategy_ContractFirst_geometry.txt --max-steps 20
 
-# Show help
-.venv/bin/python visualize_ellipse_dump.py --help
+# Custom output directory
+python tools/visualize_solver.py dumps/example.txt --output-dir my_viz
 ```
 
 ### Generating Dump Files
 
-Enable geometry dumping when running tests:
-
-```bash
-# Run test with geometry dump enabled
-./build/bin/test_strategies
-
-# This generates dump files in build/dumps/:
-# - build/dumps/strategy_ContractFirst_geometry.txt
-# - build/dumps/strategy_SubdivideFirst_geometry.txt
-# - build/dumps/strategy_Simultaneous_geometry.txt
-```
-
-Or enable in your code:
+Enable geometry dumping in your code:
 
 ```cpp
 SubdivisionConfig config;
 config.dump_geometry = true;
-config.dump_prefix = "dumps/my_dump";  // Directory will be created automatically
+config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
 ```
 
-**Note**: Dump files are created relative to the working directory. When running tests from `build/`, files are saved to `build/dumps/`. The solver automatically creates the directory if it doesn't exist.
+The solver automatically creates the `dumps/` directory if it doesn't exist.
+
+**Standard tests** (like `test_strategies`) automatically generate dumps in `dumps/` directory.
 
 ### Visualization Output
 
