@@ -11,10 +11,9 @@ For 1D problems, shows:
 - Current bounding box (interval computed from hull ∩ y=0)
 
 Usage:
-    python visualize_cubic_1d.py [--strategy STRATEGY] [--max-steps N]
+    python visualize_cubic_1d.py [--max-steps N]
 
 Options:
-    --strategy STRATEGY  Strategy to visualize: ContractFirst, SubdivideFirst, Simultaneous, or all (default: all)
     --max-steps N        Maximum number of iterations to visualize (default: all)
 """
 
@@ -29,60 +28,39 @@ from solver_viz_api import visualize_solver
 
 def main():
     parser = argparse.ArgumentParser(description='Visualize 1D polynomial solver geometry dumps')
-    parser.add_argument('--strategy',
-                       choices=['ContractFirst', 'SubdivideFirst', 'Simultaneous', 'all'],
-                       default='all',
-                       help='Strategy to visualize (default: all)')
-    parser.add_argument('--method',
-                       choices=['ProjectedPolyhedral', 'GraphHull', 'all'],
-                       default='ProjectedPolyhedral',
-                       help='Bounding method to visualize (default: ProjectedPolyhedral)')
     parser.add_argument('--max-steps', type=int, default=None,
                        help='Maximum number of iterations to visualize')
 
     args = parser.parse_args()
 
-    # Determine which strategies to visualize
-    if args.strategy == 'all':
-        strategies = ['ContractFirst', 'SubdivideFirst', 'Simultaneous']
-    else:
-        strategies = [args.strategy]
+    dump_file = 'dumps/cubic_1d_geometry.txt'
+    output_dir = 'visualizations/viz_cubic_1d'
 
-    # Determine which methods to visualize
-    if args.method == 'all':
-        methods = ['ProjectedPolyhedral', 'GraphHull']
-    else:
-        methods = [args.method]
+    if not os.path.exists(dump_file):
+        print(f"Error: {dump_file} not found")
+        print("Run './build/bin/example_cubic_1d' first to generate the dump file")
+        return 1
 
     print("=" * 60)
     print("1D Cubic Polynomial Visualization")
     print("=" * 60)
     print()
+    print(f"Input: {dump_file}")
+    print(f"Output: {output_dir}/")
+    print()
 
-    for method in methods:
-        for strategy in strategies:
-            dump_file = f'dumps/cubic_1d_{method}_{strategy}_geometry.txt'
-            output_dir = f'visualizations/viz_cubic_1d_{method}_{strategy}'
+    # Use the visualization API (auto-detects 1D)
+    num_visualized = visualize_solver(dump_file, output_dir, max_steps=args.max_steps)
 
-            if not os.path.exists(dump_file):
-                print(f"Warning: {dump_file} not found, skipping {method}/{strategy}")
-                continue
-
-            print(f"Processing {method}/{strategy}...")
-            print(f"  Input: {dump_file}")
-            print(f"  Output: {output_dir}/")
-
-            # Use the visualization API (auto-detects 1D)
-            num_visualized = visualize_solver(dump_file, output_dir, max_steps=args.max_steps)
-
-            print(f"  ✓ Completed {method}/{strategy}: {num_visualized} iterations")
-            print()
-
+    print()
     print("=" * 60)
-    print("Visualization complete!")
+    print(f"Visualization complete! Generated {num_visualized} images")
+    print(f"View images in: {output_dir}/")
     print("=" * 60)
+
+    return 0
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
 
 

@@ -1,16 +1,16 @@
 /**
  * Example: 1D Cubic Polynomial with 3 Roots
- * 
+ *
  * This example demonstrates solving a 1D cubic polynomial with 3 known roots.
- * 
+ *
  * Problem:
  *   p(x) = (x - 0.2)(x - 0.5)(x - 0.8)
  *        = x^3 - 1.5*x^2 + 0.62*x - 0.08
- * 
+ *
  * Expected roots: x = 0.2, 0.5, 0.8
- * 
- * This example tests all three subdivision strategies and generates
- * geometry dumps for 1D visualization.
+ *
+ * Note: In 1D, all three subdivision strategies (ContractFirst, SubdivideFirst,
+ * Simultaneous) give identical results, so we only test one.
  */
 
 #include "polynomial.h"
@@ -21,21 +21,17 @@
 
 using namespace polynomial_solver;
 
-void print_result(const char* strategy_name, const SubdivisionSolverResult& result) {
-    std::cout << "\n" << std::string(60, '=') << "\n";
-    std::cout << "Strategy: " << strategy_name << "\n";
-    std::cout << std::string(60, '=') << "\n";
-    
+void print_result(const SubdivisionSolverResult& result) {
     std::cout << "Found " << result.num_resolved << " root(s)\n";
     std::cout << "Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n\n";
-    
+
     for (size_t i = 0; i < result.num_resolved; ++i) {
         const SubdivisionBoxResult& box = result.boxes[i];
         std::cout << "Root " << (i+1) << ":\n";
-        std::cout << "  Interval: [" << std::fixed << std::setprecision(10) 
+        std::cout << "  Interval: [" << std::fixed << std::setprecision(10)
                   << box.lower[0] << ", " << box.upper[0] << "]\n";
         std::cout << "  Center: " << box.center[0] << "\n";
-        std::cout << "  Width: " << std::scientific << std::setprecision(6) 
+        std::cout << "  Width: " << std::scientific << std::setprecision(6)
                   << (box.upper[0] - box.lower[0]) << "\n";
         std::cout << "  Depth: " << box.depth << "\n";
         std::cout << "  Converged: " << (box.converged ? "yes" : "no") << "\n";
@@ -70,48 +66,30 @@ int main() {
     }
     std::cout << "\n";
     
-    // Test all three strategies with both bounding methods
-    const char* strategy_names[] = {"ContractFirst", "SubdivideFirst", "Simultaneous"};
-    SubdivisionStrategy strategies[] = {
-        SubdivisionStrategy::ContractFirst,
-        SubdivisionStrategy::SubdivideFirst,
-        SubdivisionStrategy::Simultaneous
-    };
-
-    const char* method_names[] = {"ProjectedPolyhedral", "GraphHull"};
-    RootBoundingMethod methods[] = {
-        RootBoundingMethod::ProjectedPolyhedral,
-        RootBoundingMethod::GraphHull
-    };
-
+    // In 1D, all strategies give identical results, so just use SubdivideFirst
+    // Test with ProjectedPolyhedral method (generates geometry dump for visualization)
     Solver solver;
 
-    // Test each strategy with each bounding method
-    for (int m = 0; m < 2; ++m) {
-        std::cout << "\n" << std::string(60, '=') << "\n";
-        std::cout << "Bounding Method: " << method_names[m] << "\n";
-        std::cout << std::string(60, '=') << "\n";
+    SubdivisionConfig config;
+    config.tolerance = 1e-8;
+    config.max_depth = 100;
+    config.contraction_threshold = 0.8;
+    config.strategy = SubdivisionStrategy::SubdivideFirst;
+    config.dump_geometry = true;
+    config.dump_prefix = "dumps/cubic_1d";
 
-        for (int s = 0; s < 3; ++s) {
-            SubdivisionConfig config;
-            config.tolerance = 1e-8;
-            config.max_depth = 100;
-            config.contraction_threshold = 0.8;  // Set to 0.8 as recommended
-            config.strategy = strategies[s];
-            config.dump_geometry = true;
-            config.dump_prefix = std::string("dumps/cubic_1d_") +
-                                method_names[m] + "_" + strategy_names[s];
+    std::cout << "\n" << std::string(60, '=') << "\n";
+    std::cout << "Solving with SubdivideFirst strategy\n";
+    std::cout << std::string(60, '=') << "\n\n";
 
-            SubdivisionSolverResult result = solver.subdivisionSolve(
-                system, config, methods[m]);
+    SubdivisionSolverResult result = solver.subdivisionSolve(
+        system, config, RootBoundingMethod::ProjectedPolyhedral);
 
-            print_result(strategy_names[s], result);
-        }
-    }
+    print_result(result);
     
     std::cout << "\n" << std::string(60, '=') << "\n";
     std::cout << "Example completed successfully!\n";
-    std::cout << "\nGeometry dumps saved to dumps/cubic_1d_*.txt\n";
+    std::cout << "\nGeometry dump saved to dumps/cubic_1d_geometry.txt\n";
     std::cout << "Visualize with: python examples/visualize_cubic_1d.py\n";
     
     return 0;
