@@ -18,7 +18,7 @@ The project is **fully portable** and **self-contained**. No external dependenci
 - Python 3.11+ (for visualization only)
 - NumPy, Matplotlib (for visualization only)
 
-## Three Ways to Move
+## Two Ways to Move
 
 ### Method 1: Git Clone (Recommended)
 
@@ -31,28 +31,29 @@ cd polynomial-solver
 ./build.sh --test
 ```
 
-### Method 2: Package Transfer
+### Method 2: Manual Transfer
 
 If the target environment is offline:
 
 **On source machine:**
 ```bash
 cd polynomial-solver
-./package.sh -o my-package
-# Creates: my-package.tar.gz (492K)
+tar -czf polynomial-solver.tar.gz .
+# Creates: polynomial-solver.tar.gz
 ```
 
 **Transfer the file** (USB, SCP, etc.)
 
 **On target machine:**
 ```bash
-tar -xzf my-package.tar.gz
+mkdir polynomial-solver
+tar -xzf polynomial-solver.tar.gz -C polynomial-solver
 cd polynomial-solver
 ./check_prerequisites.sh
 ./build.sh --test
 ```
 
-### Method 3: Git Bundle (With History)
+**Alternative: Git Bundle (With History)**
 
 To preserve Git history without internet:
 
@@ -60,10 +61,7 @@ To preserve Git history without internet:
 ```bash
 cd polynomial-solver
 git bundle create polynomial-solver.bundle --all
-# Creates: polynomial-solver.bundle
 ```
-
-**Transfer the file**
 
 **On target machine:**
 ```bash
@@ -79,44 +77,69 @@ After moving to new environment:
 
 - [ ] Run `./check_prerequisites.sh` - All checks pass
 - [ ] Run `./build.sh --test` - Build succeeds
-- [ ] Check test results - 100% tests passed (11/11)
-- [ ] Run `./build/bin/test_method_comparison` - Examples work
+- [ ] Check test results - 100% tests passed (12/12)
+- [ ] Run standard verification workflow (see below)
+
+## Standard Verification Workflow
+
+After setup, run the circle-ellipse intersection example:
+
+```bash
+# 1. Build and test
+./build.sh --test
+
+# 2. Run circle-ellipse intersection
+./build/bin/test_strategies
+
+# 3. Set up Python environment (one-time)
+uv venv .venv
+source .venv/bin/activate
+uv pip install numpy matplotlib
+
+# 4. Visualize results
+python examples/visualize_circle_ellipse.py
+```
+
+**Expected Results:**
+- All 12 tests pass
+- 3 geometry dumps generated in `dumps/`
+- Visualizations generated in `visualizations/`
+- All strategies converge to root: (0.894427, 0.447214)
 
 ## Package Contents
 
-### Essential Files (Always Included)
+### Essential Files
 ```
 polynomial-solver/
 ├── include/              # Header files (4 files)
 ├── src/                  # Source files (5 files)
 ├── tests/                # Test suite (12 files)
+├── examples/             # Example programs and scripts
+├── tools/                # Visualization tools
 ├── CMakeLists.txt        # Build configuration
 ├── build.sh              # Build script
 └── check_prerequisites.sh # Prerequisite checker
 ```
 
-### Documentation (Included by default)
+### Documentation
 ```
 ├── README.md             # Project overview
 ├── QUICKSTART.md         # Quick start guide
 ├── SETUP.md              # Complete setup guide
 ├── PORTABILITY.md        # This file
+├── PROJECT_SUMMARY.md    # Project summary
+├── examples/README.md    # Example documentation
+├── tools/README.md       # Visualization API docs
 └── docs/                 # Algorithm documentation
 ```
 
-### Optional Components
+### Generated Files (Not Included)
 ```
-├── python/               # Visualization tools
-└── .git/                 # Git history (with --with-git)
+├── build/                # Build artifacts (regenerated)
+├── .venv/                # Python environment (regenerated)
+├── dumps/                # Geometry dumps (regenerated)
+└── visualizations/       # PNG visualizations (regenerated)
 ```
-
-## Package Sizes
-
-| Package Type | Size | Contents |
-|--------------|------|----------|
-| Minimal | ~200K | Source + tests only |
-| Standard | ~500K | + docs + python |
-| With Git | ~1.5M | + Git history |
 
 ## Platform Support
 
@@ -141,14 +164,14 @@ polynomial-solver/
 
 ```bash
 # On local machine
-./package.sh --no-python -o hpc-package
+tar -czf polynomial-solver.tar.gz polynomial-solver/
 
 # Transfer to cluster
-scp hpc-package.tar.gz user@cluster:~
+scp polynomial-solver.tar.gz user@cluster:~
 
 # On cluster
 ssh user@cluster
-tar -xzf hpc-package.tar.gz
+tar -xzf polynomial-solver.tar.gz
 cd polynomial-solver
 module load gcc/9.3.0 cmake/3.18.0  # Load required modules
 ./check_prerequisites.sh
@@ -159,11 +182,11 @@ module load gcc/9.3.0 cmake/3.18.0  # Load required modules
 
 ```bash
 # On internet-connected machine
-./package.sh -o airgap-package
+tar -czf polynomial-solver.tar.gz polynomial-solver/
 
 # Transfer via USB or approved method
 # On air-gapped machine
-tar -xzf airgap-package.tar.gz
+tar -xzf polynomial-solver.tar.gz
 cd polynomial-solver
 ./check_prerequisites.sh
 # If prerequisites missing, install from offline repos
@@ -225,20 +248,21 @@ These directories/files are **not** in the package (will be regenerated):
 
 ## Summary
 
-✅ **Fully portable** - No external dependencies  
-✅ **Self-contained** - All source included  
-✅ **Small size** - 492K standard package  
-✅ **Easy setup** - 3 commands to build  
-✅ **Well documented** - Multiple guides included  
-✅ **Tested** - Verified in isolated environment  
+✅ **Fully portable** - No external dependencies
+✅ **Self-contained** - All source included
+✅ **Easy setup** - 2 commands to build
+✅ **Well documented** - Multiple guides included
+✅ **Tested** - Verified in isolated environment
+✅ **Standard verification** - Circle-ellipse intersection workflow
 
 ## Next Steps
 
-1. Choose your transfer method (Git, Package, or Bundle)
+1. Choose your transfer method (Git or Manual)
 2. Transfer to target environment
 3. Run `./check_prerequisites.sh`
 4. Run `./build.sh --test`
-5. Start developing!
+5. Run standard verification workflow
+6. Start developing!
 
 For more details, see:
 - [QUICKSTART.md](QUICKSTART.md) - Quick start guide
