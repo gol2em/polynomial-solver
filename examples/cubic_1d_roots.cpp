@@ -17,26 +17,90 @@
 #include "solver.h"
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <cmath>
 
 using namespace polynomial_solver;
 
 void print_result(const SubdivisionSolverResult& result) {
     std::cout << "Found " << result.num_resolved << " root(s)\n";
-    std::cout << "Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n\n";
+    std::cout << "Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n";
+    std::cout << "Unresolved boxes: " << (result.boxes.size() - result.num_resolved) << "\n\n";
 
+    std::cout << "Resolved roots:\n";
     for (size_t i = 0; i < result.num_resolved; ++i) {
         const SubdivisionBoxResult& box = result.boxes[i];
-        std::cout << "Root " << (i+1) << ":\n";
-        std::cout << "  Interval: [" << std::fixed << std::setprecision(10)
+        std::cout << "  Root " << (i+1) << ":\n";
+        std::cout << "    Interval: [" << std::fixed << std::setprecision(10)
                   << box.lower[0] << ", " << box.upper[0] << "]\n";
-        std::cout << "  Center: " << box.center[0] << "\n";
-        std::cout << "  Width: " << std::scientific << std::setprecision(6)
+        std::cout << "    Center: " << box.center[0] << "\n";
+        std::cout << "    Width: " << std::scientific << std::setprecision(6)
                   << (box.upper[0] - box.lower[0]) << "\n";
-        std::cout << "  Depth: " << box.depth << "\n";
-        std::cout << "  Converged: " << (box.converged ? "yes" : "no") << "\n";
+        std::cout << "    Depth: " << box.depth << "\n";
         std::cout << "\n";
     }
+
+    if (result.boxes.size() > result.num_resolved) {
+        std::cout << "Unresolved boxes:\n";
+        for (size_t i = result.num_resolved; i < result.boxes.size(); ++i) {
+            const SubdivisionBoxResult& box = result.boxes[i];
+            std::cout << "  Box " << (i - result.num_resolved + 1) << ":\n";
+            std::cout << "    Interval: [" << std::fixed << std::setprecision(10)
+                      << box.lower[0] << ", " << box.upper[0] << "]\n";
+            std::cout << "    Center: " << box.center[0] << "\n";
+            std::cout << "    Width: " << std::scientific << std::setprecision(6)
+                      << (box.upper[0] - box.lower[0]) << "\n";
+            std::cout << "    Depth: " << box.depth << "\n";
+            std::cout << "\n";
+        }
+    }
+}
+
+void dump_result(const SubdivisionSolverResult& result, const std::string& filename) {
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        std::cerr << "Failed to open " << filename << " for writing\n";
+        return;
+    }
+
+    out << "# Solver Result Dump\n";
+    out << "# Dimension: 1\n";
+    out << "# Total boxes: " << result.boxes.size() << "\n";
+    out << "# Resolved: " << result.num_resolved << "\n";
+    out << "# Unresolved: " << (result.boxes.size() - result.num_resolved) << "\n";
+    out << "# Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n";
+    out << "\n";
+
+    // Dump resolved boxes
+    out << "## Resolved Boxes\n";
+    for (size_t i = 0; i < result.num_resolved; ++i) {
+        const SubdivisionBoxResult& box = result.boxes[i];
+        out << "Box " << i << "\n";
+        out << "  Lower: " << std::setprecision(17) << box.lower[0] << "\n";
+        out << "  Upper: " << box.upper[0] << "\n";
+        out << "  Center: " << box.center[0] << "\n";
+        out << "  Depth: " << box.depth << "\n";
+        out << "  Converged: " << (box.converged ? "yes" : "no") << "\n";
+        out << "\n";
+    }
+
+    // Dump unresolved boxes
+    if (result.boxes.size() > result.num_resolved) {
+        out << "## Unresolved Boxes\n";
+        for (size_t i = result.num_resolved; i < result.boxes.size(); ++i) {
+            const SubdivisionBoxResult& box = result.boxes[i];
+            out << "Box " << (i - result.num_resolved) << "\n";
+            out << "  Lower: " << std::setprecision(17) << box.lower[0] << "\n";
+            out << "  Upper: " << box.upper[0] << "\n";
+            out << "  Center: " << box.center[0] << "\n";
+            out << "  Depth: " << box.depth << "\n";
+            out << "  Converged: " << (box.converged ? "yes" : "no") << "\n";
+            out << "\n";
+        }
+    }
+
+    out.close();
+    std::cout << "Result dump saved to: " << filename << "\n";
 }
 
 int main() {
@@ -86,12 +150,16 @@ int main() {
         system, config, RootBoundingMethod::ProjectedPolyhedral);
 
     print_result(result);
-    
+
+    // Dump result to file
+    dump_result(result, "dumps/cubic_1d_result.txt");
+
     std::cout << "\n" << std::string(60, '=') << "\n";
     std::cout << "Example completed successfully!\n";
     std::cout << "\nGeometry dump saved to dumps/cubic_1d_geometry.txt\n";
+    std::cout << "Result dump saved to dumps/cubic_1d_result.txt\n";
     std::cout << "Visualize with: python examples/visualize_cubic_1d.py\n";
-    
+
     return 0;
 }
 
