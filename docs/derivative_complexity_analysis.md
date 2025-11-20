@@ -369,7 +369,7 @@ for (auto& box : boxes) {
 
 **For your degeneracy detection use case:**
 
-✅ **Use Approach A with global caching**:
+✅ **Use Approach B with global caching** (Differentiate → Restrict):
 
 1. **At solver initialization**: Compute and cache all needed derivatives globally
    ```cpp
@@ -392,6 +392,13 @@ for (auto& box : boxes) {
 
 **Complexity**: O(d^k · N) for initial caching + O(B · d · N · n_avg) for B boxes
 **Memory**: O(C(d+k, k) · N) for cached derivatives
+**Numerical accuracy**: 10-5500× better than Approach A (see numerical_stability_analysis.md)
 
 This is optimal for your use case where you need multiple derivatives on many boxes.
+
+**Why this strategy wins**:
+1. ✅ **Computational**: k× faster than computing derivatives per box
+2. ✅ **Numerical**: 10-5500× more accurate than Approach A (experimental results)
+3. ✅ **Memory**: Sparse caching, only compute what's needed
+4. ✅ **Simplicity**: Differentiate once, restrict many times
 

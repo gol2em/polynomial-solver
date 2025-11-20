@@ -27,8 +27,8 @@ This document summarizes the complexity analysis and design decisions for implem
 
 ✅ **For subdivision solver with degeneracy detection:**
 
-**Use Approach A with global caching:**
-1. Cache all derivatives globally (once)
+**Use Approach B with global caching (Differentiate → Restrict):**
+1. Cache all derivatives globally (once) - **numerically stable**
 2. Restrict cached derivatives per box (cheap)
 3. Evaluate restricted derivatives at box center
 
@@ -36,6 +36,11 @@ This document summarizes the complexity analysis and design decisions for implem
 - Initial: O(C(d+k,k) · N) - compute all derivatives once
 - Per box: O(d · N · n_avg) - restrict to box
 - **Total for B boxes**: O(C(d+k,k) · N + B · d · N · n_avg)
+
+**Numerical accuracy**:
+- **10-5500× more accurate** than Approach A (restrict→diff)
+- Experimental results show Approach B wins for all test cases
+- See `docs/numerical_stability_analysis.md` for details
 
 **Alternative (BAD)**: Compute derivatives per box
 - **Total for B boxes**: O(B · C(d+k,k) · N)
