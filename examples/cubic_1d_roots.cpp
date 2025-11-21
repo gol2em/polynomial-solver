@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <fstream>
 #include <cmath>
+#include <cstring>
 
 using namespace polynomial_solver;
 
@@ -103,10 +104,24 @@ void dump_result(const SubdivisionSolverResult& result, const std::string& filen
     std::cout << "Result dump saved to: " << filename << "\n";
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Parse command-line arguments
+    bool dump_geometry = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--dump-geometry") == 0) {
+            dump_geometry = true;
+        } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            std::cout << "Usage: " << argv[0] << " [options]\n";
+            std::cout << "Options:\n";
+            std::cout << "  --dump-geometry    Enable geometry dump for visualization (default: off)\n";
+            std::cout << "  --help, -h         Show this help message\n";
+            return 0;
+        }
+    }
+
     std::cout << "1D Cubic Polynomial Root Finding\n";
     std::cout << std::string(60, '=') << "\n\n";
-    
+
     std::cout << "Problem: p(x) = (x - 0.2)(x - 0.5)(x - 0.8)\n";
     std::cout << "              = x^3 - 1.5*x^2 + 0.66*x - 0.08\n";
     std::cout << "Expected roots: x = 0.2, 0.5, 0.8\n";
@@ -139,8 +154,10 @@ int main() {
     config.max_depth = 100;
     config.contraction_threshold = 0.8;
     config.strategy = SubdivisionStrategy::SubdivideFirst;
-    config.dump_geometry = true;
+#ifdef ENABLE_GEOMETRY_DUMP
+    config.dump_geometry = dump_geometry;
     config.dump_prefix = "dumps/cubic_1d";
+#endif
 
     std::cout << "\n" << std::string(60, '=') << "\n";
     std::cout << "Solving with SubdivideFirst strategy\n";
@@ -156,7 +173,11 @@ int main() {
 
     std::cout << "\n" << std::string(60, '=') << "\n";
     std::cout << "Example completed successfully!\n";
-    std::cout << "\nGeometry dump saved to dumps/cubic_1d_geometry.txt\n";
+#ifdef ENABLE_GEOMETRY_DUMP
+    if (dump_geometry) {
+        std::cout << "\nGeometry dump saved to dumps/cubic_1d_geometry.txt\n";
+    }
+#endif
     std::cout << "Result dump saved to dumps/cubic_1d_result.txt\n";
     std::cout << "Visualize with: python examples/visualize_cubic_1d.py\n";
 

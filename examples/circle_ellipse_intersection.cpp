@@ -22,6 +22,7 @@
 #include <iomanip>
 #include <fstream>
 #include <cmath>
+#include <cstring>
 
 using namespace polynomial_solver;
 
@@ -123,10 +124,24 @@ void dump_result(const SubdivisionSolverResult& result, const std::string& filen
     std::cout << "  Result dump saved to: " << filename << "\n";
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Parse command-line arguments
+    bool dump_geometry = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--dump-geometry") == 0) {
+            dump_geometry = true;
+        } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            std::cout << "Usage: " << argv[0] << " [options]\n";
+            std::cout << "Options:\n";
+            std::cout << "  --dump-geometry    Enable geometry dump for visualization (default: off)\n";
+            std::cout << "  --help, -h         Show this help message\n";
+            return 0;
+        }
+    }
+
     std::cout << "Circle-Ellipse Intersection Example\n";
     std::cout << std::string(60, '=') << "\n\n";
-    
+
     std::cout << "Problem:\n";
     std::cout << "  f1(x,y) = x^2 + y^2 - 1 = 0        (unit circle)\n";
     std::cout << "  f2(x,y) = x^2/4 + 4*y^2 - 1 = 0    (ellipse)\n";
@@ -168,8 +183,10 @@ int main() {
         config.max_depth = 100;
         config.contraction_threshold = 0.9;
         config.strategy = strategies[s];
-        config.dump_geometry = true;
+#ifdef ENABLE_GEOMETRY_DUMP
+        config.dump_geometry = dump_geometry;
         config.dump_prefix = std::string("dumps/example_") + strategy_names[s];
+#endif
 
         SubdivisionSolverResult result = solver.subdivisionSolve(
             system, config, RootBoundingMethod::ProjectedPolyhedral);
@@ -183,7 +200,11 @@ int main() {
 
     std::cout << "\n" << std::string(60, '=') << "\n";
     std::cout << "Example completed successfully!\n";
-    std::cout << "\nGeometry dumps saved to dumps/example_*_geometry.txt\n";
+#ifdef ENABLE_GEOMETRY_DUMP
+    if (dump_geometry) {
+        std::cout << "\nGeometry dumps saved to dumps/example_*_geometry.txt\n";
+    }
+#endif
     std::cout << "Result dumps saved to dumps/example_*_result.txt\n";
     std::cout << "Visualize with: tools/visualize_solver.py\n";
 

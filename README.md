@@ -17,6 +17,7 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
 - **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
 - **Comprehensive Test Suite**: 12 test suites covering all major functionality
 - **Python Visualization**: Optional visualization tools for graphs and control points
+- **Configurable Geometry Dumping**: Control geometry dump generation via command-line flags (default: off for performance)
 
 ## Quick Start
 
@@ -43,29 +44,33 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 **2D Example: Circle-Ellipse Intersection**
 
 ```bash
-# Run the example (generates geometry dumps)
+# Run the example (no geometry dumps by default)
 ./build/bin/example_circle_ellipse
 
-# Or run the test version
-./build/bin/test_strategies
+# Run with geometry dumps for visualization
+./build/bin/example_circle_ellipse --dump-geometry
+
+# Show help
+./build/bin/example_circle_ellipse --help
 ```
 
-This generates geometry dump files in `dumps/` directory:
-- `dumps/strategy_ContractFirst_geometry.txt`
-- `dumps/strategy_SubdivideFirst_geometry.txt`
-- `dumps/strategy_Simultaneous_geometry.txt`
+With `--dump-geometry`, this generates geometry dump files in `dumps/` directory:
+- `dumps/example_ContractFirst_geometry.txt`
+- `dumps/example_SubdivideFirst_geometry.txt`
+- `dumps/example_Simultaneous_geometry.txt`
 
 **1D Example: Cubic Polynomial with 3 Roots**
 
 ```bash
-# Run the 1D example
+# Run the 1D example (no geometry dumps by default)
 ./build/bin/example_cubic_1d
+
+# Run with geometry dumps for visualization
+./build/bin/example_cubic_1d --dump-geometry
 ```
 
-This generates 1D geometry dumps:
-- `dumps/cubic_1d_ContractFirst_geometry.txt`
-- `dumps/cubic_1d_SubdivideFirst_geometry.txt`
-- `dumps/cubic_1d_Simultaneous_geometry.txt`
+With `--dump-geometry`, this generates 1D geometry dumps:
+- `dumps/cubic_1d_geometry.txt`
 
 ### 4. Visualize the Results
 
@@ -243,13 +248,43 @@ python tools/solver_viz_api.py dumps/example.txt --output-dir output/ --max-step
 
 ### Generating Dump Files
 
-Enable geometry dumping in your code:
+**Command-line control (examples):**
+
+All examples support the `--dump-geometry` flag to enable geometry dumping:
+
+```bash
+# Run without geometry dumps (default, faster)
+./build/bin/example_cubic_1d
+
+# Run with geometry dumps for visualization
+./build/bin/example_cubic_1d --dump-geometry
+```
+
+**Programmatic control:**
+
+Enable geometry dumping in your code (only when `ENABLE_GEOMETRY_DUMP` macro is defined):
 
 ```cpp
 SubdivisionConfig config;
+#ifdef ENABLE_GEOMETRY_DUMP
 config.dump_geometry = true;
 config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
+#endif
 ```
+
+**Build-time control:**
+
+The `ENABLE_GEOMETRY_DUMP` macro is controlled by CMake:
+
+```bash
+# Enable geometry dump (default, for development)
+cmake -DENABLE_GEOMETRY_DUMP=ON ..
+
+# Disable geometry dump (for release builds, removes all dump code)
+cmake -DENABLE_GEOMETRY_DUMP=OFF ..
+```
+
+When `ENABLE_GEOMETRY_DUMP=OFF`, all geometry dumping code is compiled out for maximum performance.
 
 The solver automatically creates the `dumps/` directory if it doesn't exist.
 
