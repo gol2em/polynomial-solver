@@ -79,9 +79,9 @@ With `--dump-geometry`, this generates geometry dump files in `dumps/` directory
 ```
 
 **Command-line Options** (available for all examples):
-- `--tolerance, -t <value>`: Box size tolerance for convergence (default: 1e-6)
+- `--tolerance, -t <value>`: Box size tolerance for convergence (default: 1e-8)
 - `--max-depth, -d <value>`: Maximum subdivision depth (default: 100)
-- `--degeneracy-multiplier, -m <value>`: Multiplier for degeneracy detection (default: 2.0)
+- `--degeneracy-multiplier, -m <value>`: Multiplier for degeneracy detection (default: 5.0)
 - `--dump-geometry`: Enable geometry dump for visualization (default: off)
 - `--help, -h`: Show help message
 

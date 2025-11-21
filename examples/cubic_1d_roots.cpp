@@ -107,9 +107,9 @@ void dump_result(const SubdivisionSolverResult& result, const std::string& filen
 int main(int argc, char* argv[]) {
     // Default parameters
     bool dump_geometry = false;
-    double tolerance = 1e-6;
+    double tolerance = 1e-8;
     unsigned int max_depth = 100;
-    double degeneracy_multiplier = 2.0;
+    double degeneracy_multiplier = 5.0;
 
     // Parse command-line arguments
     for (int i = 1; i < argc; ++i) {
