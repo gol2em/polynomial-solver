@@ -116,12 +116,98 @@ Polynomial::Polynomial()
 
 Polynomial::Polynomial(const std::vector<unsigned int>& degrees,
                        const std::vector<double>& bernstein_coeffs)
-    : dimension_(degrees.size()),
-      degrees_(degrees),
-      bernstein_coeffs_(bernstein_coeffs)
+    : dimension_(degrees.size())
 {
-    // TODO: Optionally validate that bernstein_coeffs_.size()
-    // matches coefficientCount().
+    // Raise degree to at least 1 in each dimension (in Bernstein basis).
+    // This ensures proper geometric representation with at least 2 control points per dimension.
+    std::vector<unsigned int> adjusted_degrees = degrees;
+    bool needs_degree_raising = false;
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        if (adjusted_degrees[i] == 0u) {
+            adjusted_degrees[i] = 1u;
+            needs_degree_raising = true;
+        }
+    }
+
+    if (needs_degree_raising) {
+        // Compute new coefficient count
+        std::size_t new_count = 1u;
+        for (std::size_t i = 0; i < dimension_; ++i) {
+            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
+        }
+
+        // Compute old coefficient count
+        std::size_t old_count = 1u;
+        for (std::size_t i = 0; i < dimension_; ++i) {
+            old_count *= static_cast<std::size_t>(degrees[i] + 1u);
+        }
+
+        std::vector<double> raised_coeffs(new_count, 0.0);
+
+        // Copy coefficients, duplicating along dimensions where degree was raised
+        std::vector<unsigned int> old_multi(dimension_, 0u);
+        std::vector<unsigned int> new_multi(dimension_, 0u);
+
+        for (std::size_t old_idx = 0; old_idx < old_count; ++old_idx) {
+            // Compute old multi-index
+            std::size_t temp = old_idx;
+            for (std::size_t d = dimension_; d-- > 0;) {
+                old_multi[d] = static_cast<unsigned int>(temp % (degrees[d] + 1u));
+                temp /= (degrees[d] + 1u);
+            }
+
+            // For each dimension where degree was raised, duplicate the coefficient
+            std::vector<unsigned int> dup_counts(dimension_, 1u);
+            for (std::size_t d = 0; d < dimension_; ++d) {
+                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
+                    dup_counts[d] = 2u; // Duplicate this dimension
+                }
+            }
+
+            // Enumerate all combinations
+            std::vector<unsigned int> dup_idx(dimension_, 0u);
+            bool done = false;
+            while (!done) {
+                // Compute new multi-index
+                for (std::size_t d = 0; d < dimension_; ++d) {
+                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
+                        new_multi[d] = dup_idx[d]; // 0 or 1
+                    } else {
+                        new_multi[d] = old_multi[d];
+                    }
+                }
+
+                // Compute new linear index
+                std::size_t new_idx = 0;
+                std::size_t stride = 1;
+                for (std::size_t d = dimension_; d-- > 0;) {
+                    new_idx += static_cast<std::size_t>(new_multi[d]) * stride;
+                    stride *= (adjusted_degrees[d] + 1u);
+                }
+
+                raised_coeffs[new_idx] = bernstein_coeffs[old_idx];
+
+                // Increment dup_idx
+                done = true;
+                for (std::size_t d = dimension_; d-- > 0;) {
+                    if (dup_idx[d] + 1 < dup_counts[d]) {
+                        dup_idx[d]++;
+                        for (std::size_t e = d + 1; e < dimension_; ++e) {
+                            dup_idx[e] = 0;
+                        }
+                        done = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        degrees_ = adjusted_degrees;
+        bernstein_coeffs_ = raised_coeffs;
+    } else {
+        degrees_ = degrees;
+        bernstein_coeffs_ = bernstein_coeffs;
+    }
 }
 
 Polynomial::~Polynomial() {

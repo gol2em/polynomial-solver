@@ -132,6 +132,9 @@ struct SubdivisionNode {
 
     // Polynomials restricted to this node's box and re-parameterised to [0,1]^n.
     std::vector<polynomial_solver::Polynomial> polys;
+
+    // Original polynomials (on [0,1]^n, never modified) for direct contraction.
+    std::vector<polynomial_solver::Polynomial> original_polys;
 };
 
 struct NodeQueueEntry {
@@ -612,6 +615,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     root.box_upper.assign(dim, 1.0);
     root.depth = 0u;
     root.polys = system.equations();
+    root.original_polys = system.equations();  // Store original for direct contraction
 
     std::priority_queue<NodeQueueEntry, std::vector<NodeQueueEntry>, NodeQueueCompare> queue;
     std::size_t next_index = 0u;
@@ -874,6 +878,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
             // Step 5: Contract the box (if strategy allows)
             if (should_contract) {
+                // First, update global box coordinates
                 for (std::size_t i = 0; i < dim; ++i) {
                     // For Simultaneous strategy, only contract directions that don't need subdivision
                     if (config.strategy == SubdivisionStrategy::Simultaneous && needs_subdivision[i]) {
@@ -892,10 +897,16 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
                     node.box_lower[i] = new_low;
                     node.box_upper[i] = new_high;
+                }
 
-                    // Restrict polynomials to new interval
-                    for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
-                        node.polys[eq] = node.polys[eq].restrictedToInterval(i, a, b);
+                // Direct contraction: Recompute polynomials from original using global box
+                // This eliminates error accumulation from repeated restrictions
+                for (std::size_t eq = 0; eq < node.polys.size(); ++eq) {
+                    node.polys[eq] = node.original_polys[eq];
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        // Restrict from original [0,1] to global [box_lower[i], box_upper[i]]
+                        node.polys[eq] = node.polys[eq].restrictedToInterval(
+                            i, node.box_lower[i], node.box_upper[i]);
                     }
                 }
             }
@@ -1090,6 +1101,10 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                     left_child.polys.push_back(poly.restrictedToInterval(axis, 0.0, 0.5));
                     right_child.polys.push_back(poly.restrictedToInterval(axis, 0.5, 1.0));
                 }
+
+                // Propagate original polynomials to children for direct contraction
+                left_child.original_polys = child.original_polys;
+                right_child.original_polys = child.original_polys;
 
                 next_children.push_back(std::move(left_child));
                 next_children.push_back(std::move(right_child));

@@ -3,9 +3,11 @@
 A high-performance C++11 library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
 
 **GitHub**: https://github.com/gol2em/polynomial-solver.git
+**Gitee**: https://gitee.com/gol2em/polynomial-solver.git
 
 ## Features
 
+- **Simple 2-Line Workflow**: Solve and refine roots with just two function calls
 - **Multivariate Polynomial Support**: Handle polynomials in multiple variables with arbitrary degrees
 - **Bernstein Basis Representation**: Numerically stable polynomial representation with power↔Bernstein conversion
 - **Multiple Root Bounding Methods**:
@@ -13,22 +15,19 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
   - **ProjectedPolyhedral**: Direction-by-direction projection method
   - **None**: Uniform subdivision (baseline)
 - **Intelligent Degeneracy Detection**: Automatically detects degenerate cases (multiple roots, infinite solutions)
+- **High-Precision Result Refinement**: Newton's method with sign checking to achieve 1e-15 precision (1D)
+- **Condition Number Estimation**: Automatically detects when higher precision arithmetic is needed
+- **Multiplicity Detection**: Determines root multiplicity using derivative analysis
 - **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
 - **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
-- **Comprehensive Test Suite**: 12 test suites covering all major functionality
+- **Unified Library**: Single `libpolynomial_solver.a` library for easy linking
+- **Comprehensive Test Suite**: 13 test suites covering all major functionality
 - **Python Visualization**: Optional visualization tools for graphs and control points
+- **Configurable Parameters**: All solver parameters accessible via command-line flags
 
 ## Quick Start
 
-See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
-
-### 1. Check Prerequisites
-
-```bash
-./check_prerequisites.sh
-```
-
-### 2. Build the Project
+### 1. Build the Project
 
 ```bash
 # Build with tests and examples
@@ -38,108 +37,151 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed setup instructions.
 ./build.sh
 ```
 
-### 3. Run Examples
+### 2. Run the Simple Example
 
-**2D Example: Circle-Ellipse Intersection**
+The simplest way to get started is with the 2-line workflow example:
 
 ```bash
-# Run the example (generates geometry dumps)
+./build/bin/example_simple_cubic
+```
+
+This demonstrates solving a cubic polynomial `(x - 0.2)(x - 0.5)(x - 0.8)` with just two lines of code:
+
+```cpp
+#include <polynomial_solver.h>
+
+// LINE 1: SOLVE (fast, double precision)
+Solver solver;
+auto result = solver.subdivisionSolve(system, config);
+
+// LINE 2: REFINE (high precision, 1e-15)
+ResultRefiner refiner;
+auto refined = refiner.refine(result, system, refine_config);
+```
+
+### 3. Experiment with Parameters
+
+All examples support command-line parameters for experimentation:
+
+```bash
+# Run with custom tolerance
+./build/bin/example_simple_cubic -t 1e-10
+
+# Run with custom parameters
+./build/bin/example_simple_cubic -t 1e-12 -d 150 -m 3.0
+
+# Show all options
+./build/bin/example_simple_cubic --help
+```
+
+**Common Command-line Options**:
+- `-t, --tolerance <value>`: Box size tolerance (default: 1e-8)
+- `-d, --max-depth <value>`: Maximum subdivision depth (default: 100)
+- `-m, --degeneracy-multiplier <value>`: Degeneracy detection multiplier (default: 5.0)
+- `--dump-geometry`: Enable geometry dump for visualization
+- `-h, --help`: Show help message
+
+See [docs/PARAMETERS.md](docs/PARAMETERS.md) for detailed parameter documentation.
+
+### 4. More Examples
+
+**Ill-Conditioned Problems (Wilkinson Polynomial)**:
+```bash
+# Demonstrates condition number estimation
+./build/bin/example_wilkinson_1d
+```
+
+**Multiple Roots**:
+```bash
+# Demonstrates multiplicity detection
+./build/bin/example_multiplicity_1d
+```
+
+**2D Systems (Circle-Ellipse Intersection)**:
+```bash
+# Demonstrates 2D polynomial system solving
 ./build/bin/example_circle_ellipse
-
-# Or run the test version
-./build/bin/test_strategies
 ```
 
-This generates geometry dump files in `dumps/` directory:
-- `dumps/strategy_ContractFirst_geometry.txt`
-- `dumps/strategy_SubdivideFirst_geometry.txt`
-- `dumps/strategy_Simultaneous_geometry.txt`
+### 5. Using the Library in Your Code
 
-**1D Example: Cubic Polynomial with 3 Roots**
-
-```bash
-# Run the 1D example
-./build/bin/example_cubic_1d
+**Include the unified header**:
+```cpp
+#include <polynomial_solver.h>
+using namespace polynomial_solver;
 ```
 
-This generates 1D geometry dumps:
-- `dumps/cubic_1d_ContractFirst_geometry.txt`
-- `dumps/cubic_1d_SubdivideFirst_geometry.txt`
-- `dumps/cubic_1d_Simultaneous_geometry.txt`
-
-### 4. Visualize the Results
-
-First, set up Python environment (one-time setup):
-
-```bash
-# Create virtual environment using uv
-uv venv .venv
-
-# Activate virtual environment
-source .venv/bin/activate
-
-# Install dependencies
-uv pip install numpy matplotlib
+**Link against the library**:
+```cmake
+target_link_libraries(your_target polynomial_solver)
 ```
 
-Then visualize:
+**Basic usage**:
+```cpp
+// 1. Define polynomial system
+std::vector<unsigned int> degrees = {3};
+std::vector<double> power_coeffs = {-0.08, 0.66, -1.5, 1.0};
+Polynomial poly = Polynomial::fromPower(degrees, power_coeffs);
+PolynomialSystem system(std::vector<Polynomial>{poly});
 
-**2D Visualization (Circle-Ellipse):**
+// 2. Solve (fast, double precision)
+Solver solver;
+SubdivisionConfig config;
+config.tolerance = 1e-8;
+auto result = solver.subdivisionSolve(system, config, RootBoundingMethod::ProjectedPolyhedral);
 
-```bash
-# Visualize all strategies
-python examples/visualize_circle_ellipse.py
+// 3. Refine (high precision, 1e-15)
+ResultRefiner refiner;
+RefinementConfig refine_config;
+refine_config.target_tolerance = 1e-15;
+auto refined = refiner.refine(result, system, refine_config);
 
-# Visualize first 20 iterations only
-python examples/visualize_circle_ellipse.py --max-steps 20
-
-# Visualize specific strategy
-python examples/visualize_circle_ellipse.py --strategy ContractFirst
+// 4. Check results
+for (const auto& root : refined.roots) {
+    if (root.needs_higher_precision) {
+        // Use higher precision arithmetic (future feature)
+    }
+}
 ```
-
-**1D Visualization (Cubic Polynomial):**
-
-```bash
-# Visualize all strategies
-python examples/visualize_cubic_1d.py
-
-# Visualize first 10 iterations only
-python examples/visualize_cubic_1d.py --max-steps 10
-
-# Visualize specific strategy
-python examples/visualize_cubic_1d.py --strategy SubdivideFirst
-```
-
-Visualizations are saved to `visualizations/viz_*/` directories as PNG files.
 
 ## Project Structure
 
 ```
 polynomial-solver/
-├── include/              # Header files
-│   ├── polynomial.h      # Multivariate polynomial class
-│   ├── solver.h          # Main solver interface
-│   ├── geometry.h        # Geometric algorithms
-│   └── de_casteljau.h    # De Casteljau algorithm
-├── src/                  # Implementation files
+├── include/                      # Header files
+│   ├── polynomial_solver.h       # Unified header (include this!)
+│   ├── polynomial.h              # Multivariate polynomial class
+│   ├── solver.h                  # Main solver interface
+│   ├── result_refiner.h          # High-precision refinement
+│   ├── differentiation.h         # Polynomial differentiation
+│   ├── geometry.h                # Geometric algorithms
+│   └── de_casteljau.h            # De Casteljau algorithm
+├── src/                          # Implementation files
 │   ├── polynomial.cpp
 │   ├── solver.cpp
+│   ├── result_refiner.cpp
+│   ├── differentiation.cpp
 │   ├── geometry.cpp
-│   ├── de_casteljau.cpp
-│   └── main.cpp
-├── tests/                # Test suite (12 tests)
-├── examples/             # Example programs and scripts
-│   ├── circle_ellipse_intersection.cpp  # C++ example
-│   └── visualize_circle_ellipse.py      # Python visualization script
-├── tools/                # Visualization tools and API
-│   ├── visualize_solver.py              # Core visualization engine
-│   ├── solver_viz_api.py                # Python API for visualization
-│   └── README.md                        # API documentation
-├── python/               # Python visualization tools (legacy)
-├── docs/                 # Documentation
-├── build.sh              # Automated build script
-├── check_prerequisites.sh # Prerequisite checker
-└── QUICKSTART.md         # Quick start guide
+│   └── de_casteljau.cpp
+├── build/lib/                    # Build output
+│   └── libpolynomial_solver.a    # Unified library (link this!)
+├── tests/                        # Test suite (13 tests)
+├── examples/                     # Example programs
+│   ├── simple_cubic.cpp          # 2-line workflow demo
+│   ├── cubic_1d_roots.cpp        # Detailed 1D example
+│   ├── multiplicity_1d_roots.cpp # Multiple roots
+│   ├── wilkinson_1d_roots.cpp    # Ill-conditioned
+│   └── circle_ellipse_intersection.cpp  # 2D system
+├── tools/                        # Tools and utilities
+│   └── refine_from_dumps.cpp     # Root refinement tool
+├── docs/                         # Documentation
+│   ├── PARAMETERS.md             # Parameter reference
+│   ├── CONDITIONING_AND_PRECISION.md  # Condition numbers
+│   ├── GEOMETRY_ALGORITHMS.md    # Geometric algorithms
+│   ├── DEGENERATE_BOXES.md       # Degeneracy handling
+│   └── result_refinement_design.md    # Refinement design
+├── build.sh                      # Automated build script
+└── README.md                     # This file
 ```
 
 ## Algorithm Overview
@@ -167,6 +209,21 @@ polynomial-solver/
 5. Else: subdivide and add to queue
 6. Process boxes by depth (breadth-first)
 7. Degeneracy detection for degenerate cases
+
+### Direct Contraction Implementation
+
+The solver uses **direct contraction** to minimize error accumulation:
+
+- **Traditional approach**: Restrict polynomials incrementally from current [0,1] to [a,b] repeatedly
+  - Error grows linearly: ε ≈ k·n·ε·||b|| (k = number of contractions)
+
+- **Direct contraction**: Restrict from original [0,1] to global [A,B] each time
+  - Error stays constant: ε ≈ n·ε·||b|| (independent of k)
+  - **2-8× error reduction** in practice
+  - **Same computational cost** (2 de Casteljau subdivisions per contraction)
+  - Better accuracy at extreme precision (tolerance < 10⁻¹²)
+
+**Implementation**: Each subdivision node stores both current and original polynomials. During contraction, polynomials are recomputed from original using global box coordinates. During subdivision, the incremental approach is kept for efficiency.
 
 ## Examples
 
@@ -228,13 +285,43 @@ python tools/solver_viz_api.py dumps/example.txt --output-dir output/ --max-step
 
 ### Generating Dump Files
 
-Enable geometry dumping in your code:
+**Command-line control (examples):**
+
+All examples support the `--dump-geometry` flag to enable geometry dumping:
+
+```bash
+# Run without geometry dumps (default, faster)
+./build/bin/example_cubic_1d
+
+# Run with geometry dumps for visualization
+./build/bin/example_cubic_1d --dump-geometry
+```
+
+**Programmatic control:**
+
+Enable geometry dumping in your code (only when `ENABLE_GEOMETRY_DUMP` macro is defined):
 
 ```cpp
 SubdivisionConfig config;
+#ifdef ENABLE_GEOMETRY_DUMP
 config.dump_geometry = true;
 config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
+#endif
 ```
+
+**Build-time control:**
+
+The `ENABLE_GEOMETRY_DUMP` macro is controlled by CMake:
+
+```bash
+# Enable geometry dump (default, for development)
+cmake -DENABLE_GEOMETRY_DUMP=ON ..
+
+# Disable geometry dump (for release builds, removes all dump code)
+cmake -DENABLE_GEOMETRY_DUMP=OFF ..
+```
+
+When `ENABLE_GEOMETRY_DUMP=OFF`, all geometry dumping code is compiled out for maximum performance.
 
 The solver automatically creates the `dumps/` directory if it doesn't exist.
 
@@ -289,7 +376,7 @@ uv pip install numpy matplotlib
 
 ## Test Suite
 
-All 12 test suites pass:
+All 13 test suites pass:
 
 | Test | Description |
 |------|-------------|
@@ -304,13 +391,22 @@ All 12 test suites pass:
 | DegenerateBoxesTest | Degenerate case handling |
 | LinearGraphHullTest | Linear function verification |
 | ProjectedPolyhedralTest | PP method verification |
+| DifferentiationTest | Polynomial differentiation |
+| ResultRefinerTest | High-precision Newton refinement |
 
 ## Documentation
 
-- **[QUICKSTART.md](QUICKSTART.md)**: Quick start guide
-- **[docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md)**: Geometric algorithms
-- **[docs/GEOMETRY_ROBUSTNESS.md](docs/GEOMETRY_ROBUSTNESS.md)**: Robustness improvements
-- **[docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md)**: Degeneracy handling
+### User Documentation
+- **[docs/PARAMETERS.md](docs/PARAMETERS.md)**: Complete parameter reference with tuning guide
+- **[docs/CONDITIONING_AND_PRECISION.md](docs/CONDITIONING_AND_PRECISION.md)**: Understanding condition numbers and when higher precision is needed
+
+### Technical Documentation
+- **[docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md)**: Geometric algorithms (convex hull, hyperplane intersection)
+- **[docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md)**: Degeneracy detection and handling
+- **[docs/result_refinement_design.md](docs/result_refinement_design.md)**: High-precision result refinement design
+
+### API Documentation
+- **[include/polynomial_solver.h](include/polynomial_solver.h)**: Unified header with comprehensive usage examples
 
 ## Moving to Another Environment
 
