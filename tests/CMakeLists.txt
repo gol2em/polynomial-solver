@@ -62,5 +62,8 @@ add_test(NAME DifferentiationTest COMMAND test_differentiation)
 add_executable(test_differentiation_debug test_differentiation_debug.cpp)
 target_link_libraries(test_differentiation_debug PRIVATE differentiation polynomial de_casteljau geometry)
 
+add_executable(test_degree_zero_derivative test_degree_zero_derivative.cpp)
+target_link_libraries(test_degree_zero_derivative PRIVATE differentiation polynomial de_casteljau geometry)
+
 message(STATUS "Tests directory configured (conversion, graph, system, and differentiation tests enabled)")
 
