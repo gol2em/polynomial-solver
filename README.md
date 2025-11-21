@@ -62,12 +62,28 @@ With `--dump-geometry`, this generates geometry dump files in `dumps/` directory
 **1D Example: Cubic Polynomial with 3 Roots**
 
 ```bash
-# Run the 1D example (no geometry dumps by default)
+# Run with default parameters
 ./build/bin/example_cubic_1d
+
+# Run with custom tolerance (for precision testing)
+./build/bin/example_cubic_1d -t 1e-10
+
+# Run with custom parameters
+./build/bin/example_cubic_1d -t 1e-12 -d 150 -m 3.0
 
 # Run with geometry dumps for visualization
 ./build/bin/example_cubic_1d --dump-geometry
+
+# Show all options
+./build/bin/example_cubic_1d --help
 ```
+
+**Command-line Options** (available for all examples):
+- `--tolerance, -t <value>`: Box size tolerance for convergence (default: 1e-6)
+- `--max-depth, -d <value>`: Maximum subdivision depth (default: 100)
+- `--degeneracy-multiplier, -m <value>`: Multiplier for degeneracy detection (default: 2.0)
+- `--dump-geometry`: Enable geometry dump for visualization (default: off)
+- `--help, -h`: Show help message
 
 With `--dump-geometry`, this generates 1D geometry dumps:
 - `dumps/cubic_1d_geometry.txt`

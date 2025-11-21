@@ -104,16 +104,36 @@ void dump_result(const SubdivisionSolverResult& result, const std::string& filen
 }
 
 int main(int argc, char* argv[]) {
-    // Parse command-line arguments
+    // Default parameters
     bool dump_geometry = false;
+    double tolerance = 1e-6;
+    unsigned int max_depth = 100;
+    double degeneracy_multiplier = 2.0;
+
+    // Parse command-line arguments
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--dump-geometry") == 0) {
             dump_geometry = true;
+        } else if (std::strcmp(argv[i], "--tolerance") == 0 || std::strcmp(argv[i], "-t") == 0) {
+            if (i + 1 < argc) {
+                tolerance = std::atof(argv[++i]);
+            }
+        } else if (std::strcmp(argv[i], "--max-depth") == 0 || std::strcmp(argv[i], "-d") == 0) {
+            if (i + 1 < argc) {
+                max_depth = std::atoi(argv[++i]);
+            }
+        } else if (std::strcmp(argv[i], "--degeneracy-multiplier") == 0 || std::strcmp(argv[i], "-m") == 0) {
+            if (i + 1 < argc) {
+                degeneracy_multiplier = std::atof(argv[++i]);
+            }
         } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
             std::cout << "Usage: " << argv[0] << " [options]\n";
             std::cout << "Options:\n";
-            std::cout << "  --dump-geometry    Enable geometry dump for visualization (default: off)\n";
-            std::cout << "  --help, -h         Show this help message\n";
+            std::cout << "  --dump-geometry              Enable geometry dump for visualization (default: off)\n";
+            std::cout << "  --tolerance, -t <value>      Box size tolerance for convergence (default: 1e-6)\n";
+            std::cout << "  --max-depth, -d <value>      Maximum subdivision depth (default: 100)\n";
+            std::cout << "  --degeneracy-multiplier, -m <value>  Multiplier for degeneracy detection (default: 2.0)\n";
+            std::cout << "  --help, -h                   Show this help message\n";
             return 0;
         }
     }
@@ -124,6 +144,11 @@ int main(int argc, char* argv[]) {
     std::cout << "Problem: p(x) = (x - 0.2)(x - 0.6)^6\n";
     std::cout << "Expected roots: x = 0.2 (multiplicity 1), x = 0.6 (multiplicity 6)\n";
     std::cout << "Domain: [0, 1]\n\n";
+
+    std::cout << "Parameters:\n";
+    std::cout << "  Tolerance:             " << std::scientific << std::setprecision(3) << tolerance << "\n";
+    std::cout << "  Max depth:             " << max_depth << "\n";
+    std::cout << "  Degeneracy multiplier: " << std::fixed << std::setprecision(1) << degeneracy_multiplier << "\n\n";
 
     // Expand (x - 0.2)(x - 0.6)^6
     // Computed using: (x - 0.6)^6 * (x - 0.2)
@@ -158,8 +183,9 @@ int main(int argc, char* argv[]) {
     Solver solver;
 
     SubdivisionConfig config;
-    config.tolerance = 1e-8;
-    config.max_depth = 100;
+    config.tolerance = tolerance;
+    config.max_depth = max_depth;
+    config.degeneracy_multiplier = degeneracy_multiplier;
     config.contraction_threshold = 0.8;
     config.strategy = SubdivisionStrategy::SubdivideFirst;
 #ifdef ENABLE_GEOMETRY_DUMP
