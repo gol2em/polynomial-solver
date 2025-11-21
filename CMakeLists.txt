@@ -47,6 +47,12 @@ add_library(differentiation STATIC
 )
 target_link_libraries(differentiation polynomial)
 
+# Build result_refiner library
+add_library(result_refiner STATIC
+    src/result_refiner.cpp
+)
+target_link_libraries(result_refiner polynomial differentiation)
+
 # Build solver library
 add_library(solver STATIC
     src/solver.cpp
@@ -58,6 +64,12 @@ add_executable(polynomial_solver_app
     src/main.cpp
 )
 target_link_libraries(polynomial_solver_app solver polynomial geometry de_casteljau)
+
+# Build refiner test tool
+add_executable(test_refiner_wilkinson
+    tools/test_refiner_wilkinson.cpp
+)
+target_link_libraries(test_refiner_wilkinson result_refiner solver differentiation polynomial geometry de_casteljau)
 
 # Optional: Enable testing
 enable_testing()

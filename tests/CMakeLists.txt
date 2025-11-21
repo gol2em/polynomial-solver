@@ -65,5 +65,9 @@ target_link_libraries(test_differentiation_debug PRIVATE differentiation polynom
 add_executable(test_degree_zero_derivative test_degree_zero_derivative.cpp)
 target_link_libraries(test_degree_zero_derivative PRIVATE differentiation polynomial de_casteljau geometry)
 
-message(STATUS "Tests directory configured (conversion, graph, system, and differentiation tests enabled)")
+add_executable(test_result_refiner test_result_refiner.cpp)
+target_link_libraries(test_result_refiner PRIVATE result_refiner solver differentiation polynomial de_casteljau geometry)
+add_test(NAME ResultRefinerTest COMMAND test_result_refiner)
+
+message(STATUS "Tests directory configured (conversion, graph, system, differentiation, and result refiner tests enabled)")
 

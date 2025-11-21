@@ -13,9 +13,10 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
   - **ProjectedPolyhedral**: Direction-by-direction projection method
   - **None**: Uniform subdivision (baseline)
 - **Intelligent Degeneracy Detection**: Automatically detects degenerate cases (multiple roots, infinite solutions)
+- **High-Precision Result Refinement**: Newton's method with sign checking to achieve 1e-15 precision (1D)
 - **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
 - **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
-- **Comprehensive Test Suite**: 12 test suites covering all major functionality
+- **Comprehensive Test Suite**: 13 test suites covering all major functionality
 - **Python Visualization**: Optional visualization tools for graphs and control points
 - **Configurable Geometry Dumping**: Control geometry dump generation via command-line flags (default: off for performance)
 
@@ -355,7 +356,7 @@ uv pip install numpy matplotlib
 
 ## Test Suite
 
-All 12 test suites pass:
+All 13 test suites pass:
 
 | Test | Description |
 |------|-------------|
@@ -370,6 +371,8 @@ All 12 test suites pass:
 | DegenerateBoxesTest | Degenerate case handling |
 | LinearGraphHullTest | Linear function verification |
 | ProjectedPolyhedralTest | PP method verification |
+| DifferentiationTest | Polynomial differentiation |
+| ResultRefinerTest | High-precision Newton refinement |
 
 ## Documentation
 
@@ -377,6 +380,8 @@ All 12 test suites pass:
 - **[docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md)**: Geometric algorithms
 - **[docs/GEOMETRY_ROBUSTNESS.md](docs/GEOMETRY_ROBUSTNESS.md)**: Robustness improvements
 - **[docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md)**: Degeneracy handling
+- **[docs/result_refinement_design.md](docs/result_refinement_design.md)**: High-precision result refinement
+- **[docs/extreme_precision_analysis.md](docs/extreme_precision_analysis.md)**: Extreme precision testing results
 
 ## Moving to Another Environment
 
