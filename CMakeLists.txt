@@ -25,6 +25,47 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
+#==============================================================================
+# Library: polynomial_solver (unified library for users)
+#==============================================================================
+
+# Create a unified library that users can link against
+add_library(polynomial_solver STATIC
+    src/polynomial.cpp
+    src/geometry.cpp
+    src/de_casteljau.cpp
+    src/differentiation.cpp
+    src/result_refiner.cpp
+    src/solver.cpp
+)
+
+# Set include directories for the library
+target_include_directories(polynomial_solver PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# Install library and headers
+install(TARGETS polynomial_solver
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+)
+
+install(FILES
+    include/polynomial_solver.h
+    include/polynomial.h
+    include/solver.h
+    include/result_refiner.h
+    include/differentiation.h
+    include/geometry.h
+    include/de_casteljau.h
+    DESTINATION include
+)
+
+#==============================================================================
+# Legacy individual libraries (for backward compatibility)
+#==============================================================================
+
 # Build polynomial library
 add_library(polynomial STATIC
     src/polynomial.cpp
@@ -59,35 +100,37 @@ add_library(solver STATIC
 )
 target_link_libraries(solver polynomial geometry de_casteljau)
 
+#==============================================================================
+# Executables and Tools
+#==============================================================================
+
 # Build main executable
 add_executable(polynomial_solver_app
     src/main.cpp
 )
-target_link_libraries(polynomial_solver_app solver polynomial geometry de_casteljau)
+target_link_libraries(polynomial_solver_app polynomial_solver)
 
-# Build refiner test tool
-add_executable(test_refiner_wilkinson
-    tools/test_refiner_wilkinson.cpp
-)
-target_link_libraries(test_refiner_wilkinson result_refiner solver differentiation polynomial geometry de_casteljau)
-
-# Build multiplicity detection test tool
-add_executable(test_multiplicity_detection
-    tools/test_multiplicity_detection.cpp
-)
-target_link_libraries(test_multiplicity_detection result_refiner solver differentiation polynomial geometry de_casteljau)
-
-# Build 1D refinement test tool
-add_executable(test_1d_refinement
-    tools/test_1d_refinement.cpp
-)
-target_link_libraries(test_1d_refinement result_refiner solver differentiation polynomial geometry de_casteljau)
-
-# Build refinement from dumps tool
+# Build refinement from dumps tool (main tool for users)
 add_executable(refine_from_dumps
     tools/refine_from_dumps.cpp
 )
-target_link_libraries(refine_from_dumps result_refiner solver differentiation polynomial geometry de_casteljau)
+target_link_libraries(refine_from_dumps polynomial_solver)
+
+# Legacy tools (for backward compatibility)
+add_executable(test_refiner_wilkinson
+    tools/test_refiner_wilkinson.cpp
+)
+target_link_libraries(test_refiner_wilkinson polynomial_solver)
+
+add_executable(test_multiplicity_detection
+    tools/test_multiplicity_detection.cpp
+)
+target_link_libraries(test_multiplicity_detection polynomial_solver)
+
+add_executable(test_1d_refinement
+    tools/test_1d_refinement.cpp
+)
+target_link_libraries(test_1d_refinement polynomial_solver)
 
 # Optional: Enable testing
 enable_testing()
