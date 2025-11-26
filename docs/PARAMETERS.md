@@ -110,11 +110,18 @@ Degenerate cases include:
 
 ### 4. Target Tolerance (`target_tolerance`)
 
-**Description:** Target precision for refined roots. Newton's method iterates until the box size is smaller than this value.
+**Description:** Target precision for refined roots. This controls the maximum distance between the refined root and the true root.
 
-**Type:** `double`  
-**Default:** `1e-15`  
+**Type:** `double`
+**Default:** `1e-15`
 **Range:** `1e-16` to `1e-10`
+**Command-line:** `--target-tolerance`
+
+**What it controls:**
+- Newton's method iterates until `|x_{n+1} - x_n| < target_tolerance`
+- This is the **convergence criterion** for the iterative refinement
+- Smaller values → more iterations, higher precision
+- Larger values → fewer iterations, lower precision
 
 **Usage:**
 ```cpp
@@ -129,28 +136,55 @@ config.target_tolerance = 1e-15;  // Maximum precision with double
 
 **Note:** This is limited by double precision (~16 decimal digits). For higher precision, use multiprecision arithmetic (future feature).
 
+**Trade-offs:**
+- Smaller tolerance → Higher precision, more iterations, slower
+- Larger tolerance → Lower precision, fewer iterations, faster
+
 ---
 
 ### 5. Residual Tolerance (`residual_tolerance`)
 
 **Description:** Maximum acceptable residual |f(x)| for a refined root to be considered valid.
 
-**Type:** `double`  
-**Default:** `1e-12`  
+**Type:** `double`
+**Default:** `1e-15`
 **Range:** `1e-16` to `1e-8`
+**Command-line:** `--residual-tolerance`
+
+**What it controls:**
+- A root is **accepted** only if `|f(x)| < residual_tolerance`
+- This is the **acceptance criterion** for the refined root
+- Smaller values → stricter acceptance, higher quality roots
+- Larger values → more lenient acceptance, may accept less accurate roots
+
+**⚠️ Important:** Small residual does NOT guarantee accurate root for ill-conditioned problems!
+- For well-conditioned problems: `|error| ≈ |residual|`
+- For ill-conditioned problems: `|error| ≈ κ × |residual|` where κ is the condition number
+- See [CONDITIONING_AND_PRECISION.md](CONDITIONING_AND_PRECISION.md) for details
 
 **Usage:**
 ```cpp
 RefinementConfig config;
-config.residual_tolerance = 1e-12;  // Verify root is accurate
+config.residual_tolerance = 1e-15;  // Verify root is accurate
 ```
 
 **Guidelines:**
-- **1e-14**: Very strict, may reject valid roots in ill-conditioned problems
-- **1e-12**: Default, good balance
+- **1e-15**: Strictest, maximum precision with double (recommended)
+- **1e-12**: Slightly relaxed, good balance
 - **1e-10**: Relaxed, accepts more roots
 
-**Warning:** Small residual doesn't guarantee accurate root for ill-conditioned problems! Check the condition number.
+**Trade-offs:**
+- Smaller tolerance → Stricter acceptance, higher quality roots, may reject some roots
+- Larger tolerance → More lenient acceptance, accepts more roots, may include less accurate roots
+
+**Example:**
+```bash
+# Use stricter residual tolerance
+./example_simple_cubic --residual-tolerance 1e-16
+
+# Use more lenient residual tolerance
+./example_simple_cubic --residual-tolerance 1e-12
+```
 
 ---
 
@@ -251,11 +285,16 @@ config.max_depth = 150;            // Deep depth
 config.degeneracy_multiplier = 5.0;
 
 RefinementConfig refine_config;
-refine_config.target_tolerance = 1e-15;  // Maximum precision
-refine_config.residual_tolerance = 1e-12;
+refine_config.target_tolerance = 1e-15;   // Maximum precision
+refine_config.residual_tolerance = 1e-15; // Strictest acceptance
 ```
 
 **Expected:** Slower solve, high precision roots
+
+**Command-line:**
+```bash
+./example_simple_cubic -t 1e-10 -d 150 --target-tolerance 1e-15 --residual-tolerance 1e-15
+```
 
 ---
 
@@ -281,19 +320,23 @@ All examples support command-line parameters:
 
 ```bash
 # Default parameters
-./build/bin/example_cubic_1d
+./build/bin/example_simple_cubic
 
-# Custom tolerance
-./build/bin/example_cubic_1d -t 1e-10
+# Custom solver tolerance
+./build/bin/example_simple_cubic -t 1e-10
 
-# Custom tolerance and depth
-./build/bin/example_cubic_1d -t 1e-12 -d 150
+# Custom solver tolerance and depth
+./build/bin/example_simple_cubic -t 1e-12 -d 150
+
+# Custom refinement tolerances
+./build/bin/example_simple_cubic --target-tolerance 1e-12 --residual-tolerance 1e-12
 
 # All parameters
-./build/bin/example_cubic_1d -t 1e-10 -d 150 -m 10.0 --dump-geometry
+./build/bin/example_simple_cubic -t 1e-10 -d 150 -m 10.0 \
+    --target-tolerance 1e-12 --residual-tolerance 1e-12 --dump-geometry
 
 # Show help
-./build/bin/example_cubic_1d --help
+./build/bin/example_simple_cubic --help
 ```
 
 ---
@@ -302,11 +345,13 @@ All examples support command-line parameters:
 
 | Parameter | Default | Range | Impact | Command-Line |
 |-----------|---------|-------|--------|--------------|
-| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Solver precision | `-t` |
-| `max_depth` | 100 | 10 to 1000 | Max subdivisions | `-d` |
-| `degeneracy_multiplier` | 5.0 | 2.0 to 20.0 | Degeneracy detection | `-m` |
-| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Refinement precision | N/A |
-| `residual_tolerance` | 1e-12 | 1e-16 to 1e-8 | Residual check | N/A |
-| `max_iterations` | 100 | 10 to 1000 | Newton iterations | N/A |
+| **Solver Parameters** |
+| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Solver precision | `-t`, `--tolerance` |
+| `max_depth` | 100 | 10 to 1000 | Max subdivisions | `-d`, `--max-depth` |
+| `degeneracy_multiplier` | 5.0 | 2.0 to 20.0 | Degeneracy detection | `-m`, `--degeneracy-multiplier` |
 | `dump_geometry` | false | true/false | Visualization | `--dump-geometry` |
+| **Refinement Parameters** |
+| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Convergence criterion | `--target-tolerance` |
+| `residual_tolerance` | 1e-15 | 1e-16 to 1e-8 | Acceptance criterion | `--residual-tolerance` |
+| `max_iterations` | 100 | 10 to 1000 | Newton iterations | N/A |
 
