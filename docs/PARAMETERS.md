@@ -110,7 +110,7 @@ Degenerate cases include:
 
 ### 4. Target Tolerance (`target_tolerance`)
 
-**Description:** Target precision for refined roots. This controls the maximum distance between the refined root and the true root.
+**Description:** Target precision used for computing exclusion radius around refined roots.
 
 **Type:** `double`
 **Default:** `1e-15`
@@ -118,33 +118,34 @@ Degenerate cases include:
 **Command-line:** `--target-tolerance`
 
 **What it controls:**
-- Newton's method iterates until `|x_{n+1} - x_n| < target_tolerance`
-- This is the **convergence criterion** for the iterative refinement
-- Smaller values → more iterations, higher precision
-- Larger values → fewer iterations, lower precision
+- Used to compute the **exclusion radius** around each refined root
+- For simple roots: `radius ≈ target_tolerance / |f'(x)|`
+- For multiple roots: `radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)`
+- Roots within this radius are considered duplicates and merged
+- Does NOT control Newton iteration convergence (see `residual_tolerance`)
 
 **Usage:**
 ```cpp
 RefinementConfig config;
-config.target_tolerance = 1e-15;  // Maximum precision with double
+config.target_tolerance = 1e-15;  // For exclusion radius computation
 ```
 
 **Guidelines:**
 - **1e-15**: Maximum precision with double (recommended)
-- **1e-12**: Slightly relaxed, faster convergence
-- **1e-10**: Relaxed, for quick refinement
+- **1e-12**: Slightly relaxed, larger exclusion radius
+- **1e-10**: Relaxed, may merge distinct nearby roots
 
-**Note:** This is limited by double precision (~16 decimal digits). For higher precision, use multiprecision arithmetic (future feature).
+**Note:** This parameter affects how close two roots can be before being considered duplicates. Smaller values allow detecting roots that are closer together.
 
 **Trade-offs:**
-- Smaller tolerance → Higher precision, more iterations, slower
-- Larger tolerance → Lower precision, fewer iterations, faster
+- Smaller tolerance → Smaller exclusion radius, can detect closer roots, may report duplicates
+- Larger tolerance → Larger exclusion radius, merges nearby roots, fewer duplicates
 
 ---
 
 ### 5. Residual Tolerance (`residual_tolerance`)
 
-**Description:** Maximum acceptable residual |f(x)| for a refined root to be considered valid.
+**Description:** Convergence criterion for Newton's method. Iteration stops when |f(x)| < residual_tolerance.
 
 **Type:** `double`
 **Default:** `1e-15`
@@ -152,37 +153,39 @@ config.target_tolerance = 1e-15;  // Maximum precision with double
 **Command-line:** `--residual-tolerance`
 
 **What it controls:**
+- Newton's method iterates until `|f(x)| < residual_tolerance`
+- This is the **convergence criterion** for the iterative refinement
 - A root is **accepted** only if `|f(x)| < residual_tolerance`
-- This is the **acceptance criterion** for the refined root
-- Smaller values → stricter acceptance, higher quality roots
-- Larger values → more lenient acceptance, may accept less accurate roots
+- Smaller values → more iterations, stricter convergence
+- Larger values → fewer iterations, more lenient convergence
 
 **⚠️ Important:** Small residual does NOT guarantee accurate root for ill-conditioned problems!
 - For well-conditioned problems: `|error| ≈ |residual|`
 - For ill-conditioned problems: `|error| ≈ κ × |residual|` where κ is the condition number
+- Example: Wilkinson polynomial can have `|f(x)| = 1e-15` but `|error| = 1e-3`
 - See [CONDITIONING_AND_PRECISION.md](CONDITIONING_AND_PRECISION.md) for details
 
 **Usage:**
 ```cpp
 RefinementConfig config;
-config.residual_tolerance = 1e-15;  // Verify root is accurate
+config.residual_tolerance = 1e-15;  // Converge when |f(x)| < 1e-15
 ```
 
 **Guidelines:**
 - **1e-15**: Strictest, maximum precision with double (recommended)
-- **1e-12**: Slightly relaxed, good balance
-- **1e-10**: Relaxed, accepts more roots
+- **1e-12**: Slightly relaxed, faster convergence
+- **1e-10**: Relaxed, for quick refinement
 
 **Trade-offs:**
-- Smaller tolerance → Stricter acceptance, higher quality roots, may reject some roots
-- Larger tolerance → More lenient acceptance, accepts more roots, may include less accurate roots
+- Smaller tolerance → More iterations, stricter convergence, higher quality roots
+- Larger tolerance → Fewer iterations, faster convergence, may be less accurate
 
 **Example:**
 ```bash
-# Use stricter residual tolerance
-./example_simple_cubic --residual-tolerance 1e-16
+# Use strictest residual tolerance (default)
+./example_simple_cubic --residual-tolerance 1e-15
 
-# Use more lenient residual tolerance
+# Use more lenient residual tolerance for faster convergence
 ./example_simple_cubic --residual-tolerance 1e-12
 ```
 
@@ -343,15 +346,15 @@ All examples support command-line parameters:
 
 ## Summary Table
 
-| Parameter | Default | Range | Impact | Command-Line |
-|-----------|---------|-------|--------|--------------|
+| Parameter | Default | Range | What It Controls | Command-Line |
+|-----------|---------|-------|------------------|--------------|
 | **Solver Parameters** |
-| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Solver precision | `-t`, `--tolerance` |
+| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Box size threshold | `-t`, `--tolerance` |
 | `max_depth` | 100 | 10 to 1000 | Max subdivisions | `-d`, `--max-depth` |
 | `degeneracy_multiplier` | 5.0 | 2.0 to 20.0 | Degeneracy detection | `-m`, `--degeneracy-multiplier` |
 | `dump_geometry` | false | true/false | Visualization | `--dump-geometry` |
 | **Refinement Parameters** |
-| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Convergence criterion | `--target-tolerance` |
-| `residual_tolerance` | 1e-15 | 1e-16 to 1e-8 | Acceptance criterion | `--residual-tolerance` |
+| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Exclusion radius | `--target-tolerance` |
+| `residual_tolerance` | 1e-15 | 1e-16 to 1e-8 | Convergence: \|f(x)\| < tol | `--residual-tolerance` |
 | `max_iterations` | 100 | 10 to 1000 | Newton iterations | N/A |
 

@@ -75,10 +75,18 @@ All examples support command-line parameters for experimentation:
 ```
 
 **Common Command-line Options**:
+
+Solver Options:
 - `-t, --tolerance <value>`: Box size tolerance (default: 1e-8)
 - `-d, --max-depth <value>`: Maximum subdivision depth (default: 100)
 - `-m, --degeneracy-multiplier <value>`: Degeneracy detection multiplier (default: 5.0)
 - `--dump-geometry`: Enable geometry dump for visualization
+
+Refinement Options:
+- `--target-tolerance <value>`: For exclusion radius computation (default: 1e-15)
+- `--residual-tolerance <value>`: Convergence criterion |f(x)| < tol (default: 1e-15)
+
+Other:
 - `-h, --help`: Show help message
 
 See [docs/PARAMETERS.md](docs/PARAMETERS.md) for detailed parameter documentation.
@@ -133,7 +141,7 @@ auto result = solver.subdivisionSolve(system, config, RootBoundingMethod::Projec
 // 3. Refine (high precision, 1e-15)
 ResultRefiner refiner;
 RefinementConfig refine_config;
-refine_config.target_tolerance = 1e-15;
+refine_config.residual_tolerance = 1e-15;  // Converge when |f(x)| < 1e-15
 auto refined = refiner.refine(result, system, refine_config);
 
 // 4. Check results

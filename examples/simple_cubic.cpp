@@ -62,8 +62,8 @@ void print_help() {
     std::cout << "  -m, --degeneracy-multiplier <val> Degeneracy detection multiplier (default: 5.0)\n";
     std::cout << "  --dump-geometry                   Enable geometry dump for visualization\n\n";
     std::cout << "Refinement Options:\n";
-    std::cout << "  --target-tolerance <value>        Target error for refined roots (default: 1e-15)\n";
-    std::cout << "  --residual-tolerance <value>      Maximum residual |f(x)| (default: 1e-15)\n\n";
+    std::cout << "  --target-tolerance <value>        For exclusion radius computation (default: 1e-15)\n";
+    std::cout << "  --residual-tolerance <value>      Convergence: |f(x)| < tol (default: 1e-15)\n\n";
     std::cout << "Other Options:\n";
     std::cout << "  -h, --help                        Show this help message\n\n";
     std::cout << "See docs/PARAMETERS.md for detailed parameter documentation.\n";

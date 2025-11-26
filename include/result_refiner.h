@@ -23,15 +23,15 @@ namespace polynomial_solver {
  * @brief Configuration for result refinement
  */
 struct RefinementConfig {
-    double target_tolerance;        ///< Target precision for refined roots (default: 1e-15)
-    double residual_tolerance;      ///< Max residual |f(x)| to accept as root (default: 1e-12)
+    double target_tolerance;        ///< Target precision for exclusion radius computation (default: 1e-15)
+    double residual_tolerance;      ///< Max residual |f(x)| for convergence (default: 1e-15)
     unsigned int max_newton_iters;  ///< Maximum Newton iterations (default: 50)
     unsigned int max_multiplicity;  ///< Maximum multiplicity to check (default: 10)
     double exclusion_multiplier;    ///< Multiplier for exclusion radius (default: 3.0)
 
     RefinementConfig()
         : target_tolerance(1e-15),
-          residual_tolerance(1e-12),
+          residual_tolerance(1e-15),
           max_newton_iters(50u),
           max_multiplicity(10u),
           exclusion_multiplier(3.0)
@@ -83,12 +83,13 @@ public:
      * @brief Refine solver results using Newton's method with sign checking
      *
      * This method:
-     * 1. For each resolved box, use Newton's method to refine to target_tolerance
+     * 1. For each resolved box, use Newton's method to refine until |f(x)| < residual_tolerance
      * 2. Use subdivision with sign checking to ensure convergence
-     * 3. Verify convergence by checking residual
+     * 3. Verify convergence by checking residual |f(x)| < residual_tolerance
      * 4. Estimate multiplicity from derivatives
-     * 5. Cancel nearby boxes within exclusion radius
-     * 6. Returns consolidated unique roots
+     * 5. Compute exclusion radius using target_tolerance and derivatives
+     * 6. Cancel nearby boxes within exclusion radius
+     * 7. Returns consolidated unique roots
      *
      * Currently only supports 1D systems. 2D systems may have infinite roots
      * in degenerate regions.

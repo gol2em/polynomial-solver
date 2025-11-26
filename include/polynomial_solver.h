@@ -132,14 +132,19 @@ inline SubdivisionConfig defaultSolverConfig() {
  * @brief Create default refinement configuration
  *
  * Returns a RefinementConfig with sensible defaults:
- * - target_tolerance: 1e-15 (target error for refined roots)
- *   This controls the maximum distance between the refined root and the true root.
- *   Newton's method iterates until |x_{n+1} - x_n| < target_tolerance.
  *
- * - residual_tolerance: 1e-15 (maximum acceptable residual |f(x)|)
- *   This is the maximum value of |f(x)| at the refined root.
+ * - target_tolerance: 1e-15 (for exclusion radius computation)
+ *   Used to compute the exclusion radius around each refined root.
+ *   For simple roots: radius ≈ target_tolerance / |f'(x)|
+ *   For multiple roots: radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)
+ *   Roots within this radius are considered duplicates and merged.
+ *
+ * - residual_tolerance: 1e-15 (convergence criterion)
+ *   Newton's method iterates until |f(x)| < residual_tolerance.
+ *   This is the convergence criterion for the iterative refinement.
  *   A root is accepted only if |f(x)| < residual_tolerance.
- *   Note: Small residual doesn't guarantee accurate root for ill-conditioned problems!
+ *   ⚠️ Note: Small residual doesn't guarantee accurate root for ill-conditioned problems!
+ *   For ill-conditioned problems: |error| ≈ κ × |residual| where κ is the condition number.
  *   See docs/CONDITIONING_AND_PRECISION.md for details.
  *
  * - max_newton_iters: 50 (maximum Newton iterations)
