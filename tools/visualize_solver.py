@@ -57,6 +57,7 @@ def parse_dump_file(filename):
                 eq_num = int(line.split()[2])
                 current_eq = {
                     'equation': eq_num,
+                    'control_points_3d': [],
                     'projected_points': [],
                     'convex_hull': [],
                     'intersection': [],
@@ -121,6 +122,9 @@ def parse_dump_file(filename):
                     values = [float(x.strip()) for x in box_str.split(',')]
                     current_iter['final_box'] = values
                 # Skip other comment lines
+            elif line.startswith('Control_Points_3D'):
+                state = 'control_3d'
+                count = int(line.split()[1])
             elif line.startswith('Projected_Points'):
                 state = 'projected'
                 count = int(line.split()[1])
@@ -156,7 +160,13 @@ def parse_dump_file(filename):
             else:
                 # Parse coordinate data
                 parts = line.split()
-                if len(parts) == 2 and state and current_eq:
+                if len(parts) == 3 and state == 'control_3d' and current_eq:
+                    try:
+                        x, y, z = float(parts[0]), float(parts[1]), float(parts[2])
+                        current_eq['control_points_3d'].append([x, y, z])
+                    except ValueError:
+                        pass
+                elif len(parts) == 2 and state and current_eq:
                     try:
                         x, y = float(parts[0]), float(parts[1])
                         if state == 'projected':
@@ -192,13 +202,15 @@ def create_mesh_grid(box):
 
 def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points_dir1,
                   hull_dir0, hull_dir1, intersection_dir0, intersection_dir1,
-                  interval_dir0=None, interval_dir1=None, view_box=None, z_limit=None):
+                  interval_dir0=None, interval_dir1=None, view_box=None, z_limit=None,
+                  control_points_3d=None):
     """Plot 3D graph of polynomial with control points and projections.
 
     Args:
         box: Current bounding box to draw
         view_box: Viewing scope (if None, uses box)
         z_limit: Z-axis limit (if None, computed from control points)
+        control_points_3d: 3D control points (Bernstein coefficients) in local [0,1]^2 space
 
     Note: Control points are already normalized in the dump file (z-values in [-1,1]).
           The polynomial surface is evaluated from the original polynomial (not normalized).
@@ -231,6 +243,19 @@ def plot_3d_graph(ax, poly_func, box, title, control_points_dir0, control_points
 
     # Plot zero contour (intersection with z=0)
     contour = ax.contour(X, Y, Z, levels=[0], colors='blue', linewidths=3)
+
+    # Plot 3D control points (Bernstein coefficients)
+    # These are in local [0,1]^2 space, need to transform to global [x_min, x_max] x [y_min, y_max]
+    if control_points_3d:
+        pts_3d = np.array(control_points_3d)
+        # Transform from local [0,1]^2 to global box coordinates
+        pts_global = pts_3d.copy()
+        pts_global[:, 0] = x_min + pts_3d[:, 0] * (x_max - x_min)
+        pts_global[:, 1] = y_min + pts_3d[:, 1] * (y_max - y_min)
+        # pts_global[:, 2] is the function value (z), already in correct space
+        ax.scatter(pts_global[:, 0], pts_global[:, 1], pts_global[:, 2],
+                  c='green', s=50, marker='o', edgecolors='darkgreen', linewidths=1.5,
+                  alpha=0.8, label='Control points', zorder=5)
 
     # Plot projections on background planes
     # Direction 0 projects along x-axis: (x, f(x,y)) - plot on x-z plane at y=vis_y_max (back wall)
@@ -557,7 +582,8 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                      dir0_eq0['convex_hull'], dir1_eq0['convex_hull'],
                      dir0_eq0['intersection'], dir1_eq0['intersection'],
                      dir0_eq0.get('interval'), dir1_eq0.get('interval'),
-                     view_box=view_box, z_limit=z_limit)
+                     view_box=view_box, z_limit=z_limit,
+                     control_points_3d=dir0_eq0.get('control_points_3d'))
 
         # Subplot 2: Equation 2
         ax2 = fig.add_subplot(132, projection='3d')
@@ -567,7 +593,8 @@ def visualize_iteration(iteration, prev_iteration=None, output_dir='visualizatio
                      dir0_eq1['convex_hull'], dir1_eq1['convex_hull'],
                      dir0_eq1['intersection'], dir1_eq1['intersection'],
                      dir0_eq1.get('interval'), dir1_eq1.get('interval'),
-                     view_box=view_box, z_limit=z_limit)
+                     view_box=view_box, z_limit=z_limit,
+                     control_points_3d=dir0_eq1.get('control_points_3d'))
 
         # Subplot 3: Combined 3D view
         ax3 = fig.add_subplot(133, projection='3d')

@@ -309,6 +309,20 @@ bool compute_projected_polyhedral_bounds_with_dump(
             const std::size_t num_coeffs = poly.coefficientCount();
             const std::size_t point_dim = dim + 1u;
 
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                // Dump 3D control points (for 2D problems: x, y, f(x,y))
+                dump << "Control_Points_3D " << num_coeffs << "\n";
+                for (std::size_t i = 0; i < num_coeffs; ++i) {
+                    for (std::size_t j = 0; j < point_dim; ++j) {
+                        if (j > 0) dump << " ";
+                        dump << control_points[i * point_dim + j];
+                    }
+                    dump << "\n";
+                }
+            }
+#endif
+
             // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
             std::vector<std::vector<double>> projected_2d;
             projected_2d.reserve(num_coeffs);

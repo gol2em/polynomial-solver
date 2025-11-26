@@ -32,7 +32,7 @@ LIBRARY := $(LIB_DIR)/libpolynomial_solver.a
 
 # Compiler settings
 CXX := g++
-CXXFLAGS := -std=c++11 -Wall -I$(INCLUDE_DIR)
+CXXFLAGS := -std=c++11 -Wall -I$(INCLUDE_DIR) -DENABLE_GEOMETRY_DUMP
 LDFLAGS := -L$(LIB_DIR) -lpolynomial_solver -lm
 
 # CMake options (can be overridden)
