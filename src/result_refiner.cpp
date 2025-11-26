@@ -260,6 +260,94 @@ bool ResultRefiner::isValidNewtonStep(
     return true;
 }
 
+bool ResultRefiner::refineRoot1DWithMultiplicity(
+    double initial_guess,
+    double lower,
+    double upper,
+    const Polynomial& poly,
+    unsigned int multiplicity,
+    const RefinementConfig& config,
+    double& refined_location,
+    double& residual) const
+{
+    // Get derivative
+    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+
+    double x = initial_guess;
+
+    // Modified Newton iteration: x_{n+1} = x_n - m * f(x_n) / f'(x_n)
+    for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
+        double f = poly.evaluate(x);
+        double df = dpoly.evaluate(x);
+
+        // Check for convergence
+        if (std::abs(f) < config.residual_tolerance) {
+            refined_location = x;
+            residual = f;
+            return true;
+        }
+
+        // Check for zero derivative
+        if (std::abs(df) < 1e-14) {
+            // For multiple roots, try using higher-order derivatives
+            // Compute f^(m)(x) where m is the multiplicity
+            Polynomial deriv_m = poly;
+            for (unsigned int k = 0; k < multiplicity; ++k) {
+                deriv_m = Differentiation::derivative(deriv_m, 0, 1);
+            }
+            double f_m = deriv_m.evaluate(x);
+
+            // If f^(m)(x) is non-zero, we can estimate the step size
+            if (std::abs(f_m) > 1e-14) {
+                // For a root with multiplicity m: f(x) ≈ c * (x - r)^m
+                // So: (x - r) ≈ (f(x) * m! / f^(m)(x))^(1/m)
+                double factorial_m = 1.0;
+                for (unsigned int k = 2; k <= multiplicity; ++k) {
+                    factorial_m *= k;
+                }
+
+                double ratio = f * factorial_m / f_m;
+                double step = std::copysign(std::pow(std::abs(ratio), 1.0 / multiplicity), ratio);
+
+                double x_new = x - step;
+
+                // Clamp to bounds
+                if (x_new < lower) x_new = 0.5 * (x + lower);
+                if (x_new > upper) x_new = 0.5 * (x + upper);
+
+                x = x_new;
+                continue;
+            }
+
+            // If we can't make progress, fail
+            return false;
+        }
+
+        // Modified Newton step
+        double x_new = x - multiplicity * f / df;
+
+        // Clamp to bounds
+        if (x_new < lower) {
+            x_new = 0.5 * (x + lower);
+        }
+        if (x_new > upper) {
+            x_new = 0.5 * (x + upper);
+        }
+
+        x = x_new;
+    }
+
+    // Check final residual
+    double f = poly.evaluate(x);
+    if (std::abs(f) < config.residual_tolerance) {
+        refined_location = x;
+        residual = f;
+        return true;
+    }
+
+    return false;
+}
+
 unsigned int ResultRefiner::estimateMultiplicity(
     const std::vector<double>& point,
     const PolynomialSystem& system,

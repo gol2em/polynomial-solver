@@ -106,6 +106,10 @@ struct ProblematicRegion {
     double lower;
     double upper;
     std::vector<std::size_t> box_indices;
+    unsigned int estimated_multiplicity;  // Estimated multiplicity for the region
+    double refined_root;                   // Refined root location (if successful)
+    double residual;                       // Residual at refined root
+    bool refinement_succeeded;             // Whether refinement succeeded
 };
 
 std::vector<ProblematicRegion> mergeUnresolvedBoxes(
@@ -135,6 +139,10 @@ std::vector<ProblematicRegion> mergeUnresolvedBoxes(
     current.lower = result.boxes[unresolved_indices[0]].lower[0];
     current.upper = result.boxes[unresolved_indices[0]].upper[0];
     current.box_indices.push_back(unresolved_indices[0]);
+    current.estimated_multiplicity = 0;
+    current.refined_root = 0.0;
+    current.residual = 0.0;
+    current.refinement_succeeded = false;
     
     for (std::size_t i = 1; i < unresolved_indices.size(); ++i) {
         std::size_t idx = unresolved_indices[i];
@@ -152,11 +160,64 @@ std::vector<ProblematicRegion> mergeUnresolvedBoxes(
             current.upper = box.upper[0];
             current.box_indices.clear();
             current.box_indices.push_back(idx);
+            current.estimated_multiplicity = 0;
+            current.refined_root = 0.0;
+            current.residual = 0.0;
+            current.refinement_succeeded = false;
         }
     }
     regions.push_back(current);
     
     return regions;
+}
+
+/**
+ * @brief Estimate multiplicity for a problematic region and refine using modified Newton
+ */
+void refineProblematicRegion(
+    ProblematicRegion& region,
+    const Polynomial& poly,
+    const ResultRefiner& refiner,
+    const RefinementConfig& config)
+{
+    double center = (region.lower + region.upper) / 2.0;
+
+    // Estimate multiplicity by checking derivatives at center
+    PolynomialSystem system({poly});
+    double first_nonzero_deriv = 0.0;
+    unsigned int mult = refiner.estimateMultiplicity(
+        std::vector<double>{center}, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+    region.estimated_multiplicity = mult;
+
+    // Try to refine using modified Newton method with estimated multiplicity
+    double refined_location;
+    double residual;
+
+    bool success = refiner.refineRoot1DWithMultiplicity(
+        center, region.lower, region.upper, poly, mult, config, refined_location, residual);
+
+    if (success) {
+        region.refined_root = refined_location;
+        region.residual = residual;
+        region.refinement_succeeded = true;
+    } else {
+        // If failed with estimated multiplicity, try different multiplicities
+        for (unsigned int m = 1; m <= config.max_multiplicity; ++m) {
+            if (m == mult) continue;  // Already tried this
+
+            success = refiner.refineRoot1DWithMultiplicity(
+                center, region.lower, region.upper, poly, m, config, refined_location, residual);
+
+            if (success) {
+                region.refined_root = refined_location;
+                region.residual = residual;
+                region.refinement_succeeded = true;
+                region.estimated_multiplicity = m;
+                break;
+            }
+        }
+    }
 }
 
 /**
@@ -247,6 +308,31 @@ void testExample(const std::string& name,
         auto regions = mergeUnresolvedBoxes(result, 1e-6);
         std::cout << "Merged into " << regions.size() << " problematic region(s):" << std::endl;
 
+        // Refine each problematic region
+        ResultRefiner refiner;
+        RefinementConfig region_config;
+        region_config.target_tolerance = 1e-15;
+        region_config.residual_tolerance = 1e-12;
+        region_config.max_newton_iters = 100;  // More iterations for difficult cases
+        region_config.max_multiplicity = 10;
+
+        std::size_t successful_refinements = 0;
+
+        for (std::size_t i = 0; i < regions.size(); ++i) {
+            auto& region = regions[i];
+
+            // Try to refine this region
+            refineProblematicRegion(region, poly, refiner, region_config);
+
+            if (region.refinement_succeeded) {
+                successful_refinements++;
+            }
+        }
+
+        std::cout << "\nRefined " << successful_refinements << " out of "
+                  << regions.size() << " problematic regions." << std::endl;
+
+        // Print detailed results
         for (std::size_t i = 0; i < regions.size(); ++i) {
             const auto& region = regions[i];
             std::cout << "\nProblematic Region " << i << ":" << std::endl;
@@ -255,13 +341,23 @@ void testExample(const std::string& name,
             std::cout << "  Width: " << std::scientific << std::setprecision(4)
                       << (region.upper - region.lower) << std::endl;
             std::cout << "  Number of boxes: " << region.box_indices.size() << std::endl;
-            std::cout << "  Center: " << std::fixed << std::setprecision(16)
-                      << (region.lower + region.upper) / 2.0 << std::endl;
 
-            // Evaluate polynomial at center
-            double center = (region.lower + region.upper) / 2.0;
-            double val = poly.evaluate({center});
-            std::cout << "  f(center): " << std::scientific << std::setprecision(4) << val << std::endl;
+            if (region.refinement_succeeded) {
+                std::cout << "  ✅ Refinement: SUCCESS" << std::endl;
+                std::cout << "  Root location: x = " << std::fixed << std::setprecision(16)
+                          << region.refined_root << std::endl;
+                std::cout << "  Residual: |f(x)| = " << std::scientific << std::setprecision(4)
+                          << std::abs(region.residual) << std::endl;
+                std::cout << "  Estimated multiplicity: " << region.estimated_multiplicity << std::endl;
+            } else {
+                std::cout << "  ❌ Refinement: FAILED" << std::endl;
+                std::cout << "  Center: " << std::fixed << std::setprecision(16)
+                          << (region.lower + region.upper) / 2.0 << std::endl;
+                double center = (region.lower + region.upper) / 2.0;
+                double val = poly.evaluate({center});
+                std::cout << "  f(center): " << std::scientific << std::setprecision(4) << val << std::endl;
+                std::cout << "  Estimated multiplicity: " << region.estimated_multiplicity << std::endl;
+            }
         }
     }
 }

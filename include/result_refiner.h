@@ -129,6 +129,35 @@ public:
         double derivative_threshold,
         double& first_nonzero_deriv) const;
 
+    /**
+     * @brief Refine a 1D root with known multiplicity using modified Newton method
+     *
+     * For a root with multiplicity m, uses the modified Newton iteration:
+     *   x_{n+1} = x_n - m * f(x_n) / f'(x_n)
+     *
+     * This converges quadratically even for multiple roots, unlike standard Newton
+     * which only converges linearly for multiple roots.
+     *
+     * @param initial_guess Initial guess for root location
+     * @param lower Lower bound of search interval
+     * @param upper Upper bound of search interval
+     * @param poly Polynomial to refine (1D)
+     * @param multiplicity Known or estimated multiplicity
+     * @param config Refinement configuration
+     * @param refined_location Output: refined root location
+     * @param residual Output: residual at refined location
+     * @return True if refinement succeeded
+     */
+    bool refineRoot1DWithMultiplicity(
+        double initial_guess,
+        double lower,
+        double upper,
+        const Polynomial& poly,
+        unsigned int multiplicity,
+        const RefinementConfig& config,
+        double& refined_location,
+        double& residual) const;
+
 private:
     /**
      * @brief Refine a 1D root using Newton's method with sign checking
