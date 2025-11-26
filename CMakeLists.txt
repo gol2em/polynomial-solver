@@ -83,6 +83,12 @@ add_executable(test_1d_refinement
 )
 target_link_libraries(test_1d_refinement result_refiner solver differentiation polynomial geometry de_casteljau)
 
+# Build refinement from dumps tool
+add_executable(refine_from_dumps
+    tools/refine_from_dumps.cpp
+)
+target_link_libraries(refine_from_dumps result_refiner solver differentiation polynomial geometry de_casteljau)
+
 # Optional: Enable testing
 enable_testing()
 add_subdirectory(tests)
