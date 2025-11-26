@@ -157,7 +157,6 @@ polynomial-solver/
 │   ├── visualize_solver.py              # Core visualization engine
 │   ├── solver_viz_api.py                # Python API for visualization
 │   └── README.md                        # API documentation
-├── python/               # Python visualization tools (legacy)
 ├── docs/                 # Documentation
 ├── build.sh              # Automated build script
 ├── check_prerequisites.sh # Prerequisite checker
