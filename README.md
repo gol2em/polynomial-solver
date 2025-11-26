@@ -152,6 +152,91 @@ for (const auto& root : refined.roots) {
 }
 ```
 
+## Development Workflow
+
+### Quick Testing with Makefiles
+
+Each directory (`playground/`, `examples/`, `tests/`) has a convenient Makefile for quick compilation and testing without installation:
+
+#### Playground (Rapid Prototyping)
+
+The `playground/` directory is perfect for quick experiments:
+
+```bash
+cd playground
+
+# Create test.cpp with your code
+# Then compile and run:
+make test
+./test
+
+# Or compile all .cpp files:
+make all
+
+# Clean up:
+make clean
+```
+
+**Available commands**:
+- `make <name>` - Compile `<name>.cpp` to executable
+- `make all` - Compile all `.cpp` files
+- `make clean` - Remove executables
+- `make clean-all` - Clean executables AND library build
+- `make rebuild` - Rebuild library and recompile all
+- `make lib` - Build library only
+- `make cmake CMAKE_OPTS="..."` - Reconfigure CMake with options
+
+#### Examples (Build and Run)
+
+```bash
+cd examples
+
+# Build and run a specific example:
+make simple_cubic
+make multiplicity_1d
+make wilkinson_1d
+make circle_ellipse
+
+# Build all examples:
+make all
+
+# Run all examples:
+make run-all
+```
+
+#### Tests (Build and Run)
+
+```bash
+cd tests
+
+# List all available tests:
+make list
+
+# Build and run a specific test:
+make test_polynomial_conversion
+make test_result_refiner
+
+# Build all tests:
+make all
+
+# Run all tests:
+make run-all
+```
+
+### Advanced: Reconfigure CMake
+
+You can reconfigure CMake with custom options from any directory:
+
+```bash
+# Disable geometry dump for release builds
+make cmake CMAKE_OPTS="-DENABLE_GEOMETRY_DUMP=OFF"
+make rebuild
+
+# Enable tests
+make cmake CMAKE_OPTS="-DBUILD_TESTS=ON"
+make rebuild
+```
+
 ## Project Structure
 
 ```
@@ -173,13 +258,18 @@ polynomial-solver/
 │   └── de_casteljau.cpp
 ├── build/lib/                    # Build output
 │   └── libpolynomial_solver.a    # Unified library (link this!)
-├── tests/                        # Test suite (13 tests)
-├── examples/                     # Example programs
+├── playground/                   # Quick testing (Makefile-based)
+│   ├── Makefile                  # Compile any .cpp file easily
+│   └── README.md                 # Playground documentation
+├── examples/                     # Example programs (Makefile-based)
+│   ├── Makefile                  # Build and run examples
 │   ├── simple_cubic.cpp          # 2-line workflow demo
-│   ├── cubic_1d_roots.cpp        # Detailed 1D example
 │   ├── multiplicity_1d_roots.cpp # Multiple roots
 │   ├── wilkinson_1d_roots.cpp    # Ill-conditioned
 │   └── circle_ellipse_intersection.cpp  # 2D system
+├── tests/                        # Test suite (Makefile-based)
+│   ├── Makefile                  # Build and run tests
+│   └── test_*.cpp                # 18 test files
 ├── tools/                        # Tools and utilities
 │   └── refine_from_dumps.cpp     # Root refinement tool
 ├── docs/                         # Documentation
