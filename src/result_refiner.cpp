@@ -68,6 +68,18 @@ RefinementResult ResultRefiner::refine(
         double exclusion_radius = computeExclusionRadiusFromDerivative(
             mult, first_nonzero_deriv, config.target_tolerance, config.exclusion_multiplier);
 
+        // Estimate condition number
+        double condition_estimate = estimateConditionNumber1D(
+            refined_location, poly, first_nonzero_deriv);
+
+        // Estimate actual error from condition number and residual
+        // |error| ≈ κ * |residual| / |f'(x)|
+        double estimated_error = condition_estimate * std::abs(residual) / std::max(std::abs(first_nonzero_deriv), 1e-14);
+
+        // Flag if higher precision is needed
+        // Threshold: if estimated error > 1e-10, double precision may be insufficient
+        bool needs_higher_precision = (estimated_error > 1e-10);
+
         // Create refined root
         RefinedRoot refined;
         refined.location = point;
@@ -79,6 +91,8 @@ RefinementResult ResultRefiner::refine(
         refined.source_boxes.push_back(i);
         refined.verified = true;
         refined.depth = box.depth;
+        refined.condition_estimate = condition_estimate;
+        refined.needs_higher_precision = needs_higher_precision;
 
         verified_indices.push_back(i);
         candidate_roots.push_back(refined);
@@ -346,6 +360,54 @@ bool ResultRefiner::refineRoot1DWithMultiplicity(
     }
 
     return false;
+}
+
+double ResultRefiner::estimateConditionNumber1D(
+    double location,
+    const Polynomial& poly,
+    double derivative_value) const
+{
+    // For a root-finding problem, the condition number relates the error in
+    // the root to the residual. A practical estimate uses the ratio of
+    // second derivative to first derivative squared.
+    //
+    // Theory: For f(x) near a root r, we have:
+    //   f(x) ≈ f'(r)*(x-r) + f''(r)*(x-r)^2/2
+    //
+    // If we have residual ε = f(x), then:
+    //   |x-r| ≈ |ε/f'(r)| * (1 + |f''(r)|*|x-r|/(2|f'(r)|))
+    //
+    // The condition number is approximately:
+    //   κ ≈ 1 + |f''(r)|/(2|f'(r)|) * typical_error
+    //
+    // For a more robust estimate, we use:
+    //   κ ≈ max(1, |f''(x)| / |f'(x)|^2)
+
+    if (std::abs(derivative_value) < 1e-14) {
+        // Derivative too small, condition number is very large
+        return 1e16;
+    }
+
+    // Compute second derivative
+    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+    Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+    double f_prime = derivative_value;
+    double f_double_prime = ddpoly.evaluate(location);
+
+    // Condition number estimate: |f''| / |f'|^2
+    // This gives the sensitivity of the root to perturbations
+    double kappa = std::abs(f_double_prime) / (std::abs(f_prime) * std::abs(f_prime));
+
+    // For very ill-conditioned problems, also check higher derivatives
+    // If f'''(x) is large relative to f'(x), the problem is even worse
+    Polynomial dddpoly = Differentiation::derivative(ddpoly, 0, 1);
+    double f_triple_prime = dddpoly.evaluate(location);
+    double kappa_higher = std::abs(f_triple_prime) / (std::abs(f_prime) * std::abs(f_prime) * std::abs(f_prime));
+
+    // Take the maximum as a conservative estimate
+    kappa = std::max(kappa, kappa_higher);
+
+    return std::max(1.0, kappa);
 }
 
 unsigned int ResultRefiner::estimateMultiplicity(

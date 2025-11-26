@@ -51,6 +51,8 @@ struct RefinedRoot {
     std::vector<std::size_t> source_boxes;  ///< Indices of original boxes merged into this root
     bool verified;                     ///< True if passed high-precision verification
     unsigned int depth;                ///< Subdivision depth of primary source box
+    double condition_estimate;         ///< Estimated condition number (error/residual ratio)
+    bool needs_higher_precision;       ///< True if condition number suggests double precision is insufficient
 };
 
 /**
@@ -157,6 +159,33 @@ public:
         const RefinementConfig& config,
         double& refined_location,
         double& residual) const;
+
+    /**
+     * @brief Estimate condition number for a 1D root
+     *
+     * The condition number κ relates the error in the root to the residual:
+     *   |x - x_true| ≈ κ * |f(x)| / |f'(x_true)|
+     *
+     * For well-conditioned problems: κ ≈ 1
+     * For ill-conditioned problems: κ >> 1
+     *
+     * We estimate κ by computing:
+     *   κ ≈ ||f|| / (|f'(x)| * spacing)
+     * where ||f|| is a norm of the polynomial coefficients and spacing is
+     * the typical distance between roots.
+     *
+     * A simpler practical estimate uses the ratio of higher derivatives:
+     *   κ ≈ |f''(x)| / |f'(x)|^2 * typical_scale
+     *
+     * @param location Root location
+     * @param poly Polynomial (1D)
+     * @param derivative_value Value of f'(x) at the root
+     * @return Estimated condition number
+     */
+    double estimateConditionNumber1D(
+        double location,
+        const Polynomial& poly,
+        double derivative_value) const;
 
 private:
     /**

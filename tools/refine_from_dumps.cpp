@@ -292,6 +292,14 @@ void testExample(const std::string& name,
                   << root.exclusion_radius << std::endl;
         std::cout << "  Source boxes: " << root.source_boxes.size() << std::endl;
         std::cout << "  Max error: " << std::scientific << root.max_error[0] << std::endl;
+        std::cout << "  Condition estimate: " << std::scientific << std::setprecision(4)
+                  << root.condition_estimate << std::endl;
+
+        // Estimate actual error from condition number
+        double estimated_error = root.condition_estimate * std::abs(root.residual[0]) /
+                                 std::max(std::abs(root.first_nonzero_derivative), 1e-14);
+        std::cout << "  Estimated error: " << std::scientific << std::setprecision(4)
+                  << estimated_error << std::endl;
 
         // Check if refinement succeeded
         if (std::abs(root.residual[0]) > 1e-12) {
@@ -299,6 +307,11 @@ void testExample(const std::string& name,
         }
         if (root.max_error[0] > 1e-14) {
             std::cout << "  ⚠️  WARNING: Error exceeds target precision!" << std::endl;
+        }
+        if (root.needs_higher_precision) {
+            std::cout << "  ⚠️  WARNING: Condition number suggests higher precision needed!" << std::endl;
+            std::cout << "      Small residual does NOT guarantee accurate root for this problem." << std::endl;
+            std::cout << "      Consider using quad precision or arbitrary precision arithmetic." << std::endl;
         }
     }
 
