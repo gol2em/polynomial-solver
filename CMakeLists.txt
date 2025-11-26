@@ -71,6 +71,12 @@ add_executable(test_refiner_wilkinson
 )
 target_link_libraries(test_refiner_wilkinson result_refiner solver differentiation polynomial geometry de_casteljau)
 
+# Build multiplicity detection test tool
+add_executable(test_multiplicity_detection
+    tools/test_multiplicity_detection.cpp
+)
+target_link_libraries(test_multiplicity_detection result_refiner solver differentiation polynomial geometry de_casteljau)
+
 # Optional: Enable testing
 enable_testing()
 add_subdirectory(tests)

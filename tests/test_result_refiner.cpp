@@ -147,21 +147,112 @@ int test_multiplicity_refinement() {
     return 0;
 }
 
+// Test 3: Multiplicity detection
+int test_multiplicity_detection() {
+    std::cout << "\nTest 3: Multiplicity detection from derivatives" << std::endl;
+
+    ResultRefiner refiner;
+
+    // Test case 1: Simple root at x=0.5
+    // p(x) = (x - 0.5) = x - 0.5
+    {
+        std::vector<unsigned int> degrees{1u};
+        std::vector<double> power_coeffs{-0.5, 1.0};
+        Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        PolynomialSystem system({p});
+
+        std::vector<double> point{0.5};
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+
+        std::cout << "  Simple root (x-0.5): multiplicity = " << mult;
+        if (mult == 1) {
+            std::cout << " ✓" << std::endl;
+        } else {
+            std::cout << " ✗ (expected 1)" << std::endl;
+            return 1;
+        }
+    }
+
+    // Test case 2: Double root at x=0.5
+    // p(x) = (x - 0.5)^2 = x^2 - x + 0.25
+    {
+        std::vector<unsigned int> degrees{2u};
+        std::vector<double> power_coeffs{0.25, -1.0, 1.0};
+        Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        PolynomialSystem system({p});
+
+        std::vector<double> point{0.5};
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+
+        std::cout << "  Double root (x-0.5)^2: multiplicity = " << mult;
+        if (mult == 2) {
+            std::cout << " ✓" << std::endl;
+        } else {
+            std::cout << " ✗ (expected 2)" << std::endl;
+            return 1;
+        }
+    }
+
+    // Test case 3: Triple root at x=0.5
+    // p(x) = (x - 0.5)^3 = x^3 - 1.5x^2 + 0.75x - 0.125
+    {
+        std::vector<unsigned int> degrees{3u};
+        std::vector<double> power_coeffs{-0.125, 0.75, -1.5, 1.0};
+        Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        PolynomialSystem system({p});
+
+        std::vector<double> point{0.5};
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+
+        std::cout << "  Triple root (x-0.5)^3: multiplicity = " << mult;
+        if (mult == 3) {
+            std::cout << " ✓" << std::endl;
+        } else {
+            std::cout << " ✗ (expected 3)" << std::endl;
+            return 1;
+        }
+    }
+
+    // Test case 4: Quadruple root at x=0.3
+    // p(x) = (x - 0.3)^4
+    {
+        std::vector<unsigned int> degrees{4u};
+        std::vector<double> power_coeffs{0.0081, -0.108, 0.54, -1.2, 1.0};
+        Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        PolynomialSystem system({p});
+
+        std::vector<double> point{0.3};
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+
+        std::cout << "  Quadruple root (x-0.3)^4: multiplicity = " << mult;
+        if (mult == 4) {
+            std::cout << " ✓" << std::endl;
+        } else {
+            std::cout << " ✗ (expected 4)" << std::endl;
+            return 1;
+        }
+    }
+
+    std::cout << "  PASS" << std::endl;
+    return 0;
+}
+
 int main() {
     std::cout << "Result Refiner Tests" << std::endl;
     std::cout << "====================" << std::endl;
-    
+
     int failures = 0;
     failures += test_cubic_refinement();
     failures += test_multiplicity_refinement();
-    
+    failures += test_multiplicity_detection();
+
     std::cout << "\n====================" << std::endl;
     if (failures == 0) {
         std::cout << "All tests passed!" << std::endl;
     } else {
         std::cout << failures << " test(s) failed!" << std::endl;
     }
-    
+
     return failures;
 }
 

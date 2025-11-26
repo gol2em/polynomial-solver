@@ -58,10 +58,10 @@ RefinementResult ResultRefiner::refine(
             continue;
         }
 
-        // Estimate multiplicity at refined location
+        // Verify root and determine multiplicity at refined location
         std::vector<double> point{refined_location};
         unsigned int mult = estimateMultiplicity(
-            point, original_system, config.max_multiplicity);
+            point, original_system, config.max_multiplicity, 1e-10);
 
         // Create refined root
         RefinedRoot refined;
@@ -259,18 +259,40 @@ bool ResultRefiner::isValidNewtonStep(
 unsigned int ResultRefiner::estimateMultiplicity(
     const std::vector<double>& point,
     const PolynomialSystem& system,
-    unsigned int max_order) const
+    unsigned int max_order,
+    double derivative_threshold) const
 {
     const std::size_t dim = system.dimension();
-    const double derivative_threshold = 1e-10;
 
-    // Check derivatives up to max_order
+    // For 1D case, check derivatives directly
+    if (dim == 1) {
+        // Check each equation (though typically only one for 1D)
+        for (const Polynomial& eq : system.equations()) {
+            // Check derivatives from order 1 to max_order
+            for (unsigned int order = 1; order <= max_order; ++order) {
+                Polynomial deriv = Differentiation::derivative(eq, 0, order);
+                double deriv_val = deriv.evaluate(point);
+
+                if (std::abs(deriv_val) > derivative_threshold) {
+                    // Found first non-zero derivative at order 'order'
+                    // This means multiplicity = order
+                    return order;
+                }
+            }
+        }
+
+        // All derivatives zero up to max_order
+        // Multiplicity is at least max_order + 1
+        return max_order + 1;
+    }
+
+    // For multi-dimensional case, check gradient and higher-order derivatives
     for (unsigned int order = 1; order <= max_order; ++order) {
         bool has_nonzero = false;
 
         // Check all equations
         for (const Polynomial& eq : system.equations()) {
-            // For first order, check gradient
+            // For first order, check gradient (all partial derivatives)
             if (order == 1) {
                 std::vector<Polynomial> grad = Differentiation::gradient(eq);
                 for (std::size_t axis = 0; axis < dim; ++axis) {
@@ -281,8 +303,9 @@ unsigned int ResultRefiner::estimateMultiplicity(
                     }
                 }
             } else {
-                // For higher orders, check all partial derivatives
-                // For simplicity, check diagonal second derivatives
+                // For higher orders, check partial derivatives along each axis
+                // Note: For true multiplicity, we should check all mixed partials,
+                // but for simplicity we check diagonal derivatives
                 for (std::size_t axis = 0; axis < dim; ++axis) {
                     Polynomial deriv = Differentiation::derivative(eq, axis, order);
                     double deriv_val = deriv.evaluate(point);
@@ -297,12 +320,14 @@ unsigned int ResultRefiner::estimateMultiplicity(
         }
 
         if (has_nonzero) {
-            return order;  // First non-zero derivative order
+            // First non-zero derivative at order 'order'
+            return order;
         }
     }
 
     // All derivatives zero up to max_order
-    return max_order;
+    // Multiplicity is at least max_order + 1
+    return max_order + 1;
 }
 
 double ResultRefiner::computeExclusionRadius(

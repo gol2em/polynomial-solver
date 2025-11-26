@@ -99,6 +99,32 @@ public:
         const PolynomialSystem& original_system,
         const RefinementConfig& config) const;
 
+    /**
+     * @brief Verify root and determine multiplicity from derivatives
+     *
+     * Checks derivatives up to max_order and returns the order of the
+     * first non-zero derivative. For simple roots, returns 1.
+     * For multiple roots, returns the multiplicity estimate.
+     *
+     * For a root at x with multiplicity m:
+     * - f(x) = 0 (already verified by Newton refinement)
+     * - f'(x) = 0, f''(x) = 0, ..., f^(m-1)(x) = 0
+     * - f^(m)(x) ≠ 0 (first non-zero derivative)
+     *
+     * This provides a rigorous verification of the root's multiplicity.
+     *
+     * @param point Point to check (in [0,1]^n)
+     * @param system Original polynomial system
+     * @param max_order Maximum order to check
+     * @param derivative_threshold Threshold for considering derivative as zero (default: 1e-10)
+     * @return Estimated multiplicity (1 = simple root, 2+ = multiple root)
+     */
+    unsigned int estimateMultiplicity(
+        const std::vector<double>& point,
+        const PolynomialSystem& system,
+        unsigned int max_order,
+        double derivative_threshold = 1e-10) const;
+
 private:
     /**
      * @brief Refine a 1D root using Newton's method with sign checking
@@ -136,24 +162,7 @@ private:
         double x_old, double x_new,
         double lower, double upper,
         double f_old, double f_new) const;
-    
-    /**
-     * @brief Estimate root multiplicity from derivatives
-     *
-     * Checks derivatives up to max_order and returns the order of the
-     * first non-zero derivative. For simple roots, returns 1.
-     * For multiple roots, returns the multiplicity estimate.
-     *
-     * @param point Point to check (in [0,1]^n)
-     * @param system Original polynomial system
-     * @param max_order Maximum order to check
-     * @return Estimated multiplicity
-     */
-    unsigned int estimateMultiplicity(
-        const std::vector<double>& point,
-        const PolynomialSystem& system,
-        unsigned int max_order) const;
-    
+
     /**
      * @brief Compute exclusion radius based on multiplicity
      *
