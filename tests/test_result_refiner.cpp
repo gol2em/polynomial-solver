@@ -162,7 +162,8 @@ int test_multiplicity_detection() {
         PolynomialSystem system({p});
 
         std::vector<double> point{0.5};
-        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+        double first_deriv = 0.0;
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10, first_deriv);
 
         std::cout << "  Simple root (x-0.5): multiplicity = " << mult;
         if (mult == 1) {
@@ -182,7 +183,8 @@ int test_multiplicity_detection() {
         PolynomialSystem system({p});
 
         std::vector<double> point{0.5};
-        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+        double first_deriv = 0.0;
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10, first_deriv);
 
         std::cout << "  Double root (x-0.5)^2: multiplicity = " << mult;
         if (mult == 2) {
@@ -202,7 +204,8 @@ int test_multiplicity_detection() {
         PolynomialSystem system({p});
 
         std::vector<double> point{0.5};
-        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+        double first_deriv = 0.0;
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10, first_deriv);
 
         std::cout << "  Triple root (x-0.5)^3: multiplicity = " << mult;
         if (mult == 3) {
@@ -222,7 +225,8 @@ int test_multiplicity_detection() {
         PolynomialSystem system({p});
 
         std::vector<double> point{0.3};
-        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
+        double first_deriv = 0.0;
+        unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10, first_deriv);
 
         std::cout << "  Quadruple root (x-0.3)^4: multiplicity = " << mult;
         if (mult == 4) {

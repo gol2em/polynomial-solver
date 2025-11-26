@@ -22,9 +22,10 @@ void test_multiplicity(const std::string& name,
     
     ResultRefiner refiner;
     std::vector<double> point{root_location};
-    unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10);
-    
-    std::cout << "  " << std::setw(30) << std::left << name 
+    double first_deriv = 0.0;
+    unsigned int mult = refiner.estimateMultiplicity(point, system, 10, 1e-10, first_deriv);
+
+    std::cout << "  " << std::setw(30) << std::left << name
               << ": mult=" << mult 
               << " (expected " << expected_mult << ")";
     

@@ -60,8 +60,13 @@ RefinementResult ResultRefiner::refine(
 
         // Verify root and determine multiplicity at refined location
         std::vector<double> point{refined_location};
+        double first_nonzero_deriv = 0.0;
         unsigned int mult = estimateMultiplicity(
-            point, original_system, config.max_multiplicity, 1e-10);
+            point, original_system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+        // Compute exclusion radius based on multiplicity and derivative
+        double exclusion_radius = computeExclusionRadiusFromDerivative(
+            mult, first_nonzero_deriv, config.target_tolerance, config.exclusion_multiplier);
 
         // Create refined root
         RefinedRoot refined;
@@ -69,6 +74,8 @@ RefinementResult ResultRefiner::refine(
         refined.residual = std::vector<double>{residual};
         refined.max_error = std::vector<double>{config.target_tolerance};
         refined.multiplicity = mult;
+        refined.first_nonzero_derivative = first_nonzero_deriv;
+        refined.exclusion_radius = exclusion_radius;
         refined.source_boxes.push_back(i);
         refined.verified = true;
         refined.depth = box.depth;
@@ -80,20 +87,17 @@ RefinementResult ResultRefiner::refine(
     // Step 2: Merge nearby roots and cancel duplicates
     std::set<std::size_t> cancelled;
     std::vector<bool> merged(candidate_roots.size(), false);
-    
+
     for (std::size_t i = 0; i < candidate_roots.size(); ++i) {
         if (merged[i]) continue;
-        
+
         RefinedRoot& root = candidate_roots[i];
-        double radius = computeExclusionRadius(
-            root.multiplicity,
-            config.target_tolerance,
-            config.exclusion_multiplier);
-        
+        double radius = root.exclusion_radius;  // Use pre-computed exclusion radius
+
         // Check for nearby candidate roots to merge
         for (std::size_t j = i + 1; j < candidate_roots.size(); ++j) {
             if (merged[j]) continue;
-            
+
             double dist = computeDistance(root.location, candidate_roots[j].location);
             if (dist < radius) {
                 // Merge j into i
@@ -260,9 +264,11 @@ unsigned int ResultRefiner::estimateMultiplicity(
     const std::vector<double>& point,
     const PolynomialSystem& system,
     unsigned int max_order,
-    double derivative_threshold) const
+    double derivative_threshold,
+    double& first_nonzero_deriv) const
 {
     const std::size_t dim = system.dimension();
+    first_nonzero_deriv = 0.0;
 
     // For 1D case, check derivatives directly
     if (dim == 1) {
@@ -276,6 +282,7 @@ unsigned int ResultRefiner::estimateMultiplicity(
                 if (std::abs(deriv_val) > derivative_threshold) {
                     // Found first non-zero derivative at order 'order'
                     // This means multiplicity = order
+                    first_nonzero_deriv = deriv_val;
                     return order;
                 }
             }
@@ -283,12 +290,14 @@ unsigned int ResultRefiner::estimateMultiplicity(
 
         // All derivatives zero up to max_order
         // Multiplicity is at least max_order + 1
+        first_nonzero_deriv = 0.0;
         return max_order + 1;
     }
 
     // For multi-dimensional case, check gradient and higher-order derivatives
     for (unsigned int order = 1; order <= max_order; ++order) {
         bool has_nonzero = false;
+        double max_deriv = 0.0;
 
         // Check all equations
         for (const Polynomial& eq : system.equations()) {
@@ -299,7 +308,9 @@ unsigned int ResultRefiner::estimateMultiplicity(
                     double deriv_val = grad[axis].evaluate(point);
                     if (std::abs(deriv_val) > derivative_threshold) {
                         has_nonzero = true;
-                        break;
+                        if (std::abs(deriv_val) > std::abs(max_deriv)) {
+                            max_deriv = deriv_val;
+                        }
                     }
                 }
             } else {
@@ -311,23 +322,70 @@ unsigned int ResultRefiner::estimateMultiplicity(
                     double deriv_val = deriv.evaluate(point);
                     if (std::abs(deriv_val) > derivative_threshold) {
                         has_nonzero = true;
-                        break;
+                        if (std::abs(deriv_val) > std::abs(max_deriv)) {
+                            max_deriv = deriv_val;
+                        }
                     }
                 }
             }
-
-            if (has_nonzero) break;
         }
 
         if (has_nonzero) {
             // First non-zero derivative at order 'order'
+            first_nonzero_deriv = max_deriv;
             return order;
         }
     }
 
     // All derivatives zero up to max_order
     // Multiplicity is at least max_order + 1
+    first_nonzero_deriv = 0.0;
     return max_order + 1;
+}
+
+double ResultRefiner::computeExclusionRadiusFromDerivative(
+    unsigned int multiplicity,
+    double first_nonzero_deriv,
+    double tolerance,
+    double multiplier) const
+{
+    // Avoid division by zero
+    double abs_deriv = std::abs(first_nonzero_deriv);
+    if (abs_deriv < 1e-100) {
+        // Derivative is essentially zero, use large exclusion radius
+        return multiplier * 1e-3;  // 0.1% of domain
+    }
+
+    if (multiplicity == 1) {
+        // Simple root: r ≈ tolerance / |f'(x)|
+        // The root is approximately at distance r where |f(x+r)| ≈ |f'(x)| * r = tolerance
+        double radius = multiplier * tolerance / abs_deriv;
+
+        // Clamp to reasonable range
+        radius = std::max(radius, multiplier * tolerance);  // At least tolerance-based
+        radius = std::min(radius, 0.1);  // At most 10% of domain
+
+        return radius;
+    } else {
+        // Multiple root: r ≈ (tolerance / |f^(m)(x)|)^(1/m)
+        // For a root of multiplicity m: f(x+r) ≈ f^(m)(x) * r^m / m!
+        // Setting |f(x+r)| = tolerance: r ≈ (tolerance * m! / |f^(m)(x)|)^(1/m)
+
+        // Compute factorial (for small m)
+        double factorial = 1.0;
+        for (unsigned int i = 2; i <= multiplicity && i <= 10; ++i) {
+            factorial *= static_cast<double>(i);
+        }
+
+        double exponent = 1.0 / static_cast<double>(multiplicity);
+        double radius = multiplier * std::pow(tolerance * factorial / abs_deriv, exponent);
+
+        // Clamp to reasonable range
+        radius = std::max(radius, multiplier * std::pow(tolerance, exponent));
+        radius = std::min(radius, 0.1);
+
+        return radius;
+    }
 }
 
 double ResultRefiner::computeExclusionRadius(

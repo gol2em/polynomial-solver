@@ -46,6 +46,8 @@ struct RefinedRoot {
     std::vector<double> residual;      ///< f(root) for each equation
     std::vector<double> max_error;     ///< Error bounds per dimension
     unsigned int multiplicity;         ///< Estimated multiplicity (1 = simple root)
+    double first_nonzero_derivative;   ///< Value of first non-zero derivative
+    double exclusion_radius;           ///< Computed exclusion radius based on multiplicity and derivative
     std::vector<std::size_t> source_boxes;  ///< Indices of original boxes merged into this root
     bool verified;                     ///< True if passed high-precision verification
     unsigned int depth;                ///< Subdivision depth of primary source box
@@ -117,13 +119,15 @@ public:
      * @param system Original polynomial system
      * @param max_order Maximum order to check
      * @param derivative_threshold Threshold for considering derivative as zero (default: 1e-10)
+     * @param first_nonzero_deriv Output: value of first non-zero derivative
      * @return Estimated multiplicity (1 = simple root, 2+ = multiple root)
      */
     unsigned int estimateMultiplicity(
         const std::vector<double>& point,
         const PolynomialSystem& system,
         unsigned int max_order,
-        double derivative_threshold = 1e-10) const;
+        double derivative_threshold,
+        double& first_nonzero_deriv) const;
 
 private:
     /**
@@ -164,7 +168,28 @@ private:
         double f_old, double f_new) const;
 
     /**
-     * @brief Compute exclusion radius based on multiplicity
+     * @brief Compute exclusion radius based on multiplicity and derivative value
+     *
+     * For a root with multiplicity m and first non-zero derivative D:
+     * The exclusion radius is estimated as: r ≈ (tolerance * m! / |D|)^(1/m)
+     *
+     * For simple roots (m=1): r = multiplier * tolerance / |D|
+     * For multiple roots: r = multiplier * (tolerance / |D|)^(1/m)
+     *
+     * @param multiplicity Root multiplicity
+     * @param first_nonzero_deriv Value of first non-zero derivative
+     * @param tolerance Verification tolerance
+     * @param multiplier Scaling factor
+     * @return Exclusion radius
+     */
+    double computeExclusionRadiusFromDerivative(
+        unsigned int multiplicity,
+        double first_nonzero_deriv,
+        double tolerance,
+        double multiplier) const;
+
+    /**
+     * @brief Compute exclusion radius based on multiplicity (legacy)
      *
      * For simple roots: radius = multiplier * tolerance
      * For multiple roots: radius = multiplier * tolerance^(1/m)

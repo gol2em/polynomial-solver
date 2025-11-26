@@ -77,6 +77,12 @@ add_executable(test_multiplicity_detection
 )
 target_link_libraries(test_multiplicity_detection result_refiner solver differentiation polynomial geometry de_casteljau)
 
+# Build 1D refinement test tool
+add_executable(test_1d_refinement
+    tools/test_1d_refinement.cpp
+)
+target_link_libraries(test_1d_refinement result_refiner solver differentiation polynomial geometry de_casteljau)
+
 # Optional: Enable testing
 enable_testing()
 add_subdirectory(tests)
