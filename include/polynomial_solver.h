@@ -6,31 +6,56 @@
  * functionality of the Polynomial Solver library.
  * 
  * @section usage Basic Usage
- * 
+ *
+ * @subsection usage_simple Simple Usage (with defaults)
+ *
  * @code{.cpp}
  * #include <polynomial_solver.h>
- * 
+ * using namespace polynomial_solver;
+ *
  * int main() {
  *     // 1. Define polynomial system
- *     std::vector<Polynomial> system = { ... };
- *     
- *     // 2. Solve (fast, double precision)
- *     SubdivisionSolver solver;
- *     auto result = solver.solve(system);
- *     
- *     // 3. Refine (high precision, 1e-15)
+ *     std::vector<unsigned int> degrees = {3};
+ *     std::vector<double> power_coeffs = {-0.08, 0.66, -1.5, 1.0};
+ *     Polynomial poly = Polynomial::fromPower(degrees, power_coeffs);
+ *     PolynomialSystem system(std::vector<Polynomial>{poly});
+ *
+ *     // 2. Solve (fast, double precision) - uses default config
+ *     Solver solver;
+ *     auto result = solver.subdivisionSolve(system, defaultSolverConfig(),
+ *                                           RootBoundingMethod::ProjectedPolyhedral);
+ *
+ *     // 3. Refine (high precision, 1e-15) - uses default config
  *     ResultRefiner refiner;
- *     auto refined = refiner.refine1D(result, system[0]);
- *     
+ *     auto refined = refiner.refine(result, system, defaultRefinementConfig());
+ *
  *     // 4. Check results
  *     for (const auto& root : refined.roots) {
  *         if (root.needs_higher_precision) {
  *             // Use higher precision arithmetic (future feature)
  *         }
  *     }
- *     
+ *
  *     return 0;
  * }
+ * @endcode
+ *
+ * @subsection usage_custom Custom Configuration
+ *
+ * @code{.cpp}
+ * // Customize solver parameters
+ * SubdivisionConfig solver_config = defaultSolverConfig();
+ * solver_config.tolerance = 1e-10;  // Tighter tolerance
+ * solver_config.max_depth = 150;    // Allow deeper subdivision
+ *
+ * // Customize refinement parameters
+ * RefinementConfig refine_config = defaultRefinementConfig();
+ * refine_config.target_tolerance = 1e-12;   // Target error for refined roots
+ * refine_config.residual_tolerance = 1e-12; // Maximum residual |f(x)|
+ *
+ * auto result = solver.subdivisionSolve(system, solver_config,
+ *                                       RootBoundingMethod::ProjectedPolyhedral);
+ * auto refined = refiner.refine(result, system, refine_config);
  * @endcode
  * 
  * @section parameters Parameters
@@ -77,10 +102,76 @@
 /**
  * @namespace polynomial_solver
  * @brief Main namespace for the Polynomial Solver library
- * 
- * All classes and functions are in the global namespace for simplicity.
- * Future versions may use a namespace.
  */
+
+namespace polynomial_solver {
+
+/**
+ * @brief Create default solver configuration
+ *
+ * Returns a SubdivisionConfig with sensible defaults:
+ * - tolerance: 1e-8 (box size threshold for convergence)
+ * - max_depth: 100 (maximum subdivision depth)
+ * - degeneracy_multiplier: 5.0 (degeneracy detection threshold)
+ * - contraction_threshold: 0.8 (minimum contraction ratio)
+ * - strategy: SubdivideFirst (balanced approach)
+ *
+ * @return Default solver configuration
+ */
+inline SubdivisionConfig defaultSolverConfig() {
+    SubdivisionConfig config;
+    config.tolerance = 1e-8;
+    config.max_depth = 100;
+    config.degeneracy_multiplier = 5.0;
+    config.contraction_threshold = 0.8;
+    config.strategy = SubdivisionStrategy::SubdivideFirst;
+    return config;
+}
+
+/**
+ * @brief Create default refinement configuration
+ *
+ * Returns a RefinementConfig with sensible defaults:
+ *
+ * - target_tolerance: 1e-15 (target error tolerance)
+ *   Used for TWO purposes:
+ *   1. Condition-aware convergence: Root is accepted only if estimated_error < target_tolerance
+ *   2. Exclusion radius computation: radius ≈ target_tolerance / |f'(x)| for simple roots
+ *
+ *   The refiner uses CONDITION-AWARE CONVERGENCE to prevent accepting inaccurate roots:
+ *   - When |f(x)| < residual_tolerance, estimate condition number κ ≈ |f''| / |f'|²
+ *   - Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+ *   - Accept root only if estimated_error < target_tolerance
+ *
+ *   This ensures ill-conditioned roots are rejected even when residual is small.
+ *
+ * - residual_tolerance: 1e-15 (residual threshold for convergence check)
+ *   Newton's method checks convergence when |f(x)| < residual_tolerance.
+ *   However, the root is NOT automatically accepted - the condition-aware criterion
+ *   also checks if the estimated error is within target_tolerance.
+ *
+ *   For well-conditioned problems: small residual → small error (accepted)
+ *   For ill-conditioned problems: small residual ≠ small error (rejected)
+ *
+ *   See docs/CONVERGENCE_CRITERIA_ANALYSIS.md for details.
+ *
+ * - max_newton_iters: 50 (maximum Newton iterations)
+ * - max_multiplicity: 10 (maximum multiplicity to check)
+ * - exclusion_multiplier: 3.0 (multiplier for exclusion radius)
+ *
+ * @return Default refinement configuration
+ */
+inline RefinementConfig defaultRefinementConfig() {
+    RefinementConfig config;
+    config.target_tolerance = 1e-15;
+    config.residual_tolerance = 1e-15;
+    config.max_newton_iters = 50;
+    config.max_multiplicity = 10;
+    config.exclusion_multiplier = 3.0;
+    return config;
+}
+
+} // namespace polynomial_solver
 
 /**
  * @mainpage Polynomial Solver Library

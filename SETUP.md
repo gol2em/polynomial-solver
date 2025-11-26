@@ -116,12 +116,7 @@ If any prerequisites are missing, the script will provide installation hints.
 
 ### Step 4: Build Project
 
-```bash
-# Build with tests
-./build.sh --test
-```
-
-Or manually:
+#### Basic Build (Double Precision Only)
 
 ```bash
 # Create build directory
@@ -137,6 +132,10 @@ make -j$(nproc)
 # Run tests
 ctest --output-on-failure
 ```
+
+#### Build with High-Precision Support
+
+See [High-Precision Build Options](#high-precision-build-options) section below for detailed instructions.
 
 ## Verification
 
@@ -209,6 +208,208 @@ Expected libraries:
 - `libgeometry.a` - Geometry module
 - `libde_casteljau.a` - De Casteljau module
 
+## High-Precision Build Options
+
+The polynomial solver supports three tiers of precision. See [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) for complete details.
+
+### Tier 1: Default (Double Precision Only)
+
+```bash
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+```
+
+**Features**:
+- ✅ Double precision (15-17 decimal digits)
+- ✅ Zero dependencies
+- ✅ Maximum performance
+
+### Tier 3: Full Version (Template-Based, Recommended)
+
+#### Prerequisites
+
+Install dependencies:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libboost-dev libmpfr-dev libgmp-dev
+
+# Fedora/RHEL
+sudo dnf install boost-devel mpfr-devel gmp-devel
+
+# macOS
+brew install boost mpfr gmp
+```
+
+#### Build
+
+```bash
+mkdir build && cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+make -j$(nproc)
+```
+
+**Features**:
+- ✅ Template-based (supports any numeric type)
+- ✅ Flexible precision (change at runtime)
+- ✅ Supports double, mpreal, __float128
+- ✅ No code duplication
+
+#### Optional: Enable Quadmath Support
+
+```bash
+cmake .. -DENABLE_HIGH_PRECISION=ON -DENABLE_QUADMATH=ON
+make -j$(nproc)
+```
+
+### Tier 2: Fallback Version (No Templates)
+
+For users who don't want templates:
+
+```bash
+mkdir build && cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON -DDISABLE_TEMPLATES=ON
+make -j$(nproc)
+```
+
+**Features**:
+- ✅ Fixed high precision (mpreal)
+- ✅ No templates
+- ⚠️ Less flexible than Tier 3
+
+### Custom Library Paths
+
+If libraries are not installed globally (e.g., on dedicated servers without admin rights):
+
+#### Specify Custom Paths
+
+```bash
+mkdir build && cd build
+cmake .. \
+  -DENABLE_HIGH_PRECISION=ON \
+  -DBOOST_ROOT=$HOME/local \
+  -DGMP_ROOT=$HOME/local \
+  -DMPFR_ROOT=$HOME/local
+make -j$(nproc)
+```
+
+#### Using CMake Prefix Path
+
+```bash
+cmake .. \
+  -DENABLE_HIGH_PRECISION=ON \
+  -DCMAKE_PREFIX_PATH="$HOME/local;/opt/custom"
+make -j$(nproc)
+```
+
+#### Environment Variables
+
+```bash
+export CMAKE_PREFIX_PATH=$HOME/local
+export LD_LIBRARY_PATH=$HOME/local/lib:$LD_LIBRARY_PATH
+
+mkdir build && cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+make -j$(nproc)
+```
+
+### Building Dependencies from Source (No Admin Rights)
+
+If you don't have admin rights, build dependencies locally:
+
+#### Build GMP
+
+```bash
+cd ~
+mkdir -p local/src && cd local/src
+
+wget https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+tar xf gmp-6.3.0.tar.xz && cd gmp-6.3.0
+
+./configure --prefix=$HOME/local --enable-static --disable-shared
+make -j$(nproc)
+make install
+```
+
+#### Build MPFR
+
+```bash
+cd ~/local/src
+
+wget https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz
+tar xf mpfr-4.2.1.tar.xz && cd mpfr-4.2.1
+
+./configure --prefix=$HOME/local --with-gmp=$HOME/local --enable-static --disable-shared
+make -j$(nproc)
+make install
+```
+
+#### Get Boost Headers
+
+```bash
+cd ~/local/src
+
+wget https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.tar.gz
+tar xzf boost_1_83_0.tar.gz
+
+# Copy headers to local installation
+cp -r boost_1_83_0/boost ~/local/include/
+```
+
+#### Build Project with Local Libraries
+
+```bash
+cd ~/polynomial-solver
+mkdir build && cd build
+
+cmake .. \
+  -DENABLE_HIGH_PRECISION=ON \
+  -DCMAKE_PREFIX_PATH=$HOME/local \
+  -DBOOST_ROOT=$HOME/local
+
+make -j$(nproc)
+```
+
+**Result**: Static linking, no runtime dependencies!
+
+### Header-Only Backend (Zero Dependencies)
+
+If you can't install MPFR/GMP, use the header-only cpp_dec_float backend:
+
+```bash
+# Just copy Boost headers to your project
+mkdir -p external
+cd external
+wget https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.tar.gz
+tar xzf boost_1_83_0.tar.gz
+mv boost_1_83_0/boost .
+
+# Build (CMake will automatically use cpp_dec_float if MPFR not found)
+cd ..
+mkdir build && cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+make -j$(nproc)
+```
+
+**Trade-off**: 2-5× slower than MPFR, but works everywhere with zero external dependencies.
+
+### Verify High-Precision Build
+
+```bash
+# Check which backend is being used
+cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON 2>&1 | grep -i "precision\|mpfr\|backend"
+
+# Expected output (MPFR backend):
+# -- Using MPFR backend
+# -- MPFR: /usr/lib/x86_64-linux-gnu/libmpfr.so
+# -- GMP:  /usr/lib/x86_64-linux-gnu/libgmp.so
+
+# Or (cpp_dec_float backend):
+# -- MPFR not found, using cpp_dec_float backend
+```
+
 ## Troubleshooting
 
 ### Issue: CMake version too old
@@ -243,7 +444,16 @@ sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90
 **Solution**:
 ```bash
 # Clean build and rebuild
-./build.sh --clean
+cd build
+make clean
+make -j$(nproc)
+
+# Or remove build directory entirely
+cd ..
+rm -rf build
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
 ```
 
 ### Issue: Tests fail
@@ -281,7 +491,12 @@ git clone https://github.com/gol2em/polynomial-solver.git
 cd polynomial-solver
 
 # Build in debug mode
-./build.sh --debug --test
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make -j$(nproc)
+
+# Run tests
+ctest --output-on-failure
 ```
 
 ### Project Layout
@@ -299,24 +514,49 @@ polynomial-solver/
 
 ### Build Options
 
+#### Build Types
+
 ```bash
-# Release build (optimized)
-./build.sh
+# Release build (optimized, default)
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j$(nproc)
 
-# Debug build (with symbols)
-./build.sh --debug
+# Debug build (with symbols and debug info)
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make -j$(nproc)
 
-# Clean build
-./build.sh --clean
+# RelWithDebInfo (optimized with debug symbols)
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+make -j$(nproc)
+```
 
-# Build and test
-./build.sh --test
+#### Parallel Build
 
-# Verbose build
-./build.sh --verbose
+```bash
+# Use all available cores
+make -j$(nproc)
 
-# Custom parallel jobs
-./build.sh -j 8
+# Use specific number of cores
+make -j4
+
+# Verbose build output
+make VERBOSE=1 -j$(nproc)
+```
+
+#### Clean Build
+
+```bash
+# Clean and rebuild
+cd build
+make clean
+make -j$(nproc)
+
+# Or remove build directory entirely
+cd ..
+rm -rf build
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
 ```
 
 ### Running Individual Tests
@@ -387,11 +627,11 @@ If you want to minimize the transfer size, you only need:
 - `tests/` - Test suite
 - `CMakeLists.txt` - Build configuration
 - `tests/CMakeLists.txt` - Test configuration
-- `build.sh` - Build script
 - `check_prerequisites.sh` - Prerequisite checker
 
 **Optional**:
-- `python/` - Visualization tools
+- `examples/` - Example programs
+- `tools/` - Visualization and analysis tools
 - `docs/` - Documentation
 - `README.md`, `QUICKSTART.md`, `SETUP.md` - Documentation
 - `.git/` - Git history

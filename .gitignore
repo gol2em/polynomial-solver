@@ -11,6 +11,11 @@ Makefile
 *.cmake
 !CMakeLists.txt
 
+# But allow Makefiles in specific directories
+!playground/Makefile
+!examples/Makefile
+!tests/Makefile
+
 # Compiled Object files
 *.o
 *.obj
@@ -31,6 +36,20 @@ Makefile
 *.exe
 *.out
 *.app
+
+# Playground directory (for local testing only, not part of library)
+playground/
+
+# Examples local executables (created by Makefile)
+examples/*_exe
+examples/simple_cubic_exe
+examples/multiplicity_1d_exe
+examples/wilkinson_1d_exe
+examples/circle_ellipse_exe
+
+# Tests local executables (created by Makefile)
+tests/*_exe
+tests/test_*_exe
 
 # Python
 __pycache__/

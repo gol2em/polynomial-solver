@@ -1,0 +1,27 @@
+// config.h.in - Configuration header template
+// This file is processed by CMake to generate config.h
+
+#ifndef POLYNOMIAL_SOLVER_CONFIG_H
+#define POLYNOMIAL_SOLVER_CONFIG_H
+
+// High-precision arithmetic support
+#cmakedefine ENABLE_HIGH_PRECISION
+
+// Template-based implementation
+#cmakedefine USE_TEMPLATES
+
+// Multiprecision backend
+#cmakedefine USE_MPFR_BACKEND
+#cmakedefine USE_CPP_DEC_FLOAT_BACKEND
+
+// Quadmath support
+#cmakedefine ENABLE_QUADMATH
+
+// Version information
+#define POLYNOMIAL_SOLVER_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define POLYNOMIAL_SOLVER_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define POLYNOMIAL_SOLVER_VERSION_PATCH @PROJECT_VERSION_PATCH@
+#define POLYNOMIAL_SOLVER_VERSION "@PROJECT_VERSION@"
+
+#endif // POLYNOMIAL_SOLVER_CONFIG_H
+

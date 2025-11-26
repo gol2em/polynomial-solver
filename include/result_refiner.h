@@ -6,10 +6,28 @@
  * @brief Post-processing tool for refining and consolidating solver results
  *
  * This module provides tools to:
- * - Verify roots at high precision (1e-15)
+ * - Verify roots at high precision (1e-15) using condition-aware convergence
  * - Estimate root multiplicity from derivatives
  * - Eliminate duplicate/nearby boxes
  * - Consolidate results into unique roots
+ * - Detect ill-conditioned problems requiring higher precision
+ *
+ * ## Condition-Aware Convergence
+ *
+ * The refiner uses a robust convergence criterion that checks BOTH residual and
+ * estimated error. This prevents accepting inaccurate roots for ill-conditioned problems.
+ *
+ * Traditional convergence: |f(x)| < residual_tolerance
+ * Problem: For ill-conditioned problems, small residual ≠ small error
+ *
+ * Condition-aware convergence:
+ *   1. Check if |f(x)| < residual_tolerance
+ *   2. Estimate condition number: κ ≈ |f''(x)| / |f'(x)|²
+ *   3. Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+ *   4. Accept root only if estimated_error < target_tolerance
+ *
+ * This ensures roots are rejected when residual is small but error is large,
+ * which occurs for ill-conditioned problems requiring higher precision arithmetic.
  */
 
 #include <vector>
@@ -23,15 +41,15 @@ namespace polynomial_solver {
  * @brief Configuration for result refinement
  */
 struct RefinementConfig {
-    double target_tolerance;        ///< Target precision for refined roots (default: 1e-15)
-    double residual_tolerance;      ///< Max residual |f(x)| to accept as root (default: 1e-12)
+    double target_tolerance;        ///< Target precision for both error estimation and exclusion radius (default: 1e-15)
+    double residual_tolerance;      ///< Max residual |f(x)| threshold for convergence check (default: 1e-15)
     unsigned int max_newton_iters;  ///< Maximum Newton iterations (default: 50)
     unsigned int max_multiplicity;  ///< Maximum multiplicity to check (default: 10)
     double exclusion_multiplier;    ///< Multiplier for exclusion radius (default: 3.0)
 
     RefinementConfig()
         : target_tolerance(1e-15),
-          residual_tolerance(1e-12),
+          residual_tolerance(1e-15),
           max_newton_iters(50u),
           max_multiplicity(10u),
           exclusion_multiplier(3.0)
@@ -56,12 +74,42 @@ struct RefinedRoot {
 };
 
 /**
+ * @brief A problematic region formed by merging nearby unverified boxes
+ *
+ * When refinement fails for a cluster of adjacent boxes (e.g., due to ill-conditioning
+ * or multiple roots), they are merged into a problematic region. The refiner attempts
+ * to resolve the region using modified Newton with multiplicity estimation.
+ */
+struct ProblematicRegion {
+    double lower;                      ///< Lower bound of the region (1D only)
+    double upper;                      ///< Upper bound of the region (1D only)
+    std::vector<std::size_t> box_indices;  ///< Indices of boxes merged into this region
+
+    // Refinement results (if attempted)
+    bool refinement_attempted;         ///< True if refinement was attempted
+    bool refinement_succeeded;         ///< True if refinement succeeded with condition-aware convergence
+    double refined_root;               ///< Refined root location (if successful)
+    unsigned int multiplicity;         ///< Estimated multiplicity at refined root
+    double residual;                   ///< Residual |f(x)| at refined root
+    double condition_estimate;         ///< Estimated condition number
+    bool needs_higher_precision;       ///< True if condition suggests double precision insufficient
+
+    ProblematicRegion()
+        : lower(0.0), upper(0.0),
+          refinement_attempted(false), refinement_succeeded(false),
+          refined_root(0.0), multiplicity(0), residual(0.0),
+          condition_estimate(1.0), needs_higher_precision(false)
+    {}
+};
+
+/**
  * @brief Result of refinement process
  */
 struct RefinementResult {
     std::vector<RefinedRoot> roots;           ///< Verified and consolidated roots
     std::vector<std::size_t> cancelled_boxes; ///< Indices of boxes eliminated as duplicates
-    std::vector<std::size_t> unverified_boxes; ///< Indices of boxes that didn't pass verification
+    std::vector<std::size_t> unverified_boxes; ///< Indices of boxes that didn't pass verification (kept for backward compatibility)
+    std::vector<ProblematicRegion> problematic_regions; ///< Merged regions from unverified boxes (1D only)
 };
 
 /**
@@ -83,12 +131,13 @@ public:
      * @brief Refine solver results using Newton's method with sign checking
      *
      * This method:
-     * 1. For each resolved box, use Newton's method to refine to target_tolerance
+     * 1. For each resolved box, use Newton's method to refine until |f(x)| < residual_tolerance
      * 2. Use subdivision with sign checking to ensure convergence
-     * 3. Verify convergence by checking residual
+     * 3. Verify convergence by checking residual |f(x)| < residual_tolerance
      * 4. Estimate multiplicity from derivatives
-     * 5. Cancel nearby boxes within exclusion radius
-     * 6. Returns consolidated unique roots
+     * 5. Compute exclusion radius using target_tolerance and derivatives
+     * 6. Cancel nearby boxes within exclusion radius
+     * 7. Returns consolidated unique roots
      *
      * Currently only supports 1D systems. 2D systems may have infinite roots
      * in degenerate regions.
@@ -272,6 +321,60 @@ private:
     double computeDistance(
         const std::vector<double>& p1,
         const std::vector<double>& p2) const;
+
+    /**
+     * @brief Merge nearby unverified boxes into problematic regions (1D only)
+     *
+     * Adjacent boxes from subdivision that failed refinement are merged into
+     * continuous regions. Each region is then refined using modified Newton
+     * with multiplicity estimation.
+     *
+     * @param unverified_indices Indices of unverified boxes
+     * @param solver_result Original solver result containing boxes
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     * @return Vector of problematic regions with refinement results
+     */
+    std::vector<ProblematicRegion> mergeUnverifiedBoxes1D(
+        const std::vector<std::size_t>& unverified_indices,
+        const SubdivisionSolverResult& solver_result,
+        const Polynomial& poly,
+        const RefinementConfig& config) const;
+
+    /**
+     * @brief Attempt to refine a problematic region
+     *
+     * Tries Newton refinement from the center of the region with multiplicity
+     * estimation and condition-aware convergence checking.
+     *
+     * @param region Region to refine (modified in place with results)
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     */
+    void refineProblematicRegion1D(
+        ProblematicRegion& region,
+        const Polynomial& poly,
+        const RefinementConfig& config) const;
+
+    /**
+     * @brief Refine a root starting from a given point (no box constraint)
+     *
+     * Similar to refineRoot1D but starts from an arbitrary point without
+     * box constraints. Used for refining problematic regions.
+     *
+     * @param x0 Initial guess
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     * @param refined_location Output: refined root location
+     * @param residual Output: residual at refined location
+     * @return True if refinement succeeded with condition-aware convergence
+     */
+    bool refineRoot1D_fromPoint(
+        double x0,
+        const Polynomial& poly,
+        const RefinementConfig& config,
+        double& refined_location,
+        double& residual) const;
 };
 
 } // namespace polynomial_solver

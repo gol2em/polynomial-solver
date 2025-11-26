@@ -110,47 +110,101 @@ Degenerate cases include:
 
 ### 4. Target Tolerance (`target_tolerance`)
 
-**Description:** Target precision for refined roots. Newton's method iterates until the box size is smaller than this value.
+**Description:** Target error tolerance for condition-aware convergence and exclusion radius computation.
 
-**Type:** `double`  
-**Default:** `1e-15`  
+**Type:** `double`
+**Default:** `1e-15`
 **Range:** `1e-16` to `1e-10`
+**Command-line:** `--target-tolerance`
+
+**What it controls:**
+
+1. **Condition-Aware Convergence** (PRIMARY PURPOSE):
+   - Root is accepted only if `estimated_error < target_tolerance`
+   - Estimated error = κ × |f(x)| / |f'(x)| where κ is the condition number
+   - This prevents accepting inaccurate roots for ill-conditioned problems
+   - Even if residual is small, root is rejected if estimated error is large
+
+2. **Exclusion Radius Computation** (SECONDARY PURPOSE):
+   - For simple roots: `radius ≈ target_tolerance / |f'(x)|`
+   - For multiple roots: `radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)`
+   - Roots within this radius are considered duplicates and merged
 
 **Usage:**
 ```cpp
 RefinementConfig config;
-config.target_tolerance = 1e-15;  // Maximum precision with double
+config.target_tolerance = 1e-15;  // For exclusion radius computation
 ```
 
 **Guidelines:**
 - **1e-15**: Maximum precision with double (recommended)
-- **1e-12**: Slightly relaxed, faster convergence
-- **1e-10**: Relaxed, for quick refinement
+- **1e-12**: Slightly relaxed, larger exclusion radius
+- **1e-10**: Relaxed, may merge distinct nearby roots
 
-**Note:** This is limited by double precision (~16 decimal digits). For higher precision, use multiprecision arithmetic (future feature).
+**Note:** This parameter affects how close two roots can be before being considered duplicates. Smaller values allow detecting roots that are closer together.
+
+**Trade-offs:**
+- Smaller tolerance → Smaller exclusion radius, can detect closer roots, may report duplicates
+- Larger tolerance → Larger exclusion radius, merges nearby roots, fewer duplicates
 
 ---
 
 ### 5. Residual Tolerance (`residual_tolerance`)
 
-**Description:** Maximum acceptable residual |f(x)| for a refined root to be considered valid.
+**Description:** Residual threshold for triggering convergence check (NOT the acceptance criterion).
 
-**Type:** `double`  
-**Default:** `1e-12`  
+**Type:** `double`
+**Default:** `1e-15`
 **Range:** `1e-16` to `1e-8`
+**Command-line:** `--residual-tolerance`
+
+**What it controls:**
+- Newton's method checks convergence when `|f(x)| < residual_tolerance`
+- However, the root is NOT automatically accepted!
+- The refiner uses **condition-aware convergence**:
+  1. Check if `|f(x)| < residual_tolerance` (residual is small)
+  2. Estimate condition number: κ ≈ |f''| / |f'|²
+  3. Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+  4. Accept root only if `estimated_error < target_tolerance`
+
+**Why Condition-Aware Convergence?**
+
+Traditional residual-only convergence is INSUFFICIENT for ill-conditioned problems:
+- For well-conditioned problems: small residual → small error ✓
+- For ill-conditioned problems: small residual ≠ small error ✗
+
+Example: (x - 0.5)³
+- Residual: 6.2e-16 (machine epsilon) ✓
+- Actual error: 8.5e-06 (10,000× larger!) ✗
+- Condition number: 5.8e+29 (astronomical)
+
+The condition-aware criterion rejects such roots, forcing the use of higher precision.
+
+See [CONVERGENCE_CRITERIA_ANALYSIS.md](CONVERGENCE_CRITERIA_ANALYSIS.md) for details.
 
 **Usage:**
 ```cpp
 RefinementConfig config;
-config.residual_tolerance = 1e-12;  // Verify root is accurate
+config.residual_tolerance = 1e-15;  // Converge when |f(x)| < 1e-15
 ```
 
 **Guidelines:**
-- **1e-14**: Very strict, may reject valid roots in ill-conditioned problems
-- **1e-12**: Default, good balance
-- **1e-10**: Relaxed, accepts more roots
+- **1e-15**: Strictest, maximum precision with double (recommended)
+- **1e-12**: Slightly relaxed, faster convergence
+- **1e-10**: Relaxed, for quick refinement
 
-**Warning:** Small residual doesn't guarantee accurate root for ill-conditioned problems! Check the condition number.
+**Trade-offs:**
+- Smaller tolerance → More iterations, stricter convergence, higher quality roots
+- Larger tolerance → Fewer iterations, faster convergence, may be less accurate
+
+**Example:**
+```bash
+# Use strictest residual tolerance (default)
+./example_simple_cubic --residual-tolerance 1e-15
+
+# Use more lenient residual tolerance for faster convergence
+./example_simple_cubic --residual-tolerance 1e-12
+```
 
 ---
 
@@ -212,18 +266,24 @@ A root at x=r has multiplicity m if:
 
 **Description:** Enable geometry dump for visualization.
 
-**Type:** `bool`  
-**Default:** `false`  
+**Type:** `bool`
+**Default:** `false`
 **Command-line:** `--dump-geometry`
 
 **Usage:**
 ```cpp
 SubdivisionConfig config;
+#ifdef ENABLE_GEOMETRY_DUMP
 config.dump_geometry = true;
 config.dump_prefix = "dumps/my_problem";
+#endif
 ```
 
-**Note:** Only available when compiled with `ENABLE_GEOMETRY_DUMP=ON` (default).
+**Build Mode Behavior:**
+- **Debug mode** (`CMAKE_BUILD_TYPE=Debug` or unspecified): The `ENABLE_GEOMETRY_DUMP` macro is defined. Geometry dumping is available and controlled by the `dump_geometry` runtime flag.
+- **Release mode** (`CMAKE_BUILD_TYPE=Release`): The `ENABLE_GEOMETRY_DUMP` macro is not defined. All geometry dumping code is compiled out for maximum performance.
+
+**Note:** Always wrap `dump_geometry` flag usage with `#ifdef ENABLE_GEOMETRY_DUMP` to ensure code compiles in both debug and release modes.
 
 ---
 
@@ -251,11 +311,16 @@ config.max_depth = 150;            // Deep depth
 config.degeneracy_multiplier = 5.0;
 
 RefinementConfig refine_config;
-refine_config.target_tolerance = 1e-15;  // Maximum precision
-refine_config.residual_tolerance = 1e-12;
+refine_config.target_tolerance = 1e-15;   // Maximum precision
+refine_config.residual_tolerance = 1e-15; // Strictest acceptance
 ```
 
 **Expected:** Slower solve, high precision roots
+
+**Command-line:**
+```bash
+./example_simple_cubic -t 1e-10 -d 150 --target-tolerance 1e-15 --residual-tolerance 1e-15
+```
 
 ---
 
@@ -281,32 +346,38 @@ All examples support command-line parameters:
 
 ```bash
 # Default parameters
-./build/bin/example_cubic_1d
+./build/bin/example_simple_cubic
 
-# Custom tolerance
-./build/bin/example_cubic_1d -t 1e-10
+# Custom solver tolerance
+./build/bin/example_simple_cubic -t 1e-10
 
-# Custom tolerance and depth
-./build/bin/example_cubic_1d -t 1e-12 -d 150
+# Custom solver tolerance and depth
+./build/bin/example_simple_cubic -t 1e-12 -d 150
+
+# Custom refinement tolerances
+./build/bin/example_simple_cubic --target-tolerance 1e-12 --residual-tolerance 1e-12
 
 # All parameters
-./build/bin/example_cubic_1d -t 1e-10 -d 150 -m 10.0 --dump-geometry
+./build/bin/example_simple_cubic -t 1e-10 -d 150 -m 10.0 \
+    --target-tolerance 1e-12 --residual-tolerance 1e-12 --dump-geometry
 
 # Show help
-./build/bin/example_cubic_1d --help
+./build/bin/example_simple_cubic --help
 ```
 
 ---
 
 ## Summary Table
 
-| Parameter | Default | Range | Impact | Command-Line |
-|-----------|---------|-------|--------|--------------|
-| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Solver precision | `-t` |
-| `max_depth` | 100 | 10 to 1000 | Max subdivisions | `-d` |
-| `degeneracy_multiplier` | 5.0 | 2.0 to 20.0 | Degeneracy detection | `-m` |
-| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Refinement precision | N/A |
-| `residual_tolerance` | 1e-12 | 1e-16 to 1e-8 | Residual check | N/A |
-| `max_iterations` | 100 | 10 to 1000 | Newton iterations | N/A |
+| Parameter | Default | Range | What It Controls | Command-Line |
+|-----------|---------|-------|------------------|--------------|
+| **Solver Parameters** |
+| `tolerance` | 1e-8 | 1e-15 to 1e-4 | Box size threshold | `-t`, `--tolerance` |
+| `max_depth` | 100 | 10 to 1000 | Max subdivisions | `-d`, `--max-depth` |
+| `degeneracy_multiplier` | 5.0 | 2.0 to 20.0 | Degeneracy detection | `-m`, `--degeneracy-multiplier` |
 | `dump_geometry` | false | true/false | Visualization | `--dump-geometry` |
+| **Refinement Parameters** |
+| `target_tolerance` | 1e-15 | 1e-16 to 1e-10 | Exclusion radius | `--target-tolerance` |
+| `residual_tolerance` | 1e-15 | 1e-16 to 1e-8 | Convergence: \|f(x)\| < tol | `--residual-tolerance` |
+| `max_iterations` | 100 | 10 to 1000 | Newton iterations | N/A |
 

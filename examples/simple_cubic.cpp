@@ -18,10 +18,16 @@ using namespace polynomial_solver;
 
 // Helper function to parse command-line arguments
 struct Config {
+    // Solver parameters
     double tolerance = 1e-8;
     unsigned int max_depth = 100;
     double degeneracy_multiplier = 5.0;
     bool dump_geometry = false;
+
+    // Refinement parameters
+    double target_tolerance = 1e-15;
+    double residual_tolerance = 1e-15;
+
     bool show_help = false;
 };
 
@@ -34,6 +40,10 @@ Config parse_args(int argc, char* argv[]) {
             if (i + 1 < argc) config.max_depth = std::atoi(argv[++i]);
         } else if (strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--degeneracy-multiplier") == 0) {
             if (i + 1 < argc) config.degeneracy_multiplier = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "--target-tolerance") == 0) {
+            if (i + 1 < argc) config.target_tolerance = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "--residual-tolerance") == 0) {
+            if (i + 1 < argc) config.residual_tolerance = std::atof(argv[++i]);
         } else if (strcmp(argv[i], "--dump-geometry") == 0) {
             config.dump_geometry = true;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -46,11 +56,15 @@ Config parse_args(int argc, char* argv[]) {
 void print_help() {
     std::cout << "Usage: simple_cubic [OPTIONS]\n\n";
     std::cout << "Solve cubic polynomial: (x - 0.2)(x - 0.5)(x - 0.8)\n\n";
-    std::cout << "Options:\n";
+    std::cout << "Solver Options:\n";
     std::cout << "  -t, --tolerance <value>           Box size tolerance (default: 1e-8)\n";
     std::cout << "  -d, --max-depth <value>           Maximum subdivision depth (default: 100)\n";
     std::cout << "  -m, --degeneracy-multiplier <val> Degeneracy detection multiplier (default: 5.0)\n";
-    std::cout << "  --dump-geometry                   Enable geometry dump for visualization\n";
+    std::cout << "  --dump-geometry                   Enable geometry dump for visualization\n\n";
+    std::cout << "Refinement Options:\n";
+    std::cout << "  --target-tolerance <value>        For exclusion radius computation (default: 1e-15)\n";
+    std::cout << "  --residual-tolerance <value>      Convergence: |f(x)| < tol (default: 1e-15)\n\n";
+    std::cout << "Other Options:\n";
     std::cout << "  -h, --help                        Show this help message\n\n";
     std::cout << "See docs/PARAMETERS.md for detailed parameter documentation.\n";
 }
@@ -72,12 +86,16 @@ int main(int argc, char* argv[]) {
     std::cout << "Expected roots: x = 0.2, 0.5, 0.8\n\n";
     
     // Print configuration
-    std::cout << "Configuration:\n";
+    std::cout << "Solver Configuration:\n";
     std::cout << "  Tolerance: " << std::scientific << config.tolerance << "\n";
     std::cout << "  Max depth: " << config.max_depth << "\n";
-    std::cout << "  Degeneracy multiplier: " << std::fixed << std::setprecision(1) 
+    std::cout << "  Degeneracy multiplier: " << std::fixed << std::setprecision(1)
               << config.degeneracy_multiplier << "\n";
     std::cout << "  Geometry dump: " << (config.dump_geometry ? "enabled" : "disabled") << "\n\n";
+
+    std::cout << "Refinement Configuration:\n";
+    std::cout << "  Target tolerance: " << std::scientific << config.target_tolerance << "\n";
+    std::cout << "  Residual tolerance: " << config.residual_tolerance << "\n\n";
     
     // Define polynomial: (x - 0.2)(x - 0.5)(x - 0.8)
     // = x^3 - 1.5*x^2 + 0.66*x - 0.08
@@ -114,8 +132,8 @@ int main(int argc, char* argv[]) {
     // ============================================================
     ResultRefiner refiner;
     RefinementConfig refine_config;
-    refine_config.target_tolerance = 1e-15;
-    refine_config.residual_tolerance = 1e-12;
+    refine_config.target_tolerance = config.target_tolerance;
+    refine_config.residual_tolerance = config.residual_tolerance;
 
     auto refined = refiner.refine(result, system, refine_config);
     

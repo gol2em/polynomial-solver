@@ -23,10 +23,6 @@ RefinementResult ResultRefiner::refine(
     const std::size_t dim = original_system.dimension();
     const std::size_t num_resolved = solver_result.num_resolved;
 
-    if (num_resolved == 0) {
-        return result;
-    }
-
     // Only support 1D for now
     if (dim != 1) {
         // For 2D+, just return empty result
@@ -35,6 +31,22 @@ RefinementResult ResultRefiner::refine(
     }
 
     const Polynomial& poly = original_system.equation(0);
+
+    // If no resolved boxes, try to handle unresolved boxes
+    if (num_resolved == 0) {
+        // Add all unresolved boxes to unverified list
+        for (std::size_t i = 0; i < solver_result.boxes.size(); ++i) {
+            result.unverified_boxes.push_back(i);
+        }
+
+        // Merge unverified boxes into problematic regions (1D only)
+        if (!result.unverified_boxes.empty()) {
+            result.problematic_regions = mergeUnverifiedBoxes1D(
+                result.unverified_boxes, solver_result, poly, config);
+        }
+
+        return result;
+    }
 
     // Step 1: Refine each resolved box using Newton's method
     std::vector<std::size_t> verified_indices;
@@ -146,7 +158,19 @@ RefinementResult ResultRefiner::refine(
     // Step 3: Collect cancelled box indices
     result.cancelled_boxes.assign(cancelled.begin(), cancelled.end());
     std::sort(result.cancelled_boxes.begin(), result.cancelled_boxes.end());
-    
+
+    // Step 4: Add unresolved boxes from solver to unverified list
+    // These are boxes that the solver couldn't resolve (e.g., due to degeneracy)
+    for (std::size_t i = num_resolved; i < solver_result.boxes.size(); ++i) {
+        result.unverified_boxes.push_back(i);
+    }
+
+    // Step 5: Merge unverified boxes into problematic regions (1D only)
+    if (!result.unverified_boxes.empty()) {
+        result.problematic_regions = mergeUnverifiedBoxes1D(
+            result.unverified_boxes, solver_result, poly, config);
+    }
+
     return result;
 }
 
@@ -170,11 +194,34 @@ bool ResultRefiner::refineRoot1D(
         double f = poly.evaluate(x);
         double df = dpoly.evaluate(x);
 
-        // Check for convergence
+        // Check for convergence with condition-aware criterion
         if (std::abs(f) < config.residual_tolerance) {
-            refined_location = x;
-            residual = f;
-            return true;
+            // Residual is small - but is the error also small?
+            // For ill-conditioned problems, small residual doesn't guarantee small error
+            // Check condition number to estimate actual error
+
+            // Compute second derivative for condition estimation
+            Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+            double ddf = ddpoly.evaluate(x);
+
+            // Estimate condition number: κ ≈ |f''| / |f'|²
+            // This measures sensitivity of root to perturbations
+            double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+
+            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
+            double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+            // Accept root only if estimated error is within target tolerance
+            if (estimated_error <= config.target_tolerance) {
+                refined_location = x;
+                residual = f;
+                return true;
+            }
+
+            // Residual is small but estimated error is too large
+            // This indicates an ill-conditioned problem requiring higher precision
+            // Continue iterating (though unlikely to improve with double precision)
+            // Will eventually hit max iterations and return false
         }
 
         // Check for zero derivative (multiplicity or failure)
@@ -199,6 +246,10 @@ bool ResultRefiner::refineRoot1D(
                 // Use current best estimate
                 refined_location = x;
                 residual = f;
+
+                // For multiple roots, derivative is near zero, so condition check
+                // would give unreliable results. Just check residual.
+                // The multiplicity detection later will handle this case.
                 return std::abs(f) < config.residual_tolerance;
             }
             continue;
@@ -249,11 +300,24 @@ bool ResultRefiner::refineRoot1D(
         }
     }
 
-    // Max iterations reached, check if we're close enough
+    // Max iterations reached, check if we're close enough with condition-aware criterion
     double f = poly.evaluate(x);
     refined_location = x;
     residual = f;
-    return std::abs(f) < config.residual_tolerance;
+
+    if (std::abs(f) < config.residual_tolerance) {
+        // Check condition number to verify error is acceptable
+        double df = dpoly.evaluate(x);
+        Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+        double ddf = ddpoly.evaluate(x);
+
+        double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+        double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+        return estimated_error <= config.target_tolerance;
+    }
+
+    return false;
 }
 
 bool ResultRefiner::isValidNewtonStep(
@@ -568,6 +632,231 @@ double ResultRefiner::computeDistance(
     }
 
     return std::sqrt(sum_sq);
+}
+
+std::vector<ProblematicRegion> ResultRefiner::mergeUnverifiedBoxes1D(
+    const std::vector<std::size_t>& unverified_indices,
+    const SubdivisionSolverResult& solver_result,
+    const Polynomial& poly,
+    const RefinementConfig& config) const
+{
+    std::vector<ProblematicRegion> regions;
+
+    if (unverified_indices.empty()) {
+        return regions;
+    }
+
+    // Sort by center position
+    std::vector<std::size_t> sorted_indices = unverified_indices;
+    std::sort(sorted_indices.begin(), sorted_indices.end(),
+        [&solver_result](std::size_t a, std::size_t b) {
+            return solver_result.boxes[a].center[0] < solver_result.boxes[b].center[0];
+        });
+
+    // Merge nearby boxes into regions
+    // Use a threshold based on box sizes - adjacent boxes should be merged
+    double merge_threshold = 1e-6;  // Boxes closer than this are merged
+
+    ProblematicRegion current;
+    current.lower = solver_result.boxes[sorted_indices[0]].lower[0];
+    current.upper = solver_result.boxes[sorted_indices[0]].upper[0];
+    current.box_indices.push_back(sorted_indices[0]);
+
+    for (std::size_t i = 1; i < sorted_indices.size(); ++i) {
+        std::size_t idx = sorted_indices[i];
+        const auto& box = solver_result.boxes[idx];
+
+        // Check if this box is adjacent or close to current region
+        if (box.lower[0] - current.upper <= merge_threshold) {
+            // Merge into current region
+            current.upper = std::max(current.upper, box.upper[0]);
+            current.box_indices.push_back(idx);
+        } else {
+            // Finish current region and start new one
+            regions.push_back(current);
+
+            current = ProblematicRegion();
+            current.lower = box.lower[0];
+            current.upper = box.upper[0];
+            current.box_indices.push_back(idx);
+        }
+    }
+    regions.push_back(current);
+
+    // Try to refine each region
+    for (auto& region : regions) {
+        refineProblematicRegion1D(region, poly, config);
+    }
+
+    return regions;
+}
+
+void ResultRefiner::refineProblematicRegion1D(
+    ProblematicRegion& region,
+    const Polynomial& poly,
+    const RefinementConfig& config) const
+{
+    region.refinement_attempted = true;
+
+    // Start from center of region
+    double x0 = (region.lower + region.upper) / 2.0;
+
+    // Estimate multiplicity at starting point
+    PolynomialSystem system(std::vector<Polynomial>{poly});
+    std::vector<double> point{x0};
+    double first_nonzero_deriv = 0.0;
+    unsigned int mult = estimateMultiplicity(
+        point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+    region.multiplicity = mult;
+
+    // Try Newton refinement
+    double refined_x;
+    double residual;
+
+    bool converged = refineRoot1D_fromPoint(x0, poly, config, refined_x, residual);
+
+    if (!converged) {
+        region.refinement_succeeded = false;
+        region.refined_root = x0;  // Use starting point
+        region.residual = poly.evaluate(x0);
+        region.condition_estimate = estimateConditionNumber1D(x0, poly, first_nonzero_deriv);
+        region.needs_higher_precision = true;
+        return;
+    }
+
+    // Update multiplicity estimate at refined location
+    point[0] = refined_x;
+    mult = estimateMultiplicity(
+        point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+    double condition = estimateConditionNumber1D(refined_x, poly, first_nonzero_deriv);
+
+    // Estimate actual error using condition number
+    double est_error = condition * std::abs(residual) / std::max(std::abs(first_nonzero_deriv), 1e-14);
+
+    // Check condition-aware convergence
+    region.refinement_succeeded = (est_error <= config.target_tolerance);
+    region.refined_root = refined_x;
+    region.multiplicity = mult;
+    region.residual = residual;
+    region.condition_estimate = condition;
+    region.needs_higher_precision = (est_error > 1e-10);
+}
+
+bool ResultRefiner::refineRoot1D_fromPoint(
+    double x0,
+    const Polynomial& poly,
+    const RefinementConfig& config,
+    double& refined_location,
+    double& residual) const
+{
+    // Get derivative
+    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+
+    double x = x0;
+
+    for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
+        double f = poly.evaluate(x);
+        double df = dpoly.evaluate(x);
+
+        // Check if derivative is too small (multiple root or near-singular)
+        // Do this BEFORE condition-aware check, because for multiple roots
+        // the condition number formula breaks down (f' ≈ 0)
+        if (std::abs(df) < 1e-14) {
+            // Try to estimate multiplicity and use modified Newton
+            PolynomialSystem system(std::vector<Polynomial>{poly});
+            std::vector<double> point{x};
+            double first_nonzero_deriv = 0.0;
+            unsigned int mult = estimateMultiplicity(
+                point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+            if (mult > 1) {
+                // For multiple roots, check convergence based on residual only
+                // Condition-aware check doesn't work because f' ≈ 0
+                if (std::abs(f) < config.residual_tolerance) {
+                    refined_location = x;
+                    residual = f;
+                    return true;
+                }
+
+                // Use modified Newton for multiple root
+                // For f(x) = (x-r)^m * g(x), we have f^(m)(x) ≈ m! * g(x)
+                // So we can approximate: x_new = x - f(x) / (f^(m)(x) / m!)
+
+                if (std::abs(first_nonzero_deriv) > 1e-14) {
+                    // Compute factorial
+                    double factorial = 1.0;
+                    for (unsigned int i = 2; i <= mult && i <= 10; ++i) {
+                        factorial *= static_cast<double>(i);
+                    }
+
+                    // Modified step using m-th derivative
+                    double step = f * factorial / first_nonzero_deriv;
+                    x = x - step;
+                    continue;
+                }
+            }
+
+            // Can't make progress
+            return false;
+        }
+
+        // Check for convergence with condition-aware criterion (for simple roots)
+        if (std::abs(f) < config.residual_tolerance) {
+            // Residual is small - but is the error also small?
+            // For ill-conditioned problems, small residual doesn't guarantee small error
+            // Check condition number to estimate actual error
+
+            // Compute second derivative for condition estimation
+            Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+            double ddf = ddpoly.evaluate(x);
+
+            // Estimate condition number: κ ≈ |f''| / |f'|²
+            // This measures sensitivity of root to perturbations
+            double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+
+            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
+            double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+            // Accept root only if estimated error is within target tolerance
+            if (estimated_error <= config.target_tolerance) {
+                refined_location = x;
+                residual = f;
+                return true;
+            }
+
+            // Residual is small but estimated error is too large
+            // This indicates an ill-conditioned problem requiring higher precision
+            // Continue iterating (though unlikely to improve with double precision)
+            // Will eventually hit max iterations and return false
+        }
+
+        // Standard Newton step
+        double x_new = x - f / df;
+        x = x_new;
+    }
+
+    // Max iterations reached - check final residual
+    double f = poly.evaluate(x);
+    residual = f;
+
+    if (std::abs(f) < config.residual_tolerance) {
+        // Check condition-aware convergence one more time
+        double df = dpoly.evaluate(x);
+        Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+        double ddf = ddpoly.evaluate(x);
+
+        double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+        double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+        if (estimated_error <= config.target_tolerance) {
+            refined_location = x;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace polynomial_solver

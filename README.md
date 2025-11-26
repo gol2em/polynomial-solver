@@ -75,10 +75,18 @@ All examples support command-line parameters for experimentation:
 ```
 
 **Common Command-line Options**:
+
+Solver Options:
 - `-t, --tolerance <value>`: Box size tolerance (default: 1e-8)
 - `-d, --max-depth <value>`: Maximum subdivision depth (default: 100)
 - `-m, --degeneracy-multiplier <value>`: Degeneracy detection multiplier (default: 5.0)
 - `--dump-geometry`: Enable geometry dump for visualization
+
+Refinement Options:
+- `--target-tolerance <value>`: For exclusion radius computation (default: 1e-15)
+- `--residual-tolerance <value>`: Convergence criterion |f(x)| < tol (default: 1e-15)
+
+Other:
 - `-h, --help`: Show help message
 
 See [docs/PARAMETERS.md](docs/PARAMETERS.md) for detailed parameter documentation.
@@ -133,7 +141,7 @@ auto result = solver.subdivisionSolve(system, config, RootBoundingMethod::Projec
 // 3. Refine (high precision, 1e-15)
 ResultRefiner refiner;
 RefinementConfig refine_config;
-refine_config.target_tolerance = 1e-15;
+refine_config.residual_tolerance = 1e-15;  // Converge when |f(x)| < 1e-15
 auto refined = refiner.refine(result, system, refine_config);
 
 // 4. Check results
@@ -142,6 +150,91 @@ for (const auto& root : refined.roots) {
         // Use higher precision arithmetic (future feature)
     }
 }
+```
+
+## Development Workflow
+
+### Quick Testing with Makefiles
+
+Each directory (`playground/`, `examples/`, `tests/`) has a convenient Makefile for quick compilation and testing without installation:
+
+#### Playground (Rapid Prototyping)
+
+The `playground/` directory is perfect for quick experiments:
+
+```bash
+cd playground
+
+# Create test.cpp with your code
+# Then compile and run:
+make test
+./test
+
+# Or compile all .cpp files:
+make all
+
+# Clean up:
+make clean
+```
+
+**Available commands**:
+- `make <name>` - Compile `<name>.cpp` to executable
+- `make all` - Compile all `.cpp` files
+- `make clean` - Remove executables
+- `make clean-all` - Clean executables AND library build
+- `make rebuild` - Rebuild library and recompile all
+- `make lib` - Build library only
+- `make cmake CMAKE_OPTS="..."` - Reconfigure CMake with options
+
+#### Examples (Build and Run)
+
+```bash
+cd examples
+
+# Build and run a specific example:
+make simple_cubic
+make multiplicity_1d
+make wilkinson_1d
+make circle_ellipse
+
+# Build all examples:
+make all
+
+# Run all examples:
+make run-all
+```
+
+#### Tests (Build and Run)
+
+```bash
+cd tests
+
+# List all available tests:
+make list
+
+# Build and run a specific test:
+make test_polynomial_conversion
+make test_result_refiner
+
+# Build all tests:
+make all
+
+# Run all tests:
+make run-all
+```
+
+### Advanced: Reconfigure CMake
+
+You can reconfigure CMake with custom options from any directory:
+
+```bash
+# Disable geometry dump for release builds
+make cmake CMAKE_OPTS="-DENABLE_GEOMETRY_DUMP=OFF"
+make rebuild
+
+# Enable tests
+make cmake CMAKE_OPTS="-DBUILD_TESTS=ON"
+make rebuild
 ```
 
 ## Project Structure
@@ -165,13 +258,18 @@ polynomial-solver/
 │   └── de_casteljau.cpp
 ├── build/lib/                    # Build output
 │   └── libpolynomial_solver.a    # Unified library (link this!)
-├── tests/                        # Test suite (13 tests)
-├── examples/                     # Example programs
+├── playground/                   # Quick testing (Makefile-based)
+│   ├── Makefile                  # Compile any .cpp file easily
+│   └── README.md                 # Playground documentation
+├── examples/                     # Example programs (Makefile-based)
+│   ├── Makefile                  # Build and run examples
 │   ├── simple_cubic.cpp          # 2-line workflow demo
-│   ├── cubic_1d_roots.cpp        # Detailed 1D example
 │   ├── multiplicity_1d_roots.cpp # Multiple roots
 │   ├── wilkinson_1d_roots.cpp    # Ill-conditioned
 │   └── circle_ellipse_intersection.cpp  # 2D system
+├── tests/                        # Test suite (Makefile-based)
+│   ├── Makefile                  # Build and run tests
+│   └── test_*.cpp                # 18 test files
 ├── tools/                        # Tools and utilities
 │   └── refine_from_dumps.cpp     # Root refinement tool
 ├── docs/                         # Documentation
@@ -311,17 +409,21 @@ config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
 
 **Build-time control:**
 
-The `ENABLE_GEOMETRY_DUMP` macro is controlled by CMake:
+The `ENABLE_GEOMETRY_DUMP` macro is automatically controlled by the build type:
 
 ```bash
-# Enable geometry dump (default, for development)
-cmake -DENABLE_GEOMETRY_DUMP=ON ..
+# Debug mode: macro is defined, feature is enabled and controlled by runtime flag
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+# or simply (Debug is default if not specified)
+cmake ..
 
-# Disable geometry dump (for release builds, removes all dump code)
-cmake -DENABLE_GEOMETRY_DUMP=OFF ..
+# Release mode: macro is not defined, all dump code is compiled out
+cmake -DCMAKE_BUILD_TYPE=Release ..
 ```
 
-When `ENABLE_GEOMETRY_DUMP=OFF`, all geometry dumping code is compiled out for maximum performance.
+**Behavior:**
+- **Debug mode**: The `ENABLE_GEOMETRY_DUMP` macro is defined. Geometry dumping code is compiled in and can be enabled/disabled at runtime using the `dump_geometry` flag.
+- **Release mode**: The `ENABLE_GEOMETRY_DUMP` macro is not defined. All geometry dumping code is compiled out for maximum performance.
 
 The solver automatically creates the `dumps/` directory if it doesn't exist.
 

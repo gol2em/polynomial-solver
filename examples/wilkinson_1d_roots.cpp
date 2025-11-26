@@ -1,64 +1,80 @@
 /**
- * Example: Wilkinson Polynomial
+ * @file wilkinson_1d_roots.cpp
+ * @brief Example demonstrating the famous ill-conditioned Wilkinson polynomial
  *
- * This example demonstrates solving the famous Wilkinson polynomial,
- * a notoriously ill-conditioned polynomial with 20 roots.
+ * This example shows how the solver and refiner handle the notoriously ill-conditioned
+ * Wilkinson polynomial with 20 roots. This polynomial is extremely sensitive to
+ * numerical errors and requires higher precision arithmetic for accurate root finding.
  *
- * Problem:
- *   p(x) = (x-1)(x-2)(x-3)...(x-20)
- *
- * Expected roots: x = 1, 2, 3, ..., 20
- * Domain: [0, 21]
- *
- * This is a challenging test case due to:
- * - Large number of roots (20)
- * - Wide range of root locations
- * - Numerical sensitivity (Wilkinson's polynomial is famously ill-conditioned)
+ * Problem: p(x) = (x-1/21)(x-2/21)...(x-20/21)
+ * Expected roots: x = k/21 for k = 1, 2, ..., 20
+ * Domain: [0, 1]
  */
 
-#include "polynomial.h"
-#include "solver.h"
+#include <polynomial_solver.h>
 #include <iostream>
 #include <iomanip>
 #include <fstream>
-#include <cmath>
 #include <vector>
 #include <cstring>
 
 using namespace polynomial_solver;
 
-void print_result(const SubdivisionSolverResult& result) {
-    std::cout << "Found " << result.num_resolved << " root(s)\n";
-    std::cout << "Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n";
-    std::cout << "Unresolved boxes: " << (result.boxes.size() - result.num_resolved) << "\n\n";
+// Helper function to parse command-line arguments
+struct Config {
+    // Solver parameters
+    double tolerance = 1e-8;
+    unsigned int max_depth = 100;
+    double degeneracy_multiplier = 5.0;
+    bool dump_geometry = false;
+    bool dump_result = true;
 
-    std::cout << "Resolved roots:\n";
-    for (size_t i = 0; i < result.num_resolved; ++i) {
-        const SubdivisionBoxResult& box = result.boxes[i];
-        std::cout << "  Root " << (i+1) << ":\n";
-        std::cout << "    Interval: [" << std::fixed << std::setprecision(10)
-                  << box.lower[0] << ", " << box.upper[0] << "]\n";
-        std::cout << "    Center: " << box.center[0] << "\n";
-        std::cout << "    Width: " << std::scientific << std::setprecision(6)
-                  << (box.upper[0] - box.lower[0]) << "\n";
-        std::cout << "    Depth: " << box.depth << "\n";
-        std::cout << "\n";
-    }
+    // Refinement parameters
+    double target_tolerance = 1e-15;
+    double residual_tolerance = 1e-15;
 
-    if (result.boxes.size() > result.num_resolved) {
-        std::cout << "Unresolved boxes:\n";
-        for (size_t i = result.num_resolved; i < result.boxes.size(); ++i) {
-            const SubdivisionBoxResult& box = result.boxes[i];
-            std::cout << "  Box " << (i - result.num_resolved + 1) << ":\n";
-            std::cout << "    Interval: [" << std::fixed << std::setprecision(10)
-                      << box.lower[0] << ", " << box.upper[0] << "]\n";
-            std::cout << "    Center: " << box.center[0] << "\n";
-            std::cout << "    Width: " << std::scientific << std::setprecision(6)
-                      << (box.upper[0] - box.lower[0]) << "\n";
-            std::cout << "    Depth: " << box.depth << "\n";
-            std::cout << "\n";
+    bool show_help = false;
+};
+
+Config parse_args(int argc, char* argv[]) {
+    Config config;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--tolerance") == 0) {
+            if (i + 1 < argc) config.tolerance = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--max-depth") == 0) {
+            if (i + 1 < argc) config.max_depth = std::atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-m") == 0 || strcmp(argv[i], "--degeneracy-multiplier") == 0) {
+            if (i + 1 < argc) config.degeneracy_multiplier = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "--target-tolerance") == 0) {
+            if (i + 1 < argc) config.target_tolerance = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "--residual-tolerance") == 0) {
+            if (i + 1 < argc) config.residual_tolerance = std::atof(argv[++i]);
+        } else if (strcmp(argv[i], "--dump-geometry") == 0) {
+            config.dump_geometry = true;
+        } else if (strcmp(argv[i], "--no-dump") == 0) {
+            config.dump_result = false;
+        } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            config.show_help = true;
         }
     }
+    return config;
+}
+
+void print_help() {
+    std::cout << "Usage: wilkinson_1d_roots [OPTIONS]\n\n";
+    std::cout << "Solve Wilkinson polynomial: (x-1/21)(x-2/21)...(x-20/21)\n\n";
+    std::cout << "Solver Options:\n";
+    std::cout << "  -t, --tolerance <value>           Box size tolerance (default: 1e-8)\n";
+    std::cout << "  -d, --max-depth <value>           Maximum subdivision depth (default: 100)\n";
+    std::cout << "  -m, --degeneracy-multiplier <val> Degeneracy detection multiplier (default: 5.0)\n";
+    std::cout << "  --dump-geometry                   Enable geometry dump for visualization\n";
+    std::cout << "  --no-dump                         Disable result dump file\n\n";
+    std::cout << "Refinement Options:\n";
+    std::cout << "  --target-tolerance <value>        For exclusion radius computation (default: 1e-15)\n";
+    std::cout << "  --residual-tolerance <value>      Convergence: |f(x)| < tol (default: 1e-15)\n\n";
+    std::cout << "Other Options:\n";
+    std::cout << "  -h, --help                        Show this help message\n\n";
+    std::cout << "See docs/PARAMETERS.md for detailed parameter documentation.\n";
 }
 
 void dump_result(const SubdivisionSolverResult& result, const std::string& filename) {
@@ -133,111 +149,140 @@ std::vector<double> wilkinson_coefficients_scaled(int n) {
 }
 
 int main(int argc, char* argv[]) {
-    // Default parameters
-    bool dump_geometry = false;
-    double tolerance = 1e-8;
-    unsigned int max_depth = 100;
-    double degeneracy_multiplier = 5.0;
-
     // Parse command-line arguments
-    for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--dump-geometry") == 0) {
-            dump_geometry = true;
-        } else if (std::strcmp(argv[i], "--tolerance") == 0 || std::strcmp(argv[i], "-t") == 0) {
-            if (i + 1 < argc) {
-                tolerance = std::atof(argv[++i]);
+    Config config = parse_args(argc, argv);
+
+    if (config.show_help) {
+        print_help();
+        return 0;
+    }
+
+    std::cout << "========================================\n";
+    std::cout << "Wilkinson Polynomial: 2-Line Workflow\n";
+    std::cout << "========================================\n\n";
+
+    std::cout << "Problem: p(x) = (x-1/21)(x-2/21)...(x-20/21)\n";
+    std::cout << "Expected: 20 roots at x = k/21 for k = 1, 2, ..., 20\n\n";
+
+    // Print configuration
+    std::cout << "Solver Configuration:\n";
+    std::cout << "  Tolerance: " << std::scientific << config.tolerance << "\n";
+    std::cout << "  Max depth: " << config.max_depth << "\n";
+    std::cout << "  Degeneracy multiplier: " << std::fixed << std::setprecision(1)
+              << config.degeneracy_multiplier << "\n";
+    std::cout << "  Geometry dump: " << (config.dump_geometry ? "enabled" : "disabled") << "\n\n";
+
+    std::cout << "Refinement Configuration:\n";
+    std::cout << "  Target tolerance: " << std::scientific << config.target_tolerance << "\n";
+    std::cout << "  Residual tolerance: " << config.residual_tolerance << "\n\n";
+
+    // Compute Wilkinson polynomial coefficients (scaled to [0,1])
+    // Roots at 1/21, 2/21, ..., 20/21 (20 roots total)
+    std::vector<double> power_coeffs = wilkinson_coefficients_scaled(21);
+
+    std::vector<unsigned int> degrees{static_cast<unsigned int>(power_coeffs.size() - 1)};
+    Polynomial poly = Polynomial::fromPower(degrees, power_coeffs);
+    PolynomialSystem system(std::vector<Polynomial>{poly});
+
+    // Configure solver
+    SubdivisionConfig solver_config;
+    solver_config.tolerance = config.tolerance;
+    solver_config.max_depth = config.max_depth;
+    solver_config.degeneracy_multiplier = config.degeneracy_multiplier;
+
+#ifdef ENABLE_GEOMETRY_DUMP
+    if (config.dump_geometry) {
+        solver_config.dump_geometry = true;
+        solver_config.dump_prefix = "dumps/wilkinson_1d";
+    }
+#endif
+
+    // ============================================================
+    // LINE 1: SOLVE (fast, double precision)
+    // ============================================================
+    Solver solver;
+    auto result = solver.subdivisionSolve(system, solver_config, RootBoundingMethod::ProjectedPolyhedral);
+
+    std::cout << "Step 1: Solve (fast, double precision)\n";
+    std::cout << "  Found " << result.num_resolved << " root(s)\n";
+    std::cout << "  Unresolved boxes: " << (result.boxes.size() - result.num_resolved) << "\n";
+    std::cout << "  Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << "\n\n";
+
+    // Dump solver result to file
+    if (config.dump_result) {
+        dump_result(result, "dumps/wilkinson_1d_result.txt");
+    }
+
+    // ============================================================
+    // LINE 2: REFINE (high precision, 1e-15)
+    // ============================================================
+    ResultRefiner refiner;
+    RefinementConfig refine_config;
+    refine_config.target_tolerance = config.target_tolerance;
+    refine_config.residual_tolerance = config.residual_tolerance;
+
+    auto refined = refiner.refine(result, system, refine_config);
+
+    std::cout << "Step 2: Refine (high precision, 1e-15)\n";
+    std::cout << "  Verified roots: " << refined.roots.size() << "\n";
+    std::cout << "  Problematic regions: " << refined.problematic_regions.size() << "\n\n";
+
+    // ============================================================
+    // RESULTS
+    // ============================================================
+    std::cout << "========================================\n";
+    std::cout << "Results\n";
+    std::cout << "========================================\n\n";
+
+    // Display verified roots (if any)
+    if (!refined.roots.size() > 0) {
+        std::cout << "Verified Roots:\n";
+        for (std::size_t i = 0; i < refined.roots.size(); ++i) {
+            const auto& root = refined.roots[i];
+            std::cout << "  Root " << (i + 1) << ":\n";
+            std::cout << "    Location: x = " << std::setprecision(16) << std::fixed
+                      << root.location[0] << "\n";
+            std::cout << "    Residual: |f(x)| = " << std::scientific << std::setprecision(4)
+                      << std::abs(root.residual[0]) << "\n";
+            std::cout << "    Multiplicity: " << root.multiplicity << "\n";
+
+            if (root.needs_higher_precision) {
+                std::cout << "    ⚠️  WARNING: Higher precision recommended!\n";
+            } else {
+                std::cout << "    ✅ Double precision sufficient\n";
             }
-        } else if (std::strcmp(argv[i], "--max-depth") == 0 || std::strcmp(argv[i], "-d") == 0) {
-            if (i + 1 < argc) {
-                max_depth = std::atoi(argv[++i]);
-            }
-        } else if (std::strcmp(argv[i], "--degeneracy-multiplier") == 0 || std::strcmp(argv[i], "-m") == 0) {
-            if (i + 1 < argc) {
-                degeneracy_multiplier = std::atof(argv[++i]);
-            }
-        } else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
-            std::cout << "Usage: " << argv[0] << " [options]\n";
-            std::cout << "Options:\n";
-            std::cout << "  --dump-geometry              Enable geometry dump for visualization (default: off)\n";
-            std::cout << "  --tolerance, -t <value>      Box size tolerance for convergence (default: 1e-6)\n";
-            std::cout << "  --max-depth, -d <value>      Maximum subdivision depth (default: 100)\n";
-            std::cout << "  --degeneracy-multiplier, -m <value>  Multiplier for degeneracy detection (default: 2.0)\n";
-            std::cout << "  --help, -h                   Show this help message\n";
-            return 0;
+            std::cout << "\n";
         }
     }
 
-    std::cout << "Wilkinson Polynomial Root Finding\n";
-    std::cout << std::string(60, '=') << "\n\n";
+    // Display problematic regions summary
+    if (!refined.problematic_regions.empty()) {
+        std::cout << "Problematic Regions: " << refined.problematic_regions.size()
+                  << " (all need higher precision)\n\n";
+        std::cout << "Sample regions (first 5):\n";
+        for (std::size_t i = 0; i < std::min(refined.problematic_regions.size(), size_t(5)); ++i) {
+            const auto& region = refined.problematic_regions[i];
+            std::cout << "  Region " << (i + 1) << ":\n";
+            std::cout << "    Refined root: x = " << std::fixed << std::setprecision(10)
+                      << region.refined_root << "\n";
+            std::cout << "    Residual: " << std::scientific << std::setprecision(4)
+                      << std::abs(region.residual) << "\n";
+            std::cout << "    Boxes merged: " << region.box_indices.size() << "\n";
+            std::cout << "    ⚠️  Needs higher precision\n\n";
+        }
 
-    std::cout << "Problem: p(x) = (x-1/21)(x-2/21)(x-3/21)...(x-20/21)\n";
-    std::cout << "Expected roots: x = 1/21, 2/21, 3/21, ..., 20/21\n";
-    std::cout << "Domain: [0, 1]\n\n";
-
-    std::cout << "Parameters:\n";
-    std::cout << "  Tolerance:             " << std::scientific << std::setprecision(3) << tolerance << "\n";
-    std::cout << "  Max depth:             " << max_depth << "\n";
-    std::cout << "  Degeneracy multiplier: " << std::fixed << std::setprecision(1) << degeneracy_multiplier << "\n\n";
-
-    // Compute Wilkinson polynomial coefficients (scaled to [0,1])
-    // Roots at 1/21, 2/21, ..., 19/21 (19 roots total)
-    std::vector<double> power_coeffs = wilkinson_coefficients_scaled(20);
-
-    std::cout << "Polynomial degree: " << (power_coeffs.size() - 1) << "\n";
-    std::cout << "Leading coefficient: " << power_coeffs.back() << "\n";
-    std::cout << "Constant term: " << std::scientific << std::setprecision(6)
-              << power_coeffs[0] << "\n\n";
-
-    std::vector<unsigned int> degrees{static_cast<unsigned int>(power_coeffs.size() - 1)};
-    Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
-    PolynomialSystem system({p});
-
-    // Verify a few roots
-    std::cout << "Verification (sample roots):\n";
-    int test_roots_idx[] = {1, 5, 10, 15, 19};
-    for (int i = 0; i < 5; ++i) {
-        double root = test_roots_idx[i] / 20.0;
-        double val = p.evaluate(root);
-        std::cout << "  p(" << test_roots_idx[i] << "/20 = " << std::fixed << std::setprecision(4) << root
-                  << ") = " << std::scientific << std::setprecision(6) << val << "\n";
+        if (refined.problematic_regions.size() > 5) {
+            std::cout << "  ... and " << (refined.problematic_regions.size() - 5)
+                      << " more problematic regions\n\n";
+        }
     }
-    std::cout << "\n";
-    
-    // Test with ProjectedPolyhedral method (generates geometry dump for visualization)
-    Solver solver;
 
-    SubdivisionConfig config;
-    config.tolerance = tolerance;
-    config.max_depth = max_depth;
-    config.degeneracy_multiplier = degeneracy_multiplier;
-    config.contraction_threshold = 0.8;
-    config.strategy = SubdivisionStrategy::SubdivideFirst;
-#ifdef ENABLE_GEOMETRY_DUMP
-    config.dump_geometry = dump_geometry;
-    config.dump_prefix = "dumps/wilkinson_1d";
-#endif
-
-    std::cout << "\n" << std::string(60, '=') << "\n";
-    std::cout << "Solving with SubdivideFirst strategy\n";
-    std::cout << std::string(60, '=') << "\n\n";
-
-    SubdivisionSolverResult result = solver.subdivisionSolve(
-        system, config, RootBoundingMethod::ProjectedPolyhedral);
-
-    print_result(result);
-
-    // Dump result to file
-    dump_result(result, "dumps/wilkinson_1d_result.txt");
-
-    std::cout << "\n" << std::string(60, '=') << "\n";
-    std::cout << "Example completed successfully!\n";
-#ifdef ENABLE_GEOMETRY_DUMP
-    if (dump_geometry) {
-        std::cout << "\nGeometry dump saved to dumps/wilkinson_1d_geometry.txt\n";
-    }
-#endif
-    std::cout << "Result dump saved to dumps/wilkinson_1d_result.txt\n";
-    std::cout << "Visualize with: python examples/visualize_wilkinson_1d.py\n";
+    std::cout << "========================================\n";
+    std::cout << "Summary\n";
+    std::cout << "========================================\n\n";
+    std::cout << "The Wilkinson polynomial is notoriously ill-conditioned.\n";
+    std::cout << "All " << refined.problematic_regions.size() << " roots require higher precision arithmetic.\n";
+    std::cout << "See docs/CONDITIONING_AND_PRECISION.md for more information.\n\n";
 
     return 0;
 }

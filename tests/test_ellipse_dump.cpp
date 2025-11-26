@@ -60,14 +60,21 @@ int main() {
     SubdivisionConfig config;
     config.tolerance = 1e-6;
     config.max_depth = 50;
+
+#ifdef ENABLE_GEOMETRY_DUMP
     config.dump_geometry = true;
     config.dump_prefix = "dumps/ellipse_test";
+#endif
 
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Tolerance: " << config.tolerance << std::endl;
     std::cout << "  Max depth: " << config.max_depth << std::endl;
+#ifdef ENABLE_GEOMETRY_DUMP
     std::cout << "  Dump geometry: " << (config.dump_geometry ? "enabled" : "disabled") << std::endl;
     std::cout << "  Dump prefix: " << config.dump_prefix << std::endl;
+#else
+    std::cout << "  Dump geometry: disabled (compiled out in release mode)" << std::endl;
+#endif
     std::cout << std::endl;
 
     // Solve with ProjectedPolyhedral method
@@ -116,7 +123,11 @@ int main() {
     }
 
     std::cout << std::endl;
+#ifdef ENABLE_GEOMETRY_DUMP
     std::cout << "Geometry dump written to: " << config.dump_prefix << "_geometry.txt" << std::endl;
+#else
+    std::cout << "Geometry dump: disabled (compiled out in release mode)" << std::endl;
+#endif
     std::cout << std::endl;
 
     // Verify we found roots
