@@ -74,12 +74,42 @@ struct RefinedRoot {
 };
 
 /**
+ * @brief A problematic region formed by merging nearby unverified boxes
+ *
+ * When refinement fails for a cluster of adjacent boxes (e.g., due to ill-conditioning
+ * or multiple roots), they are merged into a problematic region. The refiner attempts
+ * to resolve the region using modified Newton with multiplicity estimation.
+ */
+struct ProblematicRegion {
+    double lower;                      ///< Lower bound of the region (1D only)
+    double upper;                      ///< Upper bound of the region (1D only)
+    std::vector<std::size_t> box_indices;  ///< Indices of boxes merged into this region
+
+    // Refinement results (if attempted)
+    bool refinement_attempted;         ///< True if refinement was attempted
+    bool refinement_succeeded;         ///< True if refinement succeeded with condition-aware convergence
+    double refined_root;               ///< Refined root location (if successful)
+    unsigned int multiplicity;         ///< Estimated multiplicity at refined root
+    double residual;                   ///< Residual |f(x)| at refined root
+    double condition_estimate;         ///< Estimated condition number
+    bool needs_higher_precision;       ///< True if condition suggests double precision insufficient
+
+    ProblematicRegion()
+        : lower(0.0), upper(0.0),
+          refinement_attempted(false), refinement_succeeded(false),
+          refined_root(0.0), multiplicity(0), residual(0.0),
+          condition_estimate(1.0), needs_higher_precision(false)
+    {}
+};
+
+/**
  * @brief Result of refinement process
  */
 struct RefinementResult {
     std::vector<RefinedRoot> roots;           ///< Verified and consolidated roots
     std::vector<std::size_t> cancelled_boxes; ///< Indices of boxes eliminated as duplicates
-    std::vector<std::size_t> unverified_boxes; ///< Indices of boxes that didn't pass verification
+    std::vector<std::size_t> unverified_boxes; ///< Indices of boxes that didn't pass verification (kept for backward compatibility)
+    std::vector<ProblematicRegion> problematic_regions; ///< Merged regions from unverified boxes (1D only)
 };
 
 /**
@@ -291,6 +321,60 @@ private:
     double computeDistance(
         const std::vector<double>& p1,
         const std::vector<double>& p2) const;
+
+    /**
+     * @brief Merge nearby unverified boxes into problematic regions (1D only)
+     *
+     * Adjacent boxes from subdivision that failed refinement are merged into
+     * continuous regions. Each region is then refined using modified Newton
+     * with multiplicity estimation.
+     *
+     * @param unverified_indices Indices of unverified boxes
+     * @param solver_result Original solver result containing boxes
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     * @return Vector of problematic regions with refinement results
+     */
+    std::vector<ProblematicRegion> mergeUnverifiedBoxes1D(
+        const std::vector<std::size_t>& unverified_indices,
+        const SubdivisionSolverResult& solver_result,
+        const Polynomial& poly,
+        const RefinementConfig& config) const;
+
+    /**
+     * @brief Attempt to refine a problematic region
+     *
+     * Tries Newton refinement from the center of the region with multiplicity
+     * estimation and condition-aware convergence checking.
+     *
+     * @param region Region to refine (modified in place with results)
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     */
+    void refineProblematicRegion1D(
+        ProblematicRegion& region,
+        const Polynomial& poly,
+        const RefinementConfig& config) const;
+
+    /**
+     * @brief Refine a root starting from a given point (no box constraint)
+     *
+     * Similar to refineRoot1D but starts from an arbitrary point without
+     * box constraints. Used for refining problematic regions.
+     *
+     * @param x0 Initial guess
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     * @param refined_location Output: refined root location
+     * @param residual Output: residual at refined location
+     * @return True if refinement succeeded with condition-aware convergence
+     */
+    bool refineRoot1D_fromPoint(
+        double x0,
+        const Polynomial& poly,
+        const RefinementConfig& config,
+        double& refined_location,
+        double& residual) const;
 };
 
 } // namespace polynomial_solver
