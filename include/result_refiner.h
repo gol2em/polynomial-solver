@@ -6,10 +6,28 @@
  * @brief Post-processing tool for refining and consolidating solver results
  *
  * This module provides tools to:
- * - Verify roots at high precision (1e-15)
+ * - Verify roots at high precision (1e-15) using condition-aware convergence
  * - Estimate root multiplicity from derivatives
  * - Eliminate duplicate/nearby boxes
  * - Consolidate results into unique roots
+ * - Detect ill-conditioned problems requiring higher precision
+ *
+ * ## Condition-Aware Convergence
+ *
+ * The refiner uses a robust convergence criterion that checks BOTH residual and
+ * estimated error. This prevents accepting inaccurate roots for ill-conditioned problems.
+ *
+ * Traditional convergence: |f(x)| < residual_tolerance
+ * Problem: For ill-conditioned problems, small residual ≠ small error
+ *
+ * Condition-aware convergence:
+ *   1. Check if |f(x)| < residual_tolerance
+ *   2. Estimate condition number: κ ≈ |f''(x)| / |f'(x)|²
+ *   3. Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+ *   4. Accept root only if estimated_error < target_tolerance
+ *
+ * This ensures roots are rejected when residual is small but error is large,
+ * which occurs for ill-conditioned problems requiring higher precision arithmetic.
  */
 
 #include <vector>
@@ -23,8 +41,8 @@ namespace polynomial_solver {
  * @brief Configuration for result refinement
  */
 struct RefinementConfig {
-    double target_tolerance;        ///< Target precision for exclusion radius computation (default: 1e-15)
-    double residual_tolerance;      ///< Max residual |f(x)| for convergence (default: 1e-15)
+    double target_tolerance;        ///< Target precision for both error estimation and exclusion radius (default: 1e-15)
+    double residual_tolerance;      ///< Max residual |f(x)| threshold for convergence check (default: 1e-15)
     unsigned int max_newton_iters;  ///< Maximum Newton iterations (default: 50)
     unsigned int max_multiplicity;  ///< Maximum multiplicity to check (default: 10)
     double exclusion_multiplier;    ///< Multiplier for exclusion radius (default: 3.0)

@@ -110,7 +110,7 @@ Degenerate cases include:
 
 ### 4. Target Tolerance (`target_tolerance`)
 
-**Description:** Target precision used for computing exclusion radius around refined roots.
+**Description:** Target error tolerance for condition-aware convergence and exclusion radius computation.
 
 **Type:** `double`
 **Default:** `1e-15`
@@ -118,11 +118,17 @@ Degenerate cases include:
 **Command-line:** `--target-tolerance`
 
 **What it controls:**
-- Used to compute the **exclusion radius** around each refined root
-- For simple roots: `radius ≈ target_tolerance / |f'(x)|`
-- For multiple roots: `radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)`
-- Roots within this radius are considered duplicates and merged
-- Does NOT control Newton iteration convergence (see `residual_tolerance`)
+
+1. **Condition-Aware Convergence** (PRIMARY PURPOSE):
+   - Root is accepted only if `estimated_error < target_tolerance`
+   - Estimated error = κ × |f(x)| / |f'(x)| where κ is the condition number
+   - This prevents accepting inaccurate roots for ill-conditioned problems
+   - Even if residual is small, root is rejected if estimated error is large
+
+2. **Exclusion Radius Computation** (SECONDARY PURPOSE):
+   - For simple roots: `radius ≈ target_tolerance / |f'(x)|`
+   - For multiple roots: `radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)`
+   - Roots within this radius are considered duplicates and merged
 
 **Usage:**
 ```cpp
@@ -145,7 +151,7 @@ config.target_tolerance = 1e-15;  // For exclusion radius computation
 
 ### 5. Residual Tolerance (`residual_tolerance`)
 
-**Description:** Convergence criterion for Newton's method. Iteration stops when |f(x)| < residual_tolerance.
+**Description:** Residual threshold for triggering convergence check (NOT the acceptance criterion).
 
 **Type:** `double`
 **Default:** `1e-15`
@@ -153,17 +159,28 @@ config.target_tolerance = 1e-15;  // For exclusion radius computation
 **Command-line:** `--residual-tolerance`
 
 **What it controls:**
-- Newton's method iterates until `|f(x)| < residual_tolerance`
-- This is the **convergence criterion** for the iterative refinement
-- A root is **accepted** only if `|f(x)| < residual_tolerance`
-- Smaller values → more iterations, stricter convergence
-- Larger values → fewer iterations, more lenient convergence
+- Newton's method checks convergence when `|f(x)| < residual_tolerance`
+- However, the root is NOT automatically accepted!
+- The refiner uses **condition-aware convergence**:
+  1. Check if `|f(x)| < residual_tolerance` (residual is small)
+  2. Estimate condition number: κ ≈ |f''| / |f'|²
+  3. Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+  4. Accept root only if `estimated_error < target_tolerance`
 
-**⚠️ Important:** Small residual does NOT guarantee accurate root for ill-conditioned problems!
-- For well-conditioned problems: `|error| ≈ |residual|`
-- For ill-conditioned problems: `|error| ≈ κ × |residual|` where κ is the condition number
-- Example: Wilkinson polynomial can have `|f(x)| = 1e-15` but `|error| = 1e-3`
-- See [CONDITIONING_AND_PRECISION.md](CONDITIONING_AND_PRECISION.md) for details
+**Why Condition-Aware Convergence?**
+
+Traditional residual-only convergence is INSUFFICIENT for ill-conditioned problems:
+- For well-conditioned problems: small residual → small error ✓
+- For ill-conditioned problems: small residual ≠ small error ✗
+
+Example: (x - 0.5)³
+- Residual: 6.2e-16 (machine epsilon) ✓
+- Actual error: 8.5e-06 (10,000× larger!) ✗
+- Condition number: 5.8e+29 (astronomical)
+
+The condition-aware criterion rejects such roots, forcing the use of higher precision.
+
+See [CONVERGENCE_CRITERIA_ANALYSIS.md](CONVERGENCE_CRITERIA_ANALYSIS.md) for details.
 
 **Usage:**
 ```cpp

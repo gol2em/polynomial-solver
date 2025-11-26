@@ -133,19 +133,27 @@ inline SubdivisionConfig defaultSolverConfig() {
  *
  * Returns a RefinementConfig with sensible defaults:
  *
- * - target_tolerance: 1e-15 (for exclusion radius computation)
- *   Used to compute the exclusion radius around each refined root.
- *   For simple roots: radius ≈ target_tolerance / |f'(x)|
- *   For multiple roots: radius ≈ (target_tolerance / |f^(m)(x)|)^(1/m)
- *   Roots within this radius are considered duplicates and merged.
+ * - target_tolerance: 1e-15 (target error tolerance)
+ *   Used for TWO purposes:
+ *   1. Condition-aware convergence: Root is accepted only if estimated_error < target_tolerance
+ *   2. Exclusion radius computation: radius ≈ target_tolerance / |f'(x)| for simple roots
  *
- * - residual_tolerance: 1e-15 (convergence criterion)
- *   Newton's method iterates until |f(x)| < residual_tolerance.
- *   This is the convergence criterion for the iterative refinement.
- *   A root is accepted only if |f(x)| < residual_tolerance.
- *   ⚠️ Note: Small residual doesn't guarantee accurate root for ill-conditioned problems!
- *   For ill-conditioned problems: |error| ≈ κ × |residual| where κ is the condition number.
- *   See docs/CONDITIONING_AND_PRECISION.md for details.
+ *   The refiner uses CONDITION-AWARE CONVERGENCE to prevent accepting inaccurate roots:
+ *   - When |f(x)| < residual_tolerance, estimate condition number κ ≈ |f''| / |f'|²
+ *   - Estimate actual error: error ≈ κ × |f(x)| / |f'(x)|
+ *   - Accept root only if estimated_error < target_tolerance
+ *
+ *   This ensures ill-conditioned roots are rejected even when residual is small.
+ *
+ * - residual_tolerance: 1e-15 (residual threshold for convergence check)
+ *   Newton's method checks convergence when |f(x)| < residual_tolerance.
+ *   However, the root is NOT automatically accepted - the condition-aware criterion
+ *   also checks if the estimated error is within target_tolerance.
+ *
+ *   For well-conditioned problems: small residual → small error (accepted)
+ *   For ill-conditioned problems: small residual ≠ small error (rejected)
+ *
+ *   See docs/CONVERGENCE_CRITERIA_ANALYSIS.md for details.
  *
  * - max_newton_iters: 50 (maximum Newton iterations)
  * - max_multiplicity: 10 (maximum multiplicity to check)

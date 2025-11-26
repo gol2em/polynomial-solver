@@ -170,11 +170,34 @@ bool ResultRefiner::refineRoot1D(
         double f = poly.evaluate(x);
         double df = dpoly.evaluate(x);
 
-        // Check for convergence
+        // Check for convergence with condition-aware criterion
         if (std::abs(f) < config.residual_tolerance) {
-            refined_location = x;
-            residual = f;
-            return true;
+            // Residual is small - but is the error also small?
+            // For ill-conditioned problems, small residual doesn't guarantee small error
+            // Check condition number to estimate actual error
+
+            // Compute second derivative for condition estimation
+            Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+            double ddf = ddpoly.evaluate(x);
+
+            // Estimate condition number: κ ≈ |f''| / |f'|²
+            // This measures sensitivity of root to perturbations
+            double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+
+            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
+            double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+            // Accept root only if estimated error is within target tolerance
+            if (estimated_error <= config.target_tolerance) {
+                refined_location = x;
+                residual = f;
+                return true;
+            }
+
+            // Residual is small but estimated error is too large
+            // This indicates an ill-conditioned problem requiring higher precision
+            // Continue iterating (though unlikely to improve with double precision)
+            // Will eventually hit max iterations and return false
         }
 
         // Check for zero derivative (multiplicity or failure)
@@ -199,6 +222,10 @@ bool ResultRefiner::refineRoot1D(
                 // Use current best estimate
                 refined_location = x;
                 residual = f;
+
+                // For multiple roots, derivative is near zero, so condition check
+                // would give unreliable results. Just check residual.
+                // The multiplicity detection later will handle this case.
                 return std::abs(f) < config.residual_tolerance;
             }
             continue;
@@ -249,11 +276,24 @@ bool ResultRefiner::refineRoot1D(
         }
     }
 
-    // Max iterations reached, check if we're close enough
+    // Max iterations reached, check if we're close enough with condition-aware criterion
     double f = poly.evaluate(x);
     refined_location = x;
     residual = f;
-    return std::abs(f) < config.residual_tolerance;
+
+    if (std::abs(f) < config.residual_tolerance) {
+        // Check condition number to verify error is acceptable
+        double df = dpoly.evaluate(x);
+        Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
+        double ddf = ddpoly.evaluate(x);
+
+        double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
+        double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+
+        return estimated_error <= config.target_tolerance;
+    }
+
+    return false;
 }
 
 bool ResultRefiner::isValidNewtonStep(
