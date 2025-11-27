@@ -46,6 +46,27 @@ def load_all_boxes():
 
     return np.array(boxes) if boxes else np.array([]).reshape(0, 3)
 
+def load_converged_points():
+    """Load all converged points."""
+    points = []
+
+    try:
+        with open('dumps/hessian_det_converged.txt', 'r') as f:
+            for line in f:
+                if line.startswith('#') or not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 2:
+                    u, v = float(parts[0]), float(parts[1])
+                    # Transform to [-1,1]^2
+                    x, y = 2*u - 1, 2*v - 1
+                    residual = abs(compute_hessian_determinant(x, y))
+                    points.append([x, y, residual])
+    except FileNotFoundError:
+        print("Warning: converged points file not found")
+
+    return np.array(points) if points else np.array([]).reshape(0, 3)
+
 def compute_hessian_grid(resolution=800):
     """Compute Hessian determinant on grid."""
     x = np.linspace(-1, 1, resolution)
@@ -76,21 +97,32 @@ def main():
     print("-" * 70)
     X, Y, det_H = compute_hessian_grid(resolution=800)
 
-    # Load all boxes without filtering
-    print(f"\n2. Loading all unresolved boxes...")
+    # Load all boxes and converged points
+    print(f"\n2. Loading solver results...")
     print("-" * 70)
 
     boxes = load_all_boxes()
-    print(f"  Total unresolved boxes: {len(boxes)}")
+    converged = load_converged_points()
+
+    print(f"  Converged points: {len(converged)}")
+    print(f"  Unresolved boxes: {len(boxes)}")
+    print(f"  Total: {len(converged) + len(boxes)}")
+
+    if len(converged) > 0:
+        print(f"\n  Converged residuals:")
+        print(f"    Min: {np.min(converged[:, 2]):.2e}")
+        print(f"    Max: {np.max(converged[:, 2]):.2e}")
+        print(f"    Median: {np.median(converged[:, 2]):.2e}")
 
     if len(boxes) > 0:
-        print(f"  Residual range: [{np.min(boxes[:, 2]):.2e}, {np.max(boxes[:, 2]):.2e}]")
-        print(f"  Mean residual: {np.mean(boxes[:, 2]):.2e}")
-        print(f"  Median residual: {np.median(boxes[:, 2]):.2e}")
+        print(f"\n  Unresolved residuals:")
+        print(f"    Min: {np.min(boxes[:, 2]):.2e}")
+        print(f"    Max: {np.max(boxes[:, 2]):.2e}")
+        print(f"    Median: {np.median(boxes[:, 2]):.2e}")
 
         # Show distribution
         percentiles = [50, 75, 90, 95, 99]
-        print(f"\n  Residual percentiles:")
+        print(f"\n  Unresolved percentiles:")
         for p in percentiles:
             val = np.percentile(boxes[:, 2], p)
             print(f"    {p}th percentile: {val:.2e}")
@@ -116,21 +148,28 @@ def main():
     cbar1 = plt.colorbar(contourf1, ax=ax1, label='det(H)')
     cbar1.ax.tick_params(labelsize=12)
 
-    # Right: Polynomial solver only
+    # Right: Polynomial solver (converged + unresolved)
     ax2 = axes[1]
+
+    # Plot converged points first (smaller, lighter)
+    if len(converged) > 0:
+        ax2.scatter(converged[:, 0], converged[:, 1], c='cyan', s=1, alpha=0.5,
+                   edgecolors='none', label=f'Converged ({len(converged)})')
+
+    # Plot unresolved boxes (larger, more visible)
     if len(boxes) > 0:
-        # Use log scale for better visualization of wide residual range
-        scatter = ax2.scatter(boxes[:, 0], boxes[:, 1], c=np.log10(boxes[:, 2] + 1e-10),
-                             cmap='viridis', s=2, alpha=0.7, edgecolors='none')
-        cbar2 = plt.colorbar(scatter, ax=ax2, label='log10(|det(H)|)')
-        cbar2.ax.tick_params(labelsize=12)
+        ax2.scatter(boxes[:, 0], boxes[:, 1], c='lime', s=2, alpha=0.7,
+                   edgecolors='none', label=f'Unresolved ({len(boxes)})')
+
     ax2.set_xlim(-1, 1)
     ax2.set_ylim(-1, 1)
     ax2.set_xlabel('x', fontsize=16)
     ax2.set_ylabel('y', fontsize=16)
-    ax2.set_title(f'Polynomial Solver Method\n{len(boxes)} unresolved boxes',
+    total_points = len(converged) + len(boxes)
+    ax2.set_title(f'Polynomial Solver Method\n{total_points} total points ({len(converged)} converged + {len(boxes)} unresolved)',
                  fontsize=18, fontweight='bold')
     ax2.grid(True, alpha=0.3)
+    ax2.legend(loc='upper right', fontsize=12)
     ax2.set_aspect('equal')
 
     plt.tight_layout()
@@ -143,12 +182,20 @@ def main():
     print("Summary:")
     print("=" * 70)
     print("Comparison complete!")
-    print(f"\nTotal unresolved boxes: {len(boxes)}")
+    print(f"\nTotal points: {len(converged) + len(boxes)}")
+    print(f"  Converged: {len(converged)}")
+    print(f"  Unresolved: {len(boxes)}")
+
+    if len(converged) > 0:
+        print(f"\nConverged residual statistics:")
+        print(f"  Min: {np.min(converged[:, 2]):.2e}")
+        print(f"  Max: {np.max(converged[:, 2]):.2e}")
+        print(f"  Median: {np.median(converged[:, 2]):.2e}")
+
     if len(boxes) > 0:
-        print(f"Residual statistics:")
+        print(f"\nUnresolved residual statistics:")
         print(f"  Min: {np.min(boxes[:, 2]):.2e}")
         print(f"  Max: {np.max(boxes[:, 2]):.2e}")
-        print(f"  Mean: {np.mean(boxes[:, 2]):.2e}")
         print(f"  Median: {np.median(boxes[:, 2]):.2e}")
     print("\nThe polynomial solver method:")
     print("  • Uses piecewise polynomial interpolation")
