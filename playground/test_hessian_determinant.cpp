@@ -384,14 +384,16 @@ int main(int argc, char* argv[]) {
     std::vector<SubdivisionBoxResult> all_unresolved;
     unsigned int total_resolved = 0;
     unsigned int total_unresolved = 0;
-    unsigned int skipped_regions = 0;
+    unsigned int pruned_converged = 0;
+    unsigned int pruned_unresolved = 0;
     bool any_degeneracy = false;
 
     double max_poly_residual = 0.0;
     double max_orig_residual = 0.0;
 
-    // Interpolation quality threshold
-    const double max_acceptable_error_ratio = 0.5;  // 50% of range
+    // Residual pruning threshold for original Hessian determinant
+    // Can be adjusted: 1e2 (strict), 1e3 (moderate), 1e4 (loose)
+    const double residual_threshold = 1e2;  // Absolute threshold for |det(H)|
 
     for (unsigned int i = 0; i < subdivisions; ++i) {
         for (unsigned int j = 0; j < subdivisions; ++j) {
@@ -456,10 +458,13 @@ int main(int argc, char* argv[]) {
                 box.max_error[0] = (u_max - u_min) * box.max_error[0];
                 box.max_error[1] = (v_max - v_min) * box.max_error[1];
 
+                // Evaluate original Hessian determinant at box center
+                double u = box.center[0];
+                double v = box.center[1];
+                double orig_val = hessian_determinant(u, v);
+
                 if (k < result.num_resolved) {
-                    // Converged box - compute residuals
-                    double u = box.center[0];
-                    double v = box.center[1];
+                    // Converged box - check residual before accepting
 
                     // Evaluate local polynomial at local coordinates
                     std::vector<double> local_coords = {
@@ -467,14 +472,40 @@ int main(int argc, char* argv[]) {
                         (v - v_min) / (v_max - v_min)
                     };
                     double poly_val = local_poly.evaluate(local_coords);
-                    double orig_val = hessian_determinant(u, v);
 
                     max_poly_residual = std::max(max_poly_residual, std::abs(poly_val));
                     max_orig_residual = std::max(max_orig_residual, std::abs(orig_val));
 
-                    all_converged.push_back(box);
+                    // Prune based on original function residual
+                    if (std::abs(orig_val) <= residual_threshold) {
+                        all_converged.push_back(box);
+                    } else {
+                        pruned_converged++;
+                    }
                 } else {
-                    all_unresolved.push_back(box);
+                    // Unresolved box - also check if it's worth keeping
+                    // Check residual at box center and corners
+                    double min_residual = std::abs(orig_val);
+
+                    // Check corners
+                    double corners[4][2] = {
+                        {box.lower[0], box.lower[1]},
+                        {box.upper[0], box.lower[1]},
+                        {box.lower[0], box.upper[1]},
+                        {box.upper[0], box.upper[1]}
+                    };
+
+                    for (int c = 0; c < 4; ++c) {
+                        double corner_val = hessian_determinant(corners[c][0], corners[c][1]);
+                        min_residual = std::min(min_residual, std::abs(corner_val));
+                    }
+
+                    // Keep unresolved box if minimum residual is below threshold
+                    if (min_residual <= residual_threshold) {
+                        all_unresolved.push_back(box);
+                    } else {
+                        pruned_unresolved++;
+                    }
                 }
             }
 
@@ -484,15 +515,34 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "\n========================================" << std::endl;
-    std::cout << "Overall Results:" << std::endl;
+    std::cout << "Overall Results (before pruning):" << std::endl;
     std::cout << "  Total converged boxes: " << total_resolved << std::endl;
     std::cout << "  Total unresolved boxes: " << total_unresolved << std::endl;
     std::cout << "  Degeneracy detected: " << (any_degeneracy ? "yes" : "no") << std::endl;
 
-    if (total_resolved > 0) {
-        std::cout << "\nConverged box residuals:" << std::endl;
-        std::cout << "  Max polynomial residual: " << max_poly_residual << std::endl;
-        std::cout << "  Max original function residual: " << max_orig_residual << std::endl;
+    std::cout << "\nResidual-based pruning (threshold = " << residual_threshold << "):" << std::endl;
+    std::cout << "  Pruned converged boxes: " << pruned_converged
+              << " (" << (100.0 * pruned_converged / std::max(1u, total_resolved)) << "%)" << std::endl;
+    std::cout << "  Pruned unresolved boxes: " << pruned_unresolved
+              << " (" << (100.0 * pruned_unresolved / std::max(1u, total_unresolved)) << "%)" << std::endl;
+
+    std::cout << "\nFinal results (after pruning):" << std::endl;
+    std::cout << "  Kept converged boxes: " << all_converged.size() << std::endl;
+    std::cout << "  Kept unresolved boxes: " << all_unresolved.size() << std::endl;
+
+    // Recompute residuals for kept boxes only
+    if (!all_converged.empty()) {
+        double max_kept_residual = 0.0;
+        for (const auto& box : all_converged) {
+            double u = box.center[0];
+            double v = box.center[1];
+            double orig_val = hessian_determinant(u, v);
+            max_kept_residual = std::max(max_kept_residual, std::abs(orig_val));
+        }
+
+        std::cout << "\nKept converged box residuals:" << std::endl;
+        std::cout << "  Max original function residual: " << max_kept_residual << std::endl;
+        std::cout << "  (All kept boxes have residual <= " << residual_threshold << ")" << std::endl;
     }
 
     // Step 2: Write converged boxes (points on the curve)
