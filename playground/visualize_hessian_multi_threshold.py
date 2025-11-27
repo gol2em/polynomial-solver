@@ -77,54 +77,61 @@ def filter_points_by_threshold(converged_file, unresolved_file, threshold):
 
 def main():
     # Test multiple thresholds - can be adjusted
-    # Strict: [0.1, 0.5, 1, 5]
+    # Very strict: [0.1, 0.5, 1, 2]
+    # Strict: [0.5, 1, 5, 10]
     # Moderate: [1, 5, 10, 50]
     # Loose: [10, 50, 100, 500]
     thresholds = [0.5, 1, 5, 10]
-    
+
+    # Point size - can be adjusted (1=tiny, 3=small, 5=medium, 10=large)
+    point_size = 5
+
     converged_file = 'dumps/hessian_det_converged.txt'
     unresolved_file = 'dumps/hessian_det_boxes.txt'
-    
-    # Create figure with subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 16))
-    axes = axes.flatten()
-    
-    for idx, threshold in enumerate(thresholds):
-        ax = axes[idx]
-        
+
+    # Create individual plots for each threshold
+    for threshold in thresholds:
         print(f"\nProcessing threshold = {threshold}...")
         converged, unresolved = filter_points_by_threshold(
             converged_file, unresolved_file, threshold)
-        
+
         total_points = len(converged) + len(unresolved)
         print(f"  Converged points: {len(converged)}")
         print(f"  Unresolved points: {len(unresolved)}")
         print(f"  Total points: {total_points}")
-        
-        # Plot both as scatter points
+
+        # Create individual figure
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+
+        # Plot both as scatter points with adjustable size
         if len(converged) > 0:
             # Transform to [-1,1]^2 for display
             x_conv = 2*converged[:, 0] - 1
             y_conv = 2*converged[:, 1] - 1
-            ax.scatter(x_conv, y_conv, c='lime', s=1, alpha=0.6, label='Converged')
-        
+            ax.scatter(x_conv, y_conv, c='lime', s=point_size, alpha=0.7, label='Converged', edgecolors='none')
+
         if len(unresolved) > 0:
             x_unres = 2*unresolved[:, 0] - 1
             y_unres = 2*unresolved[:, 1] - 1
-            ax.scatter(x_unres, y_unres, c='orange', s=1, alpha=0.6, label='Unresolved')
-        
+            ax.scatter(x_unres, y_unres, c='orange', s=point_size, alpha=0.7, label='Unresolved', edgecolors='none')
+
         ax.set_xlim(-1, 1)
         ax.set_ylim(-1, 1)
-        ax.set_xlabel('x', fontsize=12)
-        ax.set_ylabel('y', fontsize=12)
-        ax.set_title(f'Threshold = {threshold} ({total_points} points)', fontsize=14, fontweight='bold')
+        ax.set_xlabel('x', fontsize=14)
+        ax.set_ylabel('y', fontsize=14)
+        ax.set_title(f'Hessian Determinant Zero Set (Threshold = {threshold}, {total_points} points)',
+                     fontsize=16, fontweight='bold')
         ax.grid(True, alpha=0.3)
-        ax.legend(loc='upper right')
+        ax.legend(loc='upper right', fontsize=12)
         ax.set_aspect('equal')
-    
-    plt.tight_layout()
-    plt.savefig('dumps/hessian_det_multi_threshold.png', dpi=150, bbox_inches='tight')
-    print(f"\n✅ Saved: dumps/hessian_det_multi_threshold.png")
+
+        # Save individual plot
+        filename = f'dumps/hessian_det_threshold_{threshold}.png'
+        plt.savefig(filename, dpi=200, bbox_inches='tight')
+        print(f"  ✅ Saved: {filename}")
+        plt.close()
+
+    print(f"\n✅ All individual plots saved!")
 
 if __name__ == '__main__':
     main()
