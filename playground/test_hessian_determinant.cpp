@@ -65,8 +65,44 @@ double hessian_determinant(double u, double v) {
     double fuu = second_derivative(f_transformed, u, v, 0, 0);
     double fvv = second_derivative(f_transformed, u, v, 1, 1);
     double fuv = second_derivative(f_transformed, u, v, 0, 1);
-    
+
     return fuu * fvv - fuv * fuv;
+}
+
+// Verify Hessian computation by checking at a few test points
+void verify_hessian_computation() {
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "Verifying Hessian Computation" << std::endl;
+    std::cout << "========================================\n" << std::endl;
+
+    // Test at a few points
+    double test_points[][2] = {
+        {0.5, 0.5},  // center
+        {0.25, 0.25},
+        {0.75, 0.75},
+        {0.1, 0.9}
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        double u = test_points[i][0];
+        double v = test_points[i][1];
+
+        double f_val = f_transformed(u, v);
+        double fuu = second_derivative(f_transformed, u, v, 0, 0);
+        double fvv = second_derivative(f_transformed, u, v, 1, 1);
+        double fuv = second_derivative(f_transformed, u, v, 0, 1);
+        double det_H = hessian_determinant(u, v);
+
+        std::cout << "Point (u=" << u << ", v=" << v << "):" << std::endl;
+        std::cout << "  f = " << f_val << std::endl;
+        std::cout << "  f_uu = " << fuu << std::endl;
+        std::cout << "  f_vv = " << fvv << std::endl;
+        std::cout << "  f_uv = " << fuv << std::endl;
+        std::cout << "  det(H) = f_uu * f_vv - f_uv² = " << det_H << std::endl;
+        std::cout << "  Verification: " << fuu << " * " << fvv << " - " << fuv << "² = "
+                  << (fuu * fvv) << " - " << (fuv * fuv) << " = " << det_H << std::endl;
+        std::cout << std::endl;
+    }
 }
 
 // Proper polynomial interpolation using least-squares fit
@@ -361,6 +397,9 @@ int main(int argc, char* argv[]) {
             std::cout << "  ⚠️  Function is too complex for polynomial interpolation\n" << std::endl;
         }
     }
+
+    // Verify Hessian computation first
+    verify_hessian_computation();
 
     // Step 0: Analyze the Hessian determinant range (global)
     std::cout << "Step 0: Analyzing global Hessian determinant range..." << std::endl;
