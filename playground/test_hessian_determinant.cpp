@@ -100,12 +100,16 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     unsigned int degree = 10;
     double degeneracy_multiplier = 10.0;
+    unsigned int subdivisions = 4;  // Subdivide domain into k x k regions
 
     if (argc > 1) {
         degree = std::atoi(argv[1]);
     }
     if (argc > 2) {
         degeneracy_multiplier = std::atof(argv[2]);
+    }
+    if (argc > 3) {
+        subdivisions = std::atoi(argv[3]);
     }
 
     std::cout << "Function: f(x,y) on [-1,1]^2" << std::endl;
@@ -119,89 +123,178 @@ int main(int argc, char* argv[]) {
     std::cout << "  det(H) = f_uu * f_vv - f_uv^2\n" << std::endl;
     
     std::cout << "Bernstein interpolation degree: " << degree << "x" << degree << std::endl;
-    std::cout << "Degeneracy multiplier: " << degeneracy_multiplier << "\n" << std::endl;
+    std::cout << "Degeneracy multiplier: " << degeneracy_multiplier << std::endl;
+    std::cout << "Domain subdivisions: " << subdivisions << "x" << subdivisions << " = "
+              << (subdivisions * subdivisions) << " regions\n" << std::endl;
 
-    // Step 0: Analyze the Hessian determinant range
-    std::cout << "Step 0: Analyzing Hessian determinant range..." << std::endl;
-    double min_val = INFINITY, max_val = -INFINITY;
+    // Step 0: Analyze the Hessian determinant range (global)
+    std::cout << "Step 0: Analyzing global Hessian determinant range..." << std::endl;
+    double global_min = INFINITY, global_max = -INFINITY;
     for (unsigned int i = 0; i <= 100; ++i) {
         for (unsigned int j = 0; j <= 100; ++j) {
             double u = i / 100.0;
             double v = j / 100.0;
             double val = hessian_determinant(u, v);
-            min_val = std::min(min_val, val);
-            max_val = std::max(max_val, val);
+            global_min = std::min(global_min, val);
+            global_max = std::max(global_max, val);
         }
     }
-    std::cout << "  Hessian det range: [" << min_val << ", " << max_val << "]" << std::endl;
-    std::cout << "  Range magnitude: " << (max_val - min_val) << "\n" << std::endl;
+    std::cout << "  Global Hessian det range: [" << global_min << ", " << global_max << "]" << std::endl;
+    std::cout << "  Global range magnitude: " << (global_max - global_min) << "\n" << std::endl;
 
-    // Step 1: Interpolate the Hessian determinant function
-    std::cout << "Step 1: Interpolating Hessian determinant..." << std::endl;
-    Polynomial hessian_det_poly = interpolate_bernstein(hessian_determinant, degree, degree);
+    // Step 1: Subdivide domain and solve in each region
+    std::cout << "Step 1: Subdividing domain and solving in each region..." << std::endl;
 
-    std::cout << "  Polynomial degree: (" << hessian_det_poly.degrees()[0]
-              << ", " << hessian_det_poly.degrees()[1] << ")" << std::endl;
-    std::cout << "  Number of coefficients: " << hessian_det_poly.coefficientCount() << "\n" << std::endl;
-
-    // Step 2: Solve for zero set
-    std::cout << "Step 2: Finding zero set using PP method..." << std::endl;
-
-    PolynomialSystem system({hessian_det_poly});
-
-    SubdivisionConfig config = defaultSolverConfig();
-    config.tolerance = 1e-4;
-    config.max_depth = 12;
-    config.degeneracy_multiplier = degeneracy_multiplier;
-    config.dump_geometry = true;
-    config.dump_prefix = "dumps/hessian_det";
-    
-    Solver solver;
-    SubdivisionSolverResult result = solver.subdivisionSolve(
-        system, config, RootBoundingMethod::ProjectedPolyhedral);
-
-    std::cout << "\nResults:" << std::endl;
-    std::cout << "  Total boxes: " << result.boxes.size() << std::endl;
-    std::cout << "  Resolved (converged): " << result.num_resolved << std::endl;
-    std::cout << "  Unresolved: " << (result.boxes.size() - result.num_resolved) << std::endl;
-    std::cout << "  Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << std::endl;
-
-    // Step 3: Write converged boxes (points on the curve) and compute residuals
-    std::ofstream converged_file("dumps/hessian_det_converged.txt");
-    converged_file << "# Hessian determinant zero set - converged boxes (points)\n";
-    converged_file << "# Format: u_center v_center poly_residual original_residual\n";
-    converged_file << "# Note: (u,v) in [0,1]^2, corresponds to (x,y) = (2u-1, 2v-1) in [-1,1]^2\n";
+    std::vector<SubdivisionBoxResult> all_converged;
+    std::vector<SubdivisionBoxResult> all_unresolved;
+    unsigned int total_resolved = 0;
+    unsigned int total_unresolved = 0;
+    bool any_degeneracy = false;
 
     double max_poly_residual = 0.0;
     double max_orig_residual = 0.0;
 
-    for (std::size_t i = 0; i < result.num_resolved; ++i) {
-        const auto& box = result.boxes[i];
-        double u = box.center[0];
-        double v = box.center[1];
-        double poly_val = hessian_det_poly.evaluate(box.center);
-        double orig_val = hessian_determinant(u, v);
-        converged_file << u << " " << v << " " << poly_val << " " << orig_val << "\n";
+    for (unsigned int i = 0; i < subdivisions; ++i) {
+        for (unsigned int j = 0; j < subdivisions; ++j) {
+            // Define subdomain [u_min, u_max] x [v_min, v_max] in [0,1]^2
+            double u_min = static_cast<double>(i) / subdivisions;
+            double u_max = static_cast<double>(i + 1) / subdivisions;
+            double v_min = static_cast<double>(j) / subdivisions;
+            double v_max = static_cast<double>(j + 1) / subdivisions;
 
-        max_poly_residual = std::max(max_poly_residual, std::abs(poly_val));
-        max_orig_residual = std::max(max_orig_residual, std::abs(orig_val));
+            std::cout << "\n  Region [" << i << "," << j << "]: u=[" << u_min << "," << u_max
+                      << "], v=[" << v_min << "," << v_max << "]" << std::endl;
+
+            // Analyze local range
+            double local_min = INFINITY, local_max = -INFINITY;
+            for (unsigned int ii = 0; ii <= 20; ++ii) {
+                for (unsigned int jj = 0; jj <= 20; ++jj) {
+                    double u = u_min + (u_max - u_min) * ii / 20.0;
+                    double v = v_min + (v_max - v_min) * jj / 20.0;
+                    double val = hessian_determinant(u, v);
+                    local_min = std::min(local_min, val);
+                    local_max = std::max(local_max, val);
+                }
+            }
+            std::cout << "    Local range: [" << local_min << ", " << local_max
+                      << "], magnitude: " << (local_max - local_min) << std::endl;
+
+            // Interpolate in this subdomain
+            // We sample the function at uniform grid points and use them as Bernstein coefficients
+            // This is an approximation, but works well for piecewise interpolation
+            std::vector<unsigned int> degrees_local = {degree, degree};
+            std::vector<double> coeffs_local;
+
+            for (unsigned int jj = 0; jj <= degree; ++jj) {
+                for (unsigned int ii = 0; ii <= degree; ++ii) {
+                    // Sample at uniform grid in local [0,1]^2
+                    double s = static_cast<double>(ii) / degree;
+                    double t = static_cast<double>(jj) / degree;
+
+                    // Transform to global [0,1]^2
+                    double u = u_min + (u_max - u_min) * s;
+                    double v = v_min + (v_max - v_min) * t;
+
+                    // Evaluate Hessian determinant
+                    double val = hessian_determinant(u, v);
+                    coeffs_local.push_back(val);
+                }
+            }
+
+            // Use Bernstein coefficients directly (approximation)
+            Polynomial local_poly = Polynomial::fromBernstein(degrees_local, coeffs_local);
+
+            // Solve in this subdomain
+            PolynomialSystem local_system({local_poly});
+
+            SubdivisionConfig config = defaultSolverConfig();
+            config.tolerance = 1e-4;
+            config.max_depth = 12;
+            config.degeneracy_multiplier = degeneracy_multiplier;
+
+            Solver solver;
+            SubdivisionSolverResult result = solver.subdivisionSolve(
+                local_system, config, RootBoundingMethod::ProjectedPolyhedral);
+
+            std::cout << "    Boxes: " << result.boxes.size()
+                      << " (converged: " << result.num_resolved
+                      << ", unresolved: " << (result.boxes.size() - result.num_resolved) << ")" << std::endl;
+
+            if (result.degeneracy_detected) {
+                any_degeneracy = true;
+            }
+
+            // Transform boxes back to global [0,1]^2 coordinates and compute residuals
+            for (std::size_t k = 0; k < result.boxes.size(); ++k) {
+                SubdivisionBoxResult box = result.boxes[k];
+
+                // Transform from local [0,1]^2 to global [0,1]^2
+                box.lower[0] = u_min + (u_max - u_min) * box.lower[0];
+                box.lower[1] = v_min + (v_max - v_min) * box.lower[1];
+                box.upper[0] = u_min + (u_max - u_min) * box.upper[0];
+                box.upper[1] = v_min + (v_max - v_min) * box.upper[1];
+                box.center[0] = u_min + (u_max - u_min) * box.center[0];
+                box.center[1] = v_min + (v_max - v_min) * box.center[1];
+                box.max_error[0] = (u_max - u_min) * box.max_error[0];
+                box.max_error[1] = (v_max - v_min) * box.max_error[1];
+
+                if (k < result.num_resolved) {
+                    // Converged box - compute residuals
+                    double u = box.center[0];
+                    double v = box.center[1];
+
+                    // Evaluate local polynomial at local coordinates
+                    std::vector<double> local_coords = {
+                        (u - u_min) / (u_max - u_min),
+                        (v - v_min) / (v_max - v_min)
+                    };
+                    double poly_val = local_poly.evaluate(local_coords);
+                    double orig_val = hessian_determinant(u, v);
+
+                    max_poly_residual = std::max(max_poly_residual, std::abs(poly_val));
+                    max_orig_residual = std::max(max_orig_residual, std::abs(orig_val));
+
+                    all_converged.push_back(box);
+                } else {
+                    all_unresolved.push_back(box);
+                }
+            }
+
+            total_resolved += result.num_resolved;
+            total_unresolved += (result.boxes.size() - result.num_resolved);
+        }
     }
-    converged_file.close();
 
-    if (result.num_resolved > 0) {
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "Overall Results:" << std::endl;
+    std::cout << "  Total converged boxes: " << total_resolved << std::endl;
+    std::cout << "  Total unresolved boxes: " << total_unresolved << std::endl;
+    std::cout << "  Degeneracy detected: " << (any_degeneracy ? "yes" : "no") << std::endl;
+
+    if (total_resolved > 0) {
         std::cout << "\nConverged box residuals:" << std::endl;
         std::cout << "  Max polynomial residual: " << max_poly_residual << std::endl;
         std::cout << "  Max original function residual: " << max_orig_residual << std::endl;
     }
 
-    // Step 4: Write unresolved boxes to file for visualization
+    // Step 2: Write converged boxes (points on the curve)
+    std::ofstream converged_file("dumps/hessian_det_converged.txt");
+    converged_file << "# Hessian determinant zero set - converged boxes (points)\n";
+    converged_file << "# Format: u_center v_center\n";
+    converged_file << "# Note: (u,v) in [0,1]^2, corresponds to (x,y) = (2u-1, 2v-1) in [-1,1]^2\n";
+
+    for (const auto& box : all_converged) {
+        converged_file << box.center[0] << " " << box.center[1] << "\n";
+    }
+    converged_file.close();
+
+    // Step 3: Write unresolved boxes to file for visualization
     std::ofstream boxes_file("dumps/hessian_det_boxes.txt");
     boxes_file << "# Hessian determinant zero set boxes (unresolved only)\n";
     boxes_file << "# Format: u_min u_max v_min v_max\n";
     boxes_file << "# Note: (u,v) in [0,1]^2, corresponds to (x,y) = (2u-1, 2v-1) in [-1,1]^2\n";
 
-    for (std::size_t i = result.num_resolved; i < result.boxes.size(); ++i) {
-        const auto& box = result.boxes[i];
+    for (const auto& box : all_unresolved) {
         boxes_file << box.lower[0] << " " << box.upper[0] << " "
                   << box.lower[1] << " " << box.upper[1] << "\n";
     }
@@ -211,7 +304,7 @@ int main(int argc, char* argv[]) {
     std::cout << "✅ Unresolved boxes written to: dumps/hessian_det_boxes.txt" << std::endl;
 
     // Step 4: Sample the Hessian determinant to understand the zero set
-    std::cout << "\nStep 3: Sampling Hessian determinant for visualization..." << std::endl;
+    std::cout << "\nStep 4: Sampling Hessian determinant for visualization..." << std::endl;
 
     std::ofstream sample_file("dumps/hessian_det_samples.txt");
     sample_file << "# Hessian determinant samples on [0,1]^2\n";

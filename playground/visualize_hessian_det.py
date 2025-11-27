@@ -51,9 +51,9 @@ def parse_converged_points(filename):
                 if line.startswith('#') or not line:
                     continue
                 parts = line.split()
-                if len(parts) == 4:
-                    u, v, poly_res, orig_res = map(float, parts)
-                    points.append((u, v, poly_res, orig_res))
+                if len(parts) >= 2:
+                    u, v = float(parts[0]), float(parts[1])
+                    points.append((u, v))
     except FileNotFoundError:
         pass
     return points
