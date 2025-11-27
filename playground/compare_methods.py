@@ -23,8 +23,8 @@ def compute_hessian_determinant(x, y, h=1e-6):
             f_original(x-h, y+h) + f_original(x-h, y-h)) / (4*h*h)
     return f_xx * f_yy - f_xy * f_xy
 
-def load_all_boxes(threshold=10.0):
-    """Load unresolved boxes with loose threshold filtering."""
+def load_all_boxes(threshold=None):
+    """Load unresolved boxes with optional threshold filtering."""
     boxes = []
 
     try:
@@ -40,7 +40,7 @@ def load_all_boxes(threshold=10.0):
                     # Transform to [-1,1]^2
                     x, y = 2*u_center - 1, 2*v_center - 1
                     residual = abs(compute_hessian_determinant(x, y))
-                    if residual <= threshold:
+                    if threshold is None or residual <= threshold:
                         boxes.append([x, y, residual])
     except FileNotFoundError:
         print("Warning: boxes file not found")
@@ -96,11 +96,11 @@ def main():
 
     # Thresholds
     converged_threshold = 1.0  # Strict threshold for converged points
-    unresolved_threshold = 10.0  # Loose threshold for unresolved boxes
+    unresolved_threshold = None  # No threshold for unresolved boxes (show all)
 
     print(f"\nThresholds:")
     print(f"  Converged points: residual <= {converged_threshold}")
-    print(f"  Unresolved boxes: residual <= {unresolved_threshold}")
+    print(f"  Unresolved boxes: no threshold (show all)")
 
     # Compute contour once
     print("\n1. Computing ground truth contour...")
@@ -108,7 +108,7 @@ def main():
     X, Y, det_H = compute_hessian_grid(resolution=800)
 
     # Load filtered boxes and converged points
-    print(f"\n2. Loading solver results with filtering...")
+    print(f"\n2. Loading solver results...")
     print("-" * 70)
 
     boxes = load_all_boxes(threshold=unresolved_threshold)
@@ -169,14 +169,14 @@ def main():
     # Plot unresolved boxes (orange, larger, more visible)
     if len(boxes) > 0:
         ax2.scatter(boxes[:, 0], boxes[:, 1], c='darkorange', s=8, alpha=0.7,
-                   edgecolors='none', label=f'Unresolved (≤{unresolved_threshold}): {len(boxes)}')
+                   edgecolors='none', label=f'Unresolved (all): {len(boxes)}')
 
     ax2.set_xlim(-1, 1)
     ax2.set_ylim(-1, 1)
     ax2.set_xlabel('x', fontsize=16)
     ax2.set_ylabel('y', fontsize=16)
     total_points = len(converged) + len(boxes)
-    ax2.set_title(f'Polynomial Solver Method\n{total_points} filtered points',
+    ax2.set_title(f'Polynomial Solver Method\n{total_points} points',
                  fontsize=18, fontweight='bold')
     ax2.grid(True, alpha=0.3)
     ax2.legend(loc='upper right', fontsize=11)
@@ -212,7 +212,7 @@ def main():
     print("  • Subdivides domain for better local accuracy")
     print("  • Finds boxes containing the zero set")
     print(f"  • Converged points filtered: residual ≤ {converged_threshold}")
-    print(f"  • Unresolved boxes filtered: residual ≤ {unresolved_threshold}")
+    print(f"  • Unresolved boxes: no filtering (all boxes shown)")
     print("\nThe contour method:")
     print("  • Direct numerical evaluation on 800×800 grid")
     print("  • Finds exact zero level curve")
