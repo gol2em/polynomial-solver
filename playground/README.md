@@ -2,7 +2,14 @@
 
 This directory contains experimental tests for the polynomial solver library.
 
-## Available Tests
+## Samples
+
+The `samples/` folder contains simple, well-tested examples demonstrating successful usage:
+- **Circle Test**: Finding the zero set of x² + y² - 1 = 0
+
+See `samples/README.md` for details.
+
+## Experimental Tests
 
 ### 1. Circle Test (`test_with_geometry_dump`)
 Tests the solver on a simple circle equation: x² + y² - 1 = 0

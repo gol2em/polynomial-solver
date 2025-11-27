@@ -99,10 +99,15 @@ int main(int argc, char* argv[]) {
     
     // Parse command line arguments
     unsigned int degree = 10;
+    double degeneracy_multiplier = 10.0;
+
     if (argc > 1) {
         degree = std::atoi(argv[1]);
     }
-    
+    if (argc > 2) {
+        degeneracy_multiplier = std::atof(argv[2]);
+    }
+
     std::cout << "Function: f(x,y) on [-1,1]^2" << std::endl;
     std::cout << "  f1 = 10*x*y*x*y + sqrt(|x*x*y|)" << std::endl;
     std::cout << "  f2 = atan2(0.001, sin(5*y) - 2*x)" << std::endl;
@@ -113,25 +118,26 @@ int main(int argc, char* argv[]) {
     std::cout << "Goal: Find zero set of det(Hessian(f))" << std::endl;
     std::cout << "  det(H) = f_uu * f_vv - f_uv^2\n" << std::endl;
     
-    std::cout << "Bernstein interpolation degree: " << degree << "x" << degree << "\n" << std::endl;
-    
+    std::cout << "Bernstein interpolation degree: " << degree << "x" << degree << std::endl;
+    std::cout << "Degeneracy multiplier: " << degeneracy_multiplier << "\n" << std::endl;
+
     // Step 1: Interpolate the Hessian determinant function
     std::cout << "Step 1: Interpolating Hessian determinant..." << std::endl;
     Polynomial hessian_det_poly = interpolate_bernstein(hessian_determinant, degree, degree);
-    
+
     std::cout << "  Polynomial degree: (" << hessian_det_poly.degrees()[0]
               << ", " << hessian_det_poly.degrees()[1] << ")" << std::endl;
     std::cout << "  Number of coefficients: " << hessian_det_poly.coefficientCount() << "\n" << std::endl;
-    
+
     // Step 2: Solve for zero set
     std::cout << "Step 2: Finding zero set using PP method..." << std::endl;
-    
+
     PolynomialSystem system({hessian_det_poly});
-    
+
     SubdivisionConfig config = defaultSolverConfig();
     config.tolerance = 1e-4;
     config.max_depth = 12;
-    config.degeneracy_multiplier = 10.0;  // Higher for curves
+    config.degeneracy_multiplier = degeneracy_multiplier;
     config.dump_geometry = true;
     config.dump_prefix = "dumps/hessian_det";
     
@@ -141,11 +147,39 @@ int main(int argc, char* argv[]) {
 
     std::cout << "\nResults:" << std::endl;
     std::cout << "  Total boxes: " << result.boxes.size() << std::endl;
-    std::cout << "  Resolved: " << result.num_resolved << std::endl;
+    std::cout << "  Resolved (converged): " << result.num_resolved << std::endl;
     std::cout << "  Unresolved: " << (result.boxes.size() - result.num_resolved) << std::endl;
     std::cout << "  Degeneracy detected: " << (result.degeneracy_detected ? "yes" : "no") << std::endl;
 
-    // Step 3: Write unresolved boxes to file for visualization
+    // Step 3: Write converged boxes (points on the curve) and compute residuals
+    std::ofstream converged_file("dumps/hessian_det_converged.txt");
+    converged_file << "# Hessian determinant zero set - converged boxes (points)\n";
+    converged_file << "# Format: u_center v_center poly_residual original_residual\n";
+    converged_file << "# Note: (u,v) in [0,1]^2, corresponds to (x,y) = (2u-1, 2v-1) in [-1,1]^2\n";
+
+    double max_poly_residual = 0.0;
+    double max_orig_residual = 0.0;
+
+    for (std::size_t i = 0; i < result.num_resolved; ++i) {
+        const auto& box = result.boxes[i];
+        double u = box.center[0];
+        double v = box.center[1];
+        double poly_val = hessian_det_poly.evaluate(box.center);
+        double orig_val = hessian_determinant(u, v);
+        converged_file << u << " " << v << " " << poly_val << " " << orig_val << "\n";
+
+        max_poly_residual = std::max(max_poly_residual, std::abs(poly_val));
+        max_orig_residual = std::max(max_orig_residual, std::abs(orig_val));
+    }
+    converged_file.close();
+
+    if (result.num_resolved > 0) {
+        std::cout << "\nConverged box residuals:" << std::endl;
+        std::cout << "  Max polynomial residual: " << max_poly_residual << std::endl;
+        std::cout << "  Max original function residual: " << max_orig_residual << std::endl;
+    }
+
+    // Step 4: Write unresolved boxes to file for visualization
     std::ofstream boxes_file("dumps/hessian_det_boxes.txt");
     boxes_file << "# Hessian determinant zero set boxes (unresolved only)\n";
     boxes_file << "# Format: u_min u_max v_min v_max\n";
@@ -158,7 +192,8 @@ int main(int argc, char* argv[]) {
     }
     boxes_file.close();
 
-    std::cout << "\n✅ Boxes written to: dumps/hessian_det_boxes.txt" << std::endl;
+    std::cout << "\n✅ Converged points written to: dumps/hessian_det_converged.txt" << std::endl;
+    std::cout << "✅ Unresolved boxes written to: dumps/hessian_det_boxes.txt" << std::endl;
 
     // Step 4: Sample the Hessian determinant to understand the zero set
     std::cout << "\nStep 3: Sampling Hessian determinant for visualization..." << std::endl;
