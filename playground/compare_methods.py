@@ -68,7 +68,7 @@ def compute_hessian_grid(resolution=800):
 
 def main():
     print("=" * 70)
-    print("Comparing Contour Method vs Polynomial Solver (All Unresolved Boxes)")
+    print("Comparing Contour Method vs Polynomial Solver")
     print("=" * 70)
 
     # Compute contour once
@@ -95,11 +95,11 @@ def main():
             val = np.percentile(boxes[:, 2], p)
             print(f"    {p}th percentile: {val:.2e}")
 
-    # Create side-by-side comparison
+    # Create side-by-side comparison (no overlay)
     print(f"\n3. Creating visualization...")
     print("-" * 70)
 
-    fig, axes = plt.subplots(1, 3, figsize=(24, 8))
+    fig, axes = plt.subplots(1, 2, figsize=(20, 9))
 
     # Left: Contour method only
     ax1 = axes[0]
@@ -107,48 +107,35 @@ def main():
     ax1.contour(X, Y, det_H, levels=[0], colors='black', linewidths=3)
     ax1.set_xlim(-1, 1)
     ax1.set_ylim(-1, 1)
-    ax1.set_xlabel('x', fontsize=14)
-    ax1.set_ylabel('y', fontsize=14)
-    ax1.set_title('Ground Truth (Contour Method)', fontsize=16, fontweight='bold')
+    ax1.set_xlabel('x', fontsize=16)
+    ax1.set_ylabel('y', fontsize=16)
+    ax1.set_title('Ground Truth (Contour Method)\n800×800 grid evaluation',
+                 fontsize=18, fontweight='bold')
     ax1.grid(True, alpha=0.3)
     ax1.set_aspect('equal')
-    plt.colorbar(contourf1, ax=ax1, label='det(H)')
+    cbar1 = plt.colorbar(contourf1, ax=ax1, label='det(H)')
+    cbar1.ax.tick_params(labelsize=12)
 
-    # Middle: Polynomial solver only
+    # Right: Polynomial solver only
     ax2 = axes[1]
     if len(boxes) > 0:
         # Use log scale for better visualization of wide residual range
         scatter = ax2.scatter(boxes[:, 0], boxes[:, 1], c=np.log10(boxes[:, 2] + 1e-10),
-                             cmap='viridis', s=3, alpha=0.6, edgecolors='none')
-        cbar = plt.colorbar(scatter, ax=ax2, label='log10(|det(H)|)')
+                             cmap='viridis', s=2, alpha=0.7, edgecolors='none')
+        cbar2 = plt.colorbar(scatter, ax=ax2, label='log10(|det(H)|)')
+        cbar2.ax.tick_params(labelsize=12)
     ax2.set_xlim(-1, 1)
     ax2.set_ylim(-1, 1)
-    ax2.set_xlabel('x', fontsize=14)
-    ax2.set_ylabel('y', fontsize=14)
-    ax2.set_title(f'Polynomial Solver (all {len(boxes)} unresolved boxes)',
-                 fontsize=16, fontweight='bold')
+    ax2.set_xlabel('x', fontsize=16)
+    ax2.set_ylabel('y', fontsize=16)
+    ax2.set_title(f'Polynomial Solver Method\n{len(boxes)} unresolved boxes',
+                 fontsize=18, fontweight='bold')
     ax2.grid(True, alpha=0.3)
     ax2.set_aspect('equal')
 
-    # Right: Overlay comparison
-    ax3 = axes[2]
-    ax3.contourf(X, Y, det_H, levels=100, cmap='RdBu_r', alpha=0.4)
-    ax3.contour(X, Y, det_H, levels=[0], colors='black', linewidths=3, label='Contour')
-    if len(boxes) > 0:
-        ax3.scatter(boxes[:, 0], boxes[:, 1], c='lime', s=3, alpha=0.5,
-                   edgecolors='none', label=f'Solver ({len(boxes)} pts)')
-    ax3.set_xlim(-1, 1)
-    ax3.set_ylim(-1, 1)
-    ax3.set_xlabel('x', fontsize=14)
-    ax3.set_ylabel('y', fontsize=14)
-    ax3.set_title('Overlay Comparison', fontsize=16, fontweight='bold')
-    ax3.grid(True, alpha=0.3)
-    ax3.legend(loc='upper right', fontsize=12)
-    ax3.set_aspect('equal')
-
     plt.tight_layout()
-    filename = 'dumps/method_comparison_all_boxes.png'
-    plt.savefig(filename, dpi=200, bbox_inches='tight')
+    filename = 'dumps/method_comparison_side_by_side.png'
+    plt.savefig(filename, dpi=250, bbox_inches='tight')
     print(f"  ✅ Saved: {filename}")
     plt.close()
 
@@ -164,13 +151,16 @@ def main():
         print(f"  Mean: {np.mean(boxes[:, 2]):.2e}")
         print(f"  Median: {np.median(boxes[:, 2]):.2e}")
     print("\nThe polynomial solver method:")
-    print("  • Uses piecewise polynomial interpolation (8×8 subdivisions)")
+    print("  • Uses piecewise polynomial interpolation")
+    print("  • Subdivides domain for better local accuracy")
     print("  • Finds boxes containing the zero set")
-    print("  • Shows ALL unresolved boxes without filtering")
+    print("  • Shows ALL unresolved boxes")
     print("\nThe contour method:")
     print("  • Direct numerical evaluation on 800×800 grid")
     print("  • Finds exact zero level curve")
     print("  • Serves as ground truth for comparison")
+    print("\nNote: Run test_hessian_determinant with different subdivision")
+    print("      parameters to generate results with varying accuracy.")
 
 if __name__ == '__main__':
     main()
