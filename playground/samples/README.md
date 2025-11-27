@@ -31,9 +31,14 @@ python3 visualize_circle_boxes_2d.py
 - **Degeneracy detected**: Yes (expected for curves)
 
 With degeneracy_multiplier=5.0:
-- ~100 converged points
-- ~50 unresolved boxes
-- Mean radius ≈ 0.80 (boxes are inside [0,1]², so only part of circle is visible)
+- 0 converged points
+- 84 unresolved boxes
+- Mean radius ≈ 0.999 (very close to unit circle)
+
+With degeneracy_multiplier=20.0:
+- 4 converged points
+- 285 unresolved boxes
+- Mean radius ≈ 0.9997 (even closer to unit circle)
 
 ### Key Features Demonstrated
 

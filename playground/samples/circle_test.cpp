@@ -30,15 +30,15 @@ int main(int argc, char* argv[]) {
     std::cout << "Degeneracy multiplier: " << degeneracy_multiplier << "\n" << std::endl;
     
     // Define the polynomial: x² + y² - 1
-    // In Bernstein form on [0,1]²
+    // In power basis: f(x,y) = -1 + 0*y + 1*y^2 + 0*x + 0*xy + 0*xy^2 + 1*x^2 + 0*x^2y + 0*x^2y^2
     std::vector<unsigned int> degrees = {2, 2};
-    std::vector<double> coeffs = {
-        -1.0,  -0.5,   0.0,   // (0,0), (0,1), (0,2)
-        -0.5,   0.0,   0.5,   // (1,0), (1,1), (1,2)
-         0.0,   0.5,   1.0    // (2,0), (2,1), (2,2)
+    std::vector<double> power_coeffs = {
+        -1.0,  0.0,  1.0,   // 1, y, y^2      (x^0)
+         0.0,  0.0,  0.0,   // x, xy, xy^2    (x^1)
+         1.0,  0.0,  0.0    // x^2, x^2y, x^2y^2  (x^2)
     };
-    
-    Polynomial circle_poly(degrees, coeffs);
+
+    Polynomial circle_poly = Polynomial::fromPower(degrees, power_coeffs);
     PolynomialSystem system({circle_poly});
     
     std::cout << "Polynomial: x² + y² - 1" << std::endl;

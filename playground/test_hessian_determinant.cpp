@@ -121,6 +121,21 @@ int main(int argc, char* argv[]) {
     std::cout << "Bernstein interpolation degree: " << degree << "x" << degree << std::endl;
     std::cout << "Degeneracy multiplier: " << degeneracy_multiplier << "\n" << std::endl;
 
+    // Step 0: Analyze the Hessian determinant range
+    std::cout << "Step 0: Analyzing Hessian determinant range..." << std::endl;
+    double min_val = INFINITY, max_val = -INFINITY;
+    for (unsigned int i = 0; i <= 100; ++i) {
+        for (unsigned int j = 0; j <= 100; ++j) {
+            double u = i / 100.0;
+            double v = j / 100.0;
+            double val = hessian_determinant(u, v);
+            min_val = std::min(min_val, val);
+            max_val = std::max(max_val, val);
+        }
+    }
+    std::cout << "  Hessian det range: [" << min_val << ", " << max_val << "]" << std::endl;
+    std::cout << "  Range magnitude: " << (max_val - min_val) << "\n" << std::endl;
+
     // Step 1: Interpolate the Hessian determinant function
     std::cout << "Step 1: Interpolating Hessian determinant..." << std::endl;
     Polynomial hessian_det_poly = interpolate_bernstein(hessian_determinant, degree, degree);
