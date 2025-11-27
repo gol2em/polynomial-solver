@@ -49,18 +49,23 @@ def compute_hessian_determinant_grid(resolution=500):
     x = np.linspace(-1, 1, resolution)
     y = np.linspace(-1, 1, resolution)
     X, Y = np.meshgrid(x, y)
-    
+
     print(f"Computing Hessian determinant on {resolution}x{resolution} grid...")
-    
+    print(f"  Total points: {resolution * resolution:,}")
+
     # Vectorized computation
     det_H = np.zeros_like(X)
+    total = resolution
+    progress_interval = max(1, resolution // 20)  # Show 20 progress updates
+
     for i in range(resolution):
-        if i % 50 == 0:
-            print(f"  Progress: {i}/{resolution}")
+        if i % progress_interval == 0:
+            percent = 100.0 * i / resolution
+            print(f"  Progress: {i}/{resolution} ({percent:.1f}%)")
         for j in range(resolution):
             det_H[i, j], _, _, _ = compute_hessian_determinant_numerical(X[i, j], Y[i, j])
-    
-    print("  Done!")
+
+    print("  Progress: 100.0% - Done!")
     return X, Y, det_H
 
 def load_solver_results():
@@ -123,10 +128,10 @@ def main():
     print(f"       = {f_xx * f_yy:.4f} - {f_xy * f_xy:.4f}")
     print(f"       = {det_H:.4f}")
     
-    # Compute on grid
+    # Compute on grid with higher resolution for smooth curve
     print(f"\n2. Computing Hessian determinant on grid...")
     print("-" * 60)
-    X, Y, det_H_grid = compute_hessian_determinant_grid(resolution=300)
+    X, Y, det_H_grid = compute_hessian_determinant_grid(resolution=800)
     
     print(f"\nHessian determinant statistics:")
     print(f"  Min: {np.min(det_H_grid):.2e}")
@@ -150,11 +155,11 @@ def main():
     ax1 = axes[0]
 
     # Plot filled contours for context
-    levels = np.linspace(np.min(det_H_grid), np.max(det_H_grid), 50)
+    levels = np.linspace(np.min(det_H_grid), np.max(det_H_grid), 100)
     contourf = ax1.contourf(X, Y, det_H_grid, levels=levels, cmap='RdBu_r', alpha=0.6)
 
-    # Plot zero level curve in black (the actual zero set)
-    contour_zero = ax1.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=3)
+    # Plot zero level curve in black (the actual zero set) with higher smoothness
+    contour_zero = ax1.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=4, antialiased=True)
 
     ax1.set_xlim(-1, 1)
     ax1.set_ylim(-1, 1)
@@ -171,8 +176,8 @@ def main():
     # Right plot: Comparison with solver results
     ax2 = axes[1]
 
-    # Plot contour zero curve
-    ax2.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=2, label='Contour (ground truth)')
+    # Plot contour zero curve with smooth antialiasing
+    ax2.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=3, antialiased=True, label='Contour (ground truth)')
 
     # Plot solver results
     if len(converged) > 0:
@@ -193,15 +198,15 @@ def main():
     ax2.set_aspect('equal')
 
     plt.tight_layout()
-    plt.savefig('dumps/hessian_det_curve_comparison.png', dpi=200, bbox_inches='tight')
-    print(f"  ✅ Saved: dumps/hessian_det_curve_comparison.png")
+    plt.savefig('dumps/hessian_det_curve_comparison.png', dpi=250, bbox_inches='tight')
+    print(f"  ✅ Saved: dumps/hessian_det_curve_comparison.png (high resolution)")
 
     # Create a detailed view of just the contour curve
-    fig2, ax = plt.subplots(1, 1, figsize=(12, 12))
+    fig2, ax = plt.subplots(1, 1, figsize=(14, 14))
 
-    # Plot with better color scheme
-    contourf2 = ax.contourf(X, Y, det_H_grid, levels=50, cmap='RdBu_r', alpha=0.7)
-    contour_zero2 = ax.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=4)
+    # Plot with better color scheme and more levels for smoothness
+    contourf2 = ax.contourf(X, Y, det_H_grid, levels=100, cmap='RdBu_r', alpha=0.7)
+    contour_zero2 = ax.contour(X, Y, det_H_grid, levels=[0], colors='black', linewidths=5, antialiased=True)
 
     # Add labels to show regions
     ax.text(0.5, 0.5, 'det(H) > 0\n(convex/concave)', fontsize=12, ha='center',
@@ -221,8 +226,12 @@ def main():
     cbar2 = plt.colorbar(contourf2, ax=ax)
     cbar2.set_label('det(H)', fontsize=14)
 
-    plt.savefig('dumps/hessian_det_curve_detailed.png', dpi=200, bbox_inches='tight')
-    print(f"  ✅ Saved: dumps/hessian_det_curve_detailed.png")
+    plt.savefig('dumps/hessian_det_curve_detailed.png', dpi=250, bbox_inches='tight')
+    print(f"  ✅ Saved: dumps/hessian_det_curve_detailed.png (high resolution)")
+
+    # Also create an ultra-high resolution version for publication quality
+    plt.savefig('dumps/hessian_det_curve_detailed_hires.png', dpi=300, bbox_inches='tight')
+    print(f"  ✅ Saved: dumps/hessian_det_curve_detailed_hires.png (ultra-high resolution)")
 
     print("\n" + "=" * 60)
     print("Summary:")
