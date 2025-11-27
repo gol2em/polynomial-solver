@@ -69,27 +69,141 @@ double hessian_determinant(double u, double v) {
     return fuu * fvv - fuv * fuv;
 }
 
-// Interpolate a function with Bernstein polynomial of degree k
-Polynomial interpolate_bernstein(double (*func)(double, double), unsigned int degree_u, unsigned int degree_v) {
-    std::cout << "Interpolating function with Bernstein polynomial of degree (" 
-              << degree_u << ", " << degree_v << ")..." << std::endl;
-    
-    // Sample the function at Bernstein interpolation points (Chebyshev-like)
+// Proper polynomial interpolation using least-squares fit
+// Sample at many points and fit a polynomial in power basis
+Polynomial interpolate_proper(double (*func)(double, double),
+                              unsigned int degree_u, unsigned int degree_v,
+                              double u_min, double u_max, double v_min, double v_max) {
+    // For proper interpolation, we need to solve a linear system
+    // We'll use oversampling: sample at (degree+1)^2 points and use least-squares
+
+    unsigned int n_samples_u = degree_u + 1;
+    unsigned int n_samples_v = degree_v + 1;
+    unsigned int n_coeffs = (degree_u + 1) * (degree_v + 1);
+
+    // Sample function at uniform grid
+    std::vector<double> sample_values;
+    std::vector<std::pair<double, double>> sample_points;
+
+    for (unsigned int j = 0; j < n_samples_v; ++j) {
+        for (unsigned int i = 0; i < n_samples_u; ++i) {
+            double s = static_cast<double>(i) / (n_samples_u - 1);
+            double t = static_cast<double>(j) / (n_samples_v - 1);
+            double u = u_min + (u_max - u_min) * s;
+            double v = v_min + (v_max - v_min) * t;
+
+            sample_points.push_back({s, t});
+            sample_values.push_back(func(u, v));
+        }
+    }
+
+    // Build Vandermonde-like matrix for 2D polynomial
+    // For simplicity, we'll use a direct approach: fit in power basis
+    std::vector<std::vector<double>> A(sample_values.size(), std::vector<double>(n_coeffs, 0.0));
+
+    for (std::size_t k = 0; k < sample_values.size(); ++k) {
+        double s = sample_points[k].first;
+        double t = sample_points[k].second;
+
+        std::size_t coeff_idx = 0;
+        for (unsigned int i = 0; i <= degree_u; ++i) {
+            for (unsigned int j = 0; j <= degree_v; ++j) {
+                double s_pow = 1.0;
+                for (unsigned int p = 0; p < i; ++p) s_pow *= s;
+                double t_pow = 1.0;
+                for (unsigned int q = 0; q < j; ++q) t_pow *= t;
+
+                A[k][coeff_idx] = s_pow * t_pow;
+                coeff_idx++;
+            }
+        }
+    }
+
+    // Solve least-squares: A^T A x = A^T b
+    std::vector<std::vector<double>> ATA(n_coeffs, std::vector<double>(n_coeffs, 0.0));
+    std::vector<double> ATb(n_coeffs, 0.0);
+
+    for (std::size_t i = 0; i < n_coeffs; ++i) {
+        for (std::size_t j = 0; j < n_coeffs; ++j) {
+            for (std::size_t k = 0; k < sample_values.size(); ++k) {
+                ATA[i][j] += A[k][i] * A[k][j];
+            }
+        }
+        for (std::size_t k = 0; k < sample_values.size(); ++k) {
+            ATb[i] += A[k][i] * sample_values[k];
+        }
+    }
+
+    // Simple Gaussian elimination (for small systems)
+    std::vector<double> power_coeffs(n_coeffs, 0.0);
+
+    for (std::size_t i = 0; i < n_coeffs; ++i) {
+        // Find pivot
+        std::size_t pivot = i;
+        for (std::size_t j = i + 1; j < n_coeffs; ++j) {
+            if (std::abs(ATA[j][i]) > std::abs(ATA[pivot][i])) {
+                pivot = j;
+            }
+        }
+
+        if (std::abs(ATA[pivot][i]) < 1e-12) {
+            continue;  // Singular, skip
+        }
+
+        // Swap rows
+        if (pivot != i) {
+            std::swap(ATA[i], ATA[pivot]);
+            std::swap(ATb[i], ATb[pivot]);
+        }
+
+        // Eliminate
+        for (std::size_t j = i + 1; j < n_coeffs; ++j) {
+            double factor = ATA[j][i] / ATA[i][i];
+            for (std::size_t k = i; k < n_coeffs; ++k) {
+                ATA[j][k] -= factor * ATA[i][k];
+            }
+            ATb[j] -= factor * ATb[i];
+        }
+    }
+
+    // Back substitution
+    for (int i = n_coeffs - 1; i >= 0; --i) {
+        if (std::abs(ATA[i][i]) < 1e-12) {
+            power_coeffs[i] = 0.0;
+            continue;
+        }
+
+        power_coeffs[i] = ATb[i];
+        for (std::size_t j = i + 1; j < n_coeffs; ++j) {
+            power_coeffs[i] -= ATA[i][j] * power_coeffs[j];
+        }
+        power_coeffs[i] /= ATA[i][i];
+    }
+
+    std::vector<unsigned int> degrees = {degree_u, degree_v};
+    return Polynomial::fromPower(degrees, power_coeffs);
+}
+
+// Simple approximation: just use function values as Bernstein coefficients
+Polynomial interpolate_bernstein_approx(double (*func)(double, double),
+                                       unsigned int degree_u, unsigned int degree_v,
+                                       double u_min, double u_max, double v_min, double v_max) {
     std::vector<double> bernstein_coeffs;
-    
+
     for (unsigned int j = 0; j <= degree_v; ++j) {
         for (unsigned int i = 0; i <= degree_u; ++i) {
-            // Use uniform sampling for simplicity
-            double u = static_cast<double>(i) / degree_u;
-            double v = static_cast<double>(j) / degree_v;
-            
+            double s = static_cast<double>(i) / degree_u;
+            double t = static_cast<double>(j) / degree_v;
+            double u = u_min + (u_max - u_min) * s;
+            double v = v_min + (v_max - v_min) * t;
+
             double value = func(u, v);
             bernstein_coeffs.push_back(value);
         }
     }
-    
+
     std::vector<unsigned int> degrees = {degree_u, degree_v};
-    return Polynomial(degrees, bernstein_coeffs);
+    return Polynomial::fromBernstein(degrees, bernstein_coeffs);
 }
 
 int main(int argc, char* argv[]) {
@@ -127,6 +241,127 @@ int main(int argc, char* argv[]) {
     std::cout << "Domain subdivisions: " << subdivisions << "x" << subdivisions << " = "
               << (subdivisions * subdivisions) << " regions\n" << std::endl;
 
+    // Test interpolation quality on a small region first
+    if (subdivisions > 1) {
+        std::cout << "========================================" << std::endl;
+        std::cout << "Testing Interpolation Quality on Sample Region" << std::endl;
+        std::cout << "========================================\n" << std::endl;
+
+        // Pick first region: [0, 1/subdivisions] x [0, 1/subdivisions]
+        double test_u_min = 0.0, test_u_max = 1.0 / subdivisions;
+        double test_v_min = 0.0, test_v_max = 1.0 / subdivisions;
+
+        std::cout << "Test region: u=[" << test_u_min << "," << test_u_max
+                  << "], v=[" << test_v_min << "," << test_v_max << "]" << std::endl;
+
+        // Compute local range
+        double test_min = INFINITY, test_max = -INFINITY;
+        for (unsigned int i = 0; i <= 20; ++i) {
+            for (unsigned int j = 0; j <= 20; ++j) {
+                double u = test_u_min + (test_u_max - test_u_min) * i / 20.0;
+                double v = test_v_min + (test_v_max - test_v_min) * j / 20.0;
+                double val = hessian_determinant(u, v);
+                test_min = std::min(test_min, val);
+                test_max = std::max(test_max, val);
+            }
+        }
+        std::cout << "Local range: [" << test_min << ", " << test_max
+                  << "], magnitude: " << (test_max - test_min) << "\n" << std::endl;
+
+        // Method 1: Direct Bernstein approximation (current approach)
+        std::cout << "Method 1: Direct Bernstein approximation (degree " << degree << "x" << degree << ")..." << std::endl;
+        Polynomial test_poly_approx = interpolate_bernstein_approx(
+            hessian_determinant, degree, degree, test_u_min, test_u_max, test_v_min, test_v_max);
+
+        // Check interpolation error at many test points
+        double max_abs_error_approx = 0.0;
+        double sum_abs_error_approx = 0.0;
+        int num_test_points = 0;
+
+        for (unsigned int i = 0; i <= 9; ++i) {
+            for (unsigned int j = 0; j <= 9; ++j) {
+                // Use slightly offset points (not exactly on grid)
+                double s = (i + 0.5) / 10.0;
+                double t = (j + 0.5) / 10.0;
+                double u = test_u_min + (test_u_max - test_u_min) * s;
+                double v = test_v_min + (test_v_max - test_v_min) * t;
+
+                // Evaluate both original and polynomial
+                double orig_val = hessian_determinant(u, v);
+                std::vector<double> local_coords = {s, t};
+                double poly_val = test_poly_approx.evaluate(local_coords);
+
+                double abs_error = std::abs(poly_val - orig_val);
+                max_abs_error_approx = std::max(max_abs_error_approx, abs_error);
+                sum_abs_error_approx += abs_error;
+                num_test_points++;
+            }
+        }
+
+        double avg_abs_error_approx = sum_abs_error_approx / num_test_points;
+        double error_ratio_approx = max_abs_error_approx / (test_max - test_min);
+
+        std::cout << "  Max absolute error: " << max_abs_error_approx << std::endl;
+        std::cout << "  Avg absolute error: " << avg_abs_error_approx << std::endl;
+        std::cout << "  Error/Range ratio: " << error_ratio_approx << std::endl;
+
+
+        // Method 2: Proper polynomial interpolation
+        std::cout << "\nMethod 2: Proper polynomial interpolation (degree " << degree << "x" << degree << ")..." << std::endl;
+        Polynomial test_poly_proper = interpolate_proper(
+            hessian_determinant, degree, degree, test_u_min, test_u_max, test_v_min, test_v_max);
+
+        double max_abs_error_proper = 0.0;
+        double sum_abs_error_proper = 0.0;
+        num_test_points = 0;
+
+        for (unsigned int i = 0; i <= 9; ++i) {
+            for (unsigned int j = 0; j <= 9; ++j) {
+                double s = (i + 0.5) / 10.0;
+                double t = (j + 0.5) / 10.0;
+                double u = test_u_min + (test_u_max - test_u_min) * s;
+                double v = test_v_min + (test_v_max - test_v_min) * t;
+
+                double orig_val = hessian_determinant(u, v);
+                std::vector<double> local_coords = {s, t};
+                double poly_val = test_poly_proper.evaluate(local_coords);
+
+                double abs_error = std::abs(poly_val - orig_val);
+                max_abs_error_proper = std::max(max_abs_error_proper, abs_error);
+                sum_abs_error_proper += abs_error;
+                num_test_points++;
+            }
+        }
+
+        double avg_abs_error_proper = sum_abs_error_proper / num_test_points;
+        double error_ratio_proper = max_abs_error_proper / (test_max - test_min);
+
+        std::cout << "  Max absolute error: " << max_abs_error_proper << std::endl;
+        std::cout << "  Avg absolute error: " << avg_abs_error_proper << std::endl;
+        std::cout << "  Error/Range ratio: " << error_ratio_proper << std::endl;
+
+        // Compare methods
+        std::cout << "\nComparison:" << std::endl;
+        std::cout << "  Approximation error ratio: " << error_ratio_approx << std::endl;
+        std::cout << "  Proper interpolation error ratio: " << error_ratio_proper << std::endl;
+
+        if (error_ratio_proper < error_ratio_approx * 0.5) {
+            std::cout << "  ✅ Proper interpolation is significantly better!" << std::endl;
+        } else if (error_ratio_proper < error_ratio_approx) {
+            std::cout << "  ✓ Proper interpolation is somewhat better" << std::endl;
+        } else {
+            std::cout << "  ⚠️  Proper interpolation doesn't help much" << std::endl;
+        }
+
+        if (error_ratio_proper < 0.01) {
+            std::cout << "  ✅ Proper interpolation quality is excellent (<1% error)\n" << std::endl;
+        } else if (error_ratio_proper < 0.1) {
+            std::cout << "  ✓ Proper interpolation quality is acceptable (<10% error)\n" << std::endl;
+        } else {
+            std::cout << "  ⚠️  Function is too complex for polynomial interpolation\n" << std::endl;
+        }
+    }
+
     // Step 0: Analyze the Hessian determinant range (global)
     std::cout << "Step 0: Analyzing global Hessian determinant range..." << std::endl;
     double global_min = INFINITY, global_max = -INFINITY;
@@ -149,10 +384,14 @@ int main(int argc, char* argv[]) {
     std::vector<SubdivisionBoxResult> all_unresolved;
     unsigned int total_resolved = 0;
     unsigned int total_unresolved = 0;
+    unsigned int skipped_regions = 0;
     bool any_degeneracy = false;
 
     double max_poly_residual = 0.0;
     double max_orig_residual = 0.0;
+
+    // Interpolation quality threshold
+    const double max_acceptable_error_ratio = 0.5;  // 50% of range
 
     for (unsigned int i = 0; i < subdivisions; ++i) {
         for (unsigned int j = 0; j < subdivisions; ++j) {
@@ -179,30 +418,9 @@ int main(int argc, char* argv[]) {
             std::cout << "    Local range: [" << local_min << ", " << local_max
                       << "], magnitude: " << (local_max - local_min) << std::endl;
 
-            // Interpolate in this subdomain
-            // We sample the function at uniform grid points and use them as Bernstein coefficients
-            // This is an approximation, but works well for piecewise interpolation
-            std::vector<unsigned int> degrees_local = {degree, degree};
-            std::vector<double> coeffs_local;
-
-            for (unsigned int jj = 0; jj <= degree; ++jj) {
-                for (unsigned int ii = 0; ii <= degree; ++ii) {
-                    // Sample at uniform grid in local [0,1]^2
-                    double s = static_cast<double>(ii) / degree;
-                    double t = static_cast<double>(jj) / degree;
-
-                    // Transform to global [0,1]^2
-                    double u = u_min + (u_max - u_min) * s;
-                    double v = v_min + (v_max - v_min) * t;
-
-                    // Evaluate Hessian determinant
-                    double val = hessian_determinant(u, v);
-                    coeffs_local.push_back(val);
-                }
-            }
-
-            // Use Bernstein coefficients directly (approximation)
-            Polynomial local_poly = Polynomial::fromBernstein(degrees_local, coeffs_local);
+            // Use proper polynomial interpolation
+            Polynomial local_poly = interpolate_proper(
+                hessian_determinant, degree, degree, u_min, u_max, v_min, v_max);
 
             // Solve in this subdomain
             PolynomialSystem local_system({local_poly});
