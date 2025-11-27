@@ -663,8 +663,10 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
         }
     }
 
-    // Track boxes per depth for degeneracy detection
-    std::map<unsigned int, std::size_t> boxes_per_depth;
+    // Track boxes that need subdivision per depth for degeneracy detection
+    // Only count boxes that would be subdivided, not pruned or converged boxes
+    std::map<unsigned int, std::size_t> subdivision_boxes_per_depth;
+    bool degeneracy_mode = false;  // Flag to indicate we're in degeneracy mode
 
     while (!queue.empty()) {
         NodeQueueEntry entry = queue.top();
@@ -672,63 +674,29 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
         SubdivisionNode node = std::move(entry.node);
 
-        // Track boxes at this depth
-        boxes_per_depth[node.depth]++;
-
-        // Check for degeneracy: too many boxes at this depth compared to expected root count
-        if (boxes_per_depth[node.depth] > degeneracy_threshold) {
-            // Degenerate case detected (multiplicity, infinite roots, etc.)
-            result.degeneracy_detected = true;
-
-            // Add current node to unresolved
-            SubdivisionBoxResult box;
-            box.lower = node.box_lower;
-            box.upper = node.box_upper;
-            box.center.resize(dim);
-            box.max_error.resize(dim);
-            for (std::size_t i = 0; i < dim; ++i) {
-                box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
-                const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
-                box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
-                    ? std::numeric_limits<double>::epsilon()
-                    : half_width;
-            }
-            box.depth = node.depth;
-            box.converged = false;
-            unresolved_boxes.push_back(std::move(box));
-
-            // Collect all remaining boxes in queue as unresolved
-            while (!queue.empty()) {
-                NodeQueueEntry remaining_entry = queue.top();
-                queue.pop();
-                SubdivisionNode& remaining_node = remaining_entry.node;
-
-                SubdivisionBoxResult remaining_box;
-                remaining_box.lower = remaining_node.box_lower;
-                remaining_box.upper = remaining_node.box_upper;
-                remaining_box.center.resize(dim);
-                remaining_box.max_error.resize(dim);
-                for (std::size_t i = 0; i < dim; ++i) {
-                    remaining_box.center[i] = 0.5 * (remaining_node.box_lower[i] + remaining_node.box_upper[i]);
-                    const double half_width = 0.5 * (remaining_node.box_upper[i] - remaining_node.box_lower[i]);
-                    remaining_box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
-                        ? std::numeric_limits<double>::epsilon()
-                        : half_width;
-                }
-                remaining_box.depth = remaining_node.depth;
-                remaining_box.converged = false;
-                unresolved_boxes.push_back(std::move(remaining_box));
-            }
-
-            // Stop processing
-            break;
-        }
-
         // Check depth limit (should rarely happen - indicates problem)
         if (node.depth >= config.max_depth) {
             std::cerr << "Warning: Maximum depth " << config.max_depth
                       << " reached. This may indicate numerical issues or insufficient tolerance."
                       << std::endl;
+
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                std::ofstream dump(dump_file.c_str(), std::ios::app);
+                if (dump.is_open()) {
+                    dump << "# Iteration " << dump_iteration++ << ", Depth " << node.depth << "\n";
+                    dump << "# Decision: MAX_DEPTH_REACHED\n";
+                    dump << "# Global box: [";
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        if (i > 0) dump << ", ";
+                        dump << node.box_lower[i] << ", " << node.box_upper[i];
+                    }
+                    dump << "]\n";
+                    dump << "# FINAL_DECISION: UNRESOLVED (max depth reached)\n\n";
+                    dump.close();
+                }
+            }
+#endif
 
             SubdivisionBoxResult box;
             box.lower = node.box_lower;
@@ -1059,6 +1027,58 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
                     split_dim[i] = true;
                 }
             }
+        }
+
+        // Track subdivision boxes per depth for degeneracy detection
+        subdivision_boxes_per_depth[node.depth]++;
+
+        // Check for degeneracy: too many boxes needing subdivision at this depth
+        if (!degeneracy_mode && subdivision_boxes_per_depth[node.depth] > degeneracy_threshold) {
+            degeneracy_mode = true;
+            result.degeneracy_detected = true;
+
+            std::cerr << "Warning: Degeneracy detected at depth " << node.depth
+                      << " (subdivision boxes: " << subdivision_boxes_per_depth[node.depth]
+                      << ", threshold: " << degeneracy_threshold << ")" << std::endl;
+        }
+
+        // If in degeneracy mode, add box to unresolved instead of subdividing
+        if (degeneracy_mode) {
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
+                std::ofstream dump(dump_file.c_str(), std::ios::app);
+                if (dump.is_open()) {
+                    dump << "# FINAL_DECISION: UNRESOLVED (degeneracy mode, would subdivide in [";
+                    bool first = true;
+                    for (std::size_t i = 0; i < dim; ++i) {
+                        if (split_dim[i]) {
+                            if (!first) dump << ", ";
+                            dump << "axis " << i;
+                            first = false;
+                        }
+                    }
+                    dump << "])\n\n";
+                    dump.close();
+                }
+            }
+#endif
+
+            SubdivisionBoxResult box;
+            box.lower = node.box_lower;
+            box.upper = node.box_upper;
+            box.center.resize(dim);
+            box.max_error.resize(dim);
+            for (std::size_t i = 0; i < dim; ++i) {
+                box.center[i] = 0.5 * (node.box_lower[i] + node.box_upper[i]);
+                const double half_width = 0.5 * (node.box_upper[i] - node.box_lower[i]);
+                box.max_error[i] = (half_width < std::numeric_limits<double>::epsilon())
+                    ? std::numeric_limits<double>::epsilon()
+                    : half_width;
+            }
+            box.depth = node.depth;
+            box.converged = false;
+            unresolved_boxes.push_back(std::move(box));
+            continue;
         }
 
         // Dump subdivision decision
