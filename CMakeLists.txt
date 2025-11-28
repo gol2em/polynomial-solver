@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(PolynomialSolver VERSION 1.0.0 LANGUAGES CXX)
 
+# Always export compile_commands.json for IDE support (VS Code, CLion, etc.)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Set C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -273,4 +276,3 @@ message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Install Prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "=========================================")
 message(STATUS "")
-

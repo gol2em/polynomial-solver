@@ -1,6 +1,6 @@
 # VS Code IntelliSense Setup for High-Precision Code
 
-This document explains how to configure VS Code to correctly highlight code blocks based on preprocessor macros.
+This document explains how VS Code IntelliSense automatically detects the correct preprocessor macros and highlights code blocks correctly.
 
 ## Problem
 
@@ -17,163 +17,145 @@ For example:
 #endif
 ```
 
-## Solution
+## Solution: Use `compile_commands.json` ✅
 
-There are **three methods** to configure IntelliSense. We've implemented all three for maximum flexibility.
+**The project uses the standard CMake approach with `compile_commands.json`.**
 
----
+This is IDE-agnostic and works for:
+- ✅ VS Code
+- ✅ CLion
+- ✅ Qt Creator
+- ✅ Any IDE that supports `compile_commands.json`
 
-## Method 1: Use `compile_commands.json` (Automatic) ✅
+### How It Works
 
-This is the **recommended** method because it automatically uses the actual build configuration.
+1. **CMake generates `compile_commands.json`** with all compiler flags and macros
+2. **VS Code reads this file** to understand the build configuration
+3. **IntelliSense automatically highlights** the correct code blocks
 
-### How it works:
-1. CMake generates `compile_commands.json` with all compiler flags
-2. VS Code reads this file to understand which macros are defined
-3. IntelliSense automatically highlights the correct code blocks
-
-### Setup:
-
-**Step 1:** Generate `compile_commands.json` during CMake configuration:
-```bash
-cd build
-cmake .. -DENABLE_HIGH_PRECISION=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-```
-
-**Step 2:** Create a symlink in the project root (already done):
-```bash
-ln -sf build/compile_commands.json compile_commands.json
-```
-
-**Step 3:** VS Code configuration (already in `.vscode/c_cpp_properties.json`):
-```json
-{
-    "compileCommands": "${workspaceFolder}/compile_commands.json"
-}
-```
-
-**Step 4:** Reload VS Code:
-- Press `Ctrl+Shift+P`
-- Type "Developer: Reload Window"
-- Wait for IntelliSense to reindex (watch bottom-right status bar)
-
-### Advantages:
-✅ Automatic - uses actual build configuration  
-✅ Always in sync with CMake settings  
-✅ No manual updates needed  
-
-### Disadvantages:
-❌ Requires rebuilding CMake when switching configurations  
+**No manual configuration needed!**
 
 ---
 
-## Method 2: Manual Defines in `c_cpp_properties.json` ✅
+## Setup (One-Time)
 
-This method manually specifies which macros are defined.
+### Step 1: Configure VS Code
 
-### Setup:
+The repository includes `.vscode/c_cpp_properties.json` that tells VS Code to use `compile_commands.json`:
 
-Edit `.vscode/c_cpp_properties.json`:
 ```json
 {
     "configurations": [{
         "name": "Linux",
-        "defines": [
-            "ENABLE_HIGH_PRECISION",
-            "USE_MPFR_BACKEND",
-            "ENABLE_QUADMATH"
-        ],
-        "includePath": [
-            "${workspaceFolder}/include",
-            "${workspaceFolder}/build/include",
-            "/usr/include",
-            "/usr/include/x86_64-linux-gnu"
-        ]
-    }]
+        "compileCommands": "${workspaceFolder}/compile_commands.json"
+    }],
+    "version": 4
 }
 ```
 
-### Switching Configurations:
+**This file is already committed to the repository, so you don't need to do anything!**
 
-We provide a helper script to easily switch between configurations:
+### Step 2: Run CMake
+
+CMake automatically exports `compile_commands.json`:
+
+```bash
+cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+```
+
+CMake will:
+- ✅ Export `build/compile_commands.json` with all compiler flags
+- ✅ Create symlink `compile_commands.json` → `build/compile_commands.json`
+- ✅ Include all preprocessor macros (ENABLE_HIGH_PRECISION, USE_MPFR_BACKEND, etc.)
+- ✅ Include all include paths
+
+### Step 3: Reload VS Code
+
+After CMake finishes:
+1. Press `Ctrl+Shift+P`
+2. Type "Developer: Reload Window"
+3. Wait for IntelliSense to reindex (watch bottom-right status bar)
+
+**Done!** Code blocks are now correctly highlighted based on your build configuration.
+
+---
+
+## Switching Configurations
+
+To switch between different backends or configurations, simply re-run CMake with different flags:
 
 ```bash
 # Switch to MPFR backend
-./switch_vscode_config.sh mpfr
+cd build && cmake .. -DENABLE_HIGH_PRECISION=ON
 
 # Switch to cpp_dec_float backend
-./switch_vscode_config.sh cpp_dec_float
+cd build && cmake .. -DENABLE_HIGH_PRECISION=ON -DUSE_MPFR=OFF -DUSE_GMP=OFF
 
 # Switch to Quadmath backend
-./switch_vscode_config.sh quadmath
+cd build && cmake .. -DENABLE_HIGH_PRECISION=ON -DUSE_BOOST=OFF -DUSE_MPFR=OFF -DUSE_GMP=OFF
 
-# Switch to no templates
-./switch_vscode_config.sh no_templates
+# Disable templates
+cd build && cmake .. -DENABLE_HIGH_PRECISION=ON -DDISABLE_TEMPLATES=ON
 
-# Switch to double precision only
-./switch_vscode_config.sh double
+# Disable high-precision
+cd build && cmake .. -DENABLE_HIGH_PRECISION=OFF
 ```
 
-After switching, reload VS Code window (Ctrl+Shift+P → "Developer: Reload Window").
-
-### Advantages:
-✅ Fast - no need to rebuild CMake  
-✅ Easy to switch between configurations  
-✅ Works even if build directory is empty  
-
-### Disadvantages:
-❌ Manual - must remember to switch when changing build config  
-❌ Can get out of sync with actual build  
+After each CMake run:
+1. CMake automatically regenerates `compile_commands.json`
+2. Reload VS Code: `Ctrl+Shift+P` → "Developer: Reload Window"
+3. IntelliSense will automatically use the new configuration
 
 ---
 
-## Method 3: Configuration Selector in VS Code UI ✅
+## What's in `compile_commands.json`
 
-VS Code allows you to select different configurations from the UI.
+The `compile_commands.json` file contains the exact compiler commands used to build each source file, including:
 
-### Setup:
+### Preprocessor Defines
+All macros defined by CMake:
+- `ENABLE_HIGH_PRECISION` (if enabled)
+- `USE_MPFR_BACKEND` / `USE_CPP_DEC_FLOAT_BACKEND` / `USE_QUADMATH_BACKEND`
+- `ENABLE_QUADMATH` (if available)
+- `USE_TEMPLATES` (if templates enabled)
+- `DISABLE_TEMPLATES` (if templates disabled)
 
-Create multiple configurations in `.vscode/c_cpp_properties.json`:
+### Include Paths
+All include directories:
+- `${workspaceFolder}/include`
+- `${workspaceFolder}/build/include`
+- Detected library paths (e.g., `/usr/include`, `/usr/include/x86_64-linux-gnu`)
+
+### Compiler Settings
+- Compiler path and version
+- C++ standard (C++11)
+- Optimization flags
+- Warning flags
+
+VS Code reads this file and automatically configures IntelliSense to match your build configuration.
+
+---
+
+## Example: What VS Code Sees
+
+When you build with MPFR backend, `compile_commands.json` contains entries like:
+
 ```json
 {
-    "configurations": [
-        {
-            "name": "MPFR Backend",
-            "defines": ["ENABLE_HIGH_PRECISION", "USE_MPFR_BACKEND"]
-        },
-        {
-            "name": "Quadmath Backend",
-            "defines": ["ENABLE_HIGH_PRECISION", "USE_QUADMATH_BACKEND"]
-        }
-    ]
+  "directory": "/home/user/polynomial-solver/build",
+  "command": "/usr/bin/c++ -DENABLE_HIGH_PRECISION -DUSE_MPFR_BACKEND -DUSE_TEMPLATES -I/home/user/polynomial-solver/include -I/home/user/polynomial-solver/build/include -I/usr/include -std=c++11 -o polynomial.cpp.o -c /home/user/polynomial-solver/src/polynomial.cpp",
+  "file": "/home/user/polynomial-solver/src/polynomial.cpp"
 }
 ```
 
-### Usage:
+VS Code parses this and knows:
+- ✅ `ENABLE_HIGH_PRECISION` is defined → highlight high-precision code
+- ✅ `USE_MPFR_BACKEND` is defined → highlight MPFR-specific code
+- ✅ `USE_TEMPLATES` is defined → highlight template code
+- ✅ Include paths are `/home/user/polynomial-solver/include`, etc.
 
-1. Click on the configuration name in the bottom-right status bar
-2. Select the desired configuration from the dropdown
-3. IntelliSense will update automatically
-
-### Advantages:
-✅ Visual - easy to see which configuration is active  
-✅ No command line needed  
-
-### Disadvantages:
-❌ More verbose configuration file  
-❌ Still requires manual switching  
-
----
-
-## Available Configurations
-
-| Configuration | Defines | Use Case |
-|---------------|---------|----------|
-| **MPFR Backend** | `ENABLE_HIGH_PRECISION`, `USE_MPFR_BACKEND`, `ENABLE_QUADMATH` | Default, fastest, runtime precision |
-| **cpp_dec_float** | `ENABLE_HIGH_PRECISION`, `USE_CPP_DEC_FLOAT_BACKEND`, `ENABLE_QUADMATH` | Boost only, fixed precision |
-| **Quadmath** | `ENABLE_HIGH_PRECISION`, `USE_QUADMATH_BACKEND`, `ENABLE_QUADMATH` | Minimal deps, fixed precision |
-| **No Templates** | `ENABLE_HIGH_PRECISION`, `USE_MPFR_BACKEND`, `DISABLE_TEMPLATES` | Code duplication instead of templates |
-| **Double Only** | (none) | No high-precision support |
+This is why code blocks are correctly highlighted!
 
 ---
 
@@ -182,59 +164,58 @@ Create multiple configurations in `.vscode/c_cpp_properties.json`:
 ### IntelliSense shows wrong code blocks
 
 **Solution:** Reload VS Code window
-- Press `Ctrl+Shift+P`
-- Type "Developer: Reload Window"
-- Wait for reindexing to complete
+1. Press `Ctrl+Shift+P`
+2. Type "Developer: Reload Window"
+3. Wait for IntelliSense to reindex
 
-### Undefined references or red squiggles
+### Configuration not updating after CMake
 
-**Solution 1:** Check include paths in `c_cpp_properties.json`
-```json
-"includePath": [
-    "${workspaceFolder}/include",
-    "${workspaceFolder}/build/include",
-    "/usr/include",
-    "/usr/include/x86_64-linux-gnu"
-]
-```
+**Possible causes:**
+1. CMake didn't finish successfully → Check CMake output for errors
+2. VS Code hasn't reloaded → Reload window (`Ctrl+Shift+P` → "Developer: Reload Window")
+3. IntelliSense is still indexing → Wait for indexing to complete (bottom-right status bar)
 
-**Solution 2:** Regenerate `compile_commands.json`
+### Wrong backend detected
+
+**Solution:** Clean build and reconfigure
 ```bash
 cd build
 rm -rf *
-cmake .. -DENABLE_HIGH_PRECISION=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake .. -DENABLE_HIGH_PRECISION=ON [your flags]
 ```
 
-### Configuration out of sync with build
+Then reload VS Code.
 
-**Solution:** Use Method 1 (`compile_commands.json`) for automatic sync
+### compile_commands.json not found
 
----
-
-## Recommended Workflow
-
-**For development:**
-1. Use Method 1 (`compile_commands.json`) for automatic sync
-2. Regenerate when switching build configurations:
-   ```bash
-   cd build
-   cmake .. -DENABLE_HIGH_PRECISION=ON [flags] -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-   ```
-3. Reload VS Code window
-
-**For quick testing:**
-1. Use Method 2 (manual defines) with the helper script:
-   ```bash
-   ./switch_vscode_config.sh mpfr
-   ```
-2. Reload VS Code window
+**Solution:** Symlink should be created automatically, but you can create it manually:
+```bash
+ln -sf build/compile_commands.json compile_commands.json
+```
 
 ---
 
-## Files
+## Benefits of This Approach
 
-- `.vscode/c_cpp_properties.json` - Main configuration file
-- `.vscode/c_cpp_properties_templates.json` - Template configurations
-- `switch_vscode_config.sh` - Helper script to switch configurations
-- `compile_commands.json` - Symlink to `build/compile_commands.json`
+✅ **IDE-agnostic** - Works with VS Code, CLion, Qt Creator, Vim, Emacs, etc.
+✅ **Standard approach** - Uses CMake's built-in `CMAKE_EXPORT_COMPILE_COMMANDS`
+✅ **Always in sync** - Configuration matches your build exactly
+✅ **No manual editing** - CMake handles everything
+✅ **Backend-aware** - Correct macros for MPFR/cpp_dec_float/quadmath
+✅ **Template-aware** - Knows if templates are enabled/disabled
+✅ **Include paths** - Automatically detects all library paths
+✅ **Easy switching** - Just re-run CMake with different flags
 
+---
+
+## For Other IDEs
+
+The same `compile_commands.json` file works with:
+
+- **CLion** - Automatically detected
+- **Qt Creator** - Import via "Open Project" → select `compile_commands.json`
+- **Vim/Neovim** - Use with clangd LSP
+- **Emacs** - Use with lsp-mode or eglot
+- **Sublime Text** - Use with LSP plugin
+
+All these IDEs will correctly highlight code blocks based on the same `compile_commands.json` file!

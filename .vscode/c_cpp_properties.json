@@ -2,23 +2,7 @@
     "configurations": [
         {
             "name": "Linux",
-            "includePath": [
-                "${workspaceFolder}/include",
-                "${workspaceFolder}/build/include",
-                "/usr/include",
-                "/usr/include/x86_64-linux-gnu"
-            ],
-            "defines": [
-                "ENABLE_HIGH_PRECISION",
-                "USE_MPFR_BACKEND",
-                "ENABLE_QUADMATH"
-            ],
-            "compilerPath": "/usr/local/bin/c++",
-            "cStandard": "c17",
-            "cppStandard": "c++11",
-            "intelliSenseMode": "linux-gcc-x64",
-            "compileCommands": "${workspaceFolder}/compile_commands.json",
-            "configurationProvider": "ms-vscode.cmake-tools"
+            "compileCommands": "${workspaceFolder}/compile_commands.json"
         }
     ],
     "version": 4
