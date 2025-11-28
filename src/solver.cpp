@@ -1,6 +1,7 @@
 #include "solver.h"
 #include <queue>
 #include <map>
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -324,8 +325,13 @@ bool compute_projected_polyhedral_bounds_with_dump(
 #endif
 
             // Project to 2D: keep coordinate 'dir' and the last coordinate (function value)
-            std::vector<std::vector<double>> projected_2d;
-            projected_2d.reserve(num_coeffs);
+            // Optimization: Control points are structured in vertical groups when projected.
+            // For convex hull, we only need the extreme (min/max) points in each group.
+            // This reduces the point set from O(d₀·d₁) to O(d_dir) where d_dir is the degree
+            // in the projection direction.
+
+            std::vector<std::vector<double>> projected_2d_all;
+            projected_2d_all.reserve(num_coeffs);
 
 #ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
@@ -333,20 +339,56 @@ bool compute_projected_polyhedral_bounds_with_dump(
             }
 #endif
 
+            // First pass: collect all projected points and group by x-coordinate
+            std::map<double, std::vector<double>> vertical_groups;
+
             for (std::size_t i = 0; i < num_coeffs; ++i) {
-                std::vector<double> pt_2d(2);
-                pt_2d[0] = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
-                pt_2d[1] = control_points[i * point_dim + dim];  // function value (last coordinate)
-                projected_2d.push_back(pt_2d);
+                double x = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
+                double y = control_points[i * point_dim + dim];  // function value (last coordinate)
+
+                vertical_groups[x].push_back(y);
 
 #ifdef ENABLE_GEOMETRY_DUMP
                 if (do_dump) {
-                    dump << pt_2d[0] << " " << pt_2d[1] << "\n";
+                    dump << x << " " << y << "\n";
                 }
 #endif
             }
 
-            // Compute convex hull in 2D
+            // Second pass: extract only extreme points (min/max) from each vertical group
+            std::vector<std::vector<double>> projected_2d;
+            projected_2d.reserve(2 * vertical_groups.size());
+
+            for (std::map<double, std::vector<double>>::const_iterator it = vertical_groups.begin();
+                 it != vertical_groups.end(); ++it) {
+                const double x = it->first;
+                const std::vector<double>& y_values = it->second;
+
+                double y_min = *std::min_element(y_values.begin(), y_values.end());
+                double y_max = *std::max_element(y_values.begin(), y_values.end());
+
+                std::vector<double> pt_min(2);
+                pt_min[0] = x;
+                pt_min[1] = y_min;
+                projected_2d.push_back(pt_min);
+
+                // Only add max if it's different from min
+                if (y_min != y_max) {
+                    std::vector<double> pt_max(2);
+                    pt_max[0] = x;
+                    pt_max[1] = y_max;
+                    projected_2d.push_back(pt_max);
+                }
+            }
+
+#ifdef ENABLE_GEOMETRY_DUMP
+            if (do_dump) {
+                dump << "Reduced_Points " << projected_2d.size()
+                     << " (from " << num_coeffs << " control points)\n";
+            }
+#endif
+
+            // Compute convex hull in 2D (now with reduced point set)
             polynomial_solver::ConvexPolyhedron hull_2d = polynomial_solver::convex_hull(projected_2d);
 
 #ifdef ENABLE_GEOMETRY_DUMP
