@@ -59,6 +59,9 @@ def parse_dump_file(filename):
                 count = int(line.split()[1])
                 state = ('projected_points', count)
                 current_eq['projected_points'] = []
+            elif line.startswith('Reduced_Points'):
+                # Informational line about optimization, skip it
+                pass
             elif state:
                 state_type, count = state
                 if state_type == 'control_points_3d' and current_eq:
