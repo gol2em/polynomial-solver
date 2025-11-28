@@ -28,13 +28,18 @@ endif()
 
 # High-precision arithmetic options
 option(ENABLE_HIGH_PRECISION "Enable high-precision arithmetic support" OFF)
-option(DISABLE_TEMPLATES "Disable template-based implementation (use fallback)" OFF)
+option(ENABLE_TEMPLATES "Enable template-based implementation (Tier 3)" ON)
 
 # Manual control over which libraries to use
 option(USE_BOOST "Use Boost multiprecision library" ON)
 option(USE_MPFR "Use MPFR library (requires Boost)" ON)
 option(USE_GMP "Use GMP library (requires Boost and MPFR)" ON)
 option(USE_QUADMATH "Use quadmath library for __float128 support" ON)
+
+# Backend selection for Tier 2 (no templates)
+# Only used when ENABLE_HIGH_PRECISION=ON and ENABLE_TEMPLATES=OFF
+set(HP_BACKEND "AUTO" CACHE STRING "High-precision backend for Tier 2: AUTO, MPFR, CPP_DEC_FLOAT, QUADMATH")
+set_property(CACHE HP_BACKEND PROPERTY STRINGS AUTO MPFR CPP_DEC_FLOAT QUADMATH)
 
 # Build options
 option(BUILD_EXAMPLES "Build example programs" ON)
@@ -79,20 +84,42 @@ if(ENABLE_HIGH_PRECISION)
         add_compile_definitions(ENABLE_HIGH_PRECISION)
 
         # Determine if templates should be used
-        if(DISABLE_TEMPLATES)
-            message(STATUS "Template support: DISABLED (using fallback implementation)")
-        else()
+        if(ENABLE_TEMPLATES)
             add_compile_definitions(USE_TEMPLATES)
-            message(STATUS "Template support: ENABLED")
+            message(STATUS "Implementation: Tier 3 (template-based, flexible)")
+        else()
+            message(STATUS "Implementation: Tier 2 (fixed high-precision, no templates)")
+
+            # For Tier 2, enforce single backend selection
+            if(HP_BACKEND STREQUAL "AUTO")
+                # Auto-select based on available libraries
+                message(STATUS "Backend selection: AUTO (using detected backend: ${HIGH_PRECISION_BACKEND})")
+            else()
+                # User specified backend - validate it's available
+                if(HP_BACKEND STREQUAL "MPFR" AND NOT HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+                    message(FATAL_ERROR "HP_BACKEND=MPFR requested but MPFR not available. Install MPFR or choose different backend.")
+                elseif(HP_BACKEND STREQUAL "CPP_DEC_FLOAT" AND NOT BOOST_FOUND_LOCAL)
+                    message(FATAL_ERROR "HP_BACKEND=CPP_DEC_FLOAT requested but Boost not available. Install Boost or choose different backend.")
+                elseif(HP_BACKEND STREQUAL "QUADMATH" AND NOT QUADMATH_FOUND)
+                    message(FATAL_ERROR "HP_BACKEND=QUADMATH requested but quadmath not available. Use GCC compiler or choose different backend.")
+                endif()
+
+                # Override detected backend with user choice
+                set(HIGH_PRECISION_BACKEND ${HP_BACKEND})
+                message(STATUS "Backend selection: ${HP_BACKEND} (user specified)")
+            endif()
         endif()
 
         # Set backend type
         if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
             add_compile_definitions(USE_MPFR_BACKEND)
+            message(STATUS "Backend: MPFR (best performance, runtime precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
             add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
+            message(STATUS "Backend: cpp_dec_float (header-only, fixed precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
             add_compile_definitions(USE_QUADMATH_BACKEND)
+            message(STATUS "Backend: quadmath (native __float128, 128-bit)")
         endif()
 
         # Add quadmath support if available
