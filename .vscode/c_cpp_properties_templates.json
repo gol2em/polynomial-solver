@@ -1,0 +1,104 @@
+{
+    "comment": "This file contains template configurations for different high-precision backends",
+    "comment2": "Copy the desired configuration to c_cpp_properties.json",
+    "comment3": "Or use the switch_vscode_config.sh script to switch configurations",
+    
+    "configurations": {
+        "MPFR_Backend": {
+            "name": "Linux (MPFR Backend)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu"
+            ],
+            "defines": [
+                "ENABLE_HIGH_PRECISION",
+                "USE_MPFR_BACKEND",
+                "ENABLE_QUADMATH"
+            ],
+            "compilerPath": "/usr/local/bin/c++",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        },
+        
+        "cpp_dec_float_Backend": {
+            "name": "Linux (cpp_dec_float Backend)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include",
+                "/usr/include"
+            ],
+            "defines": [
+                "ENABLE_HIGH_PRECISION",
+                "USE_CPP_DEC_FLOAT_BACKEND",
+                "ENABLE_QUADMATH"
+            ],
+            "compilerPath": "/usr/local/bin/c++",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        },
+        
+        "quadmath_Backend": {
+            "name": "Linux (Quadmath Backend)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include"
+            ],
+            "defines": [
+                "ENABLE_HIGH_PRECISION",
+                "USE_QUADMATH_BACKEND",
+                "ENABLE_QUADMATH"
+            ],
+            "compilerPath": "/usr/local/bin/c++",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        },
+        
+        "No_Templates": {
+            "name": "Linux (No Templates)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include",
+                "/usr/include",
+                "/usr/include/x86_64-linux-gnu"
+            ],
+            "defines": [
+                "ENABLE_HIGH_PRECISION",
+                "USE_MPFR_BACKEND",
+                "DISABLE_TEMPLATES"
+            ],
+            "compilerPath": "/usr/local/bin/c++",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        },
+        
+        "Double_Only": {
+            "name": "Linux (Double Precision Only)",
+            "includePath": [
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/build/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/local/bin/c++",
+            "cStandard": "c17",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        }
+    }
+}
+

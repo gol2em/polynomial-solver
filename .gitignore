@@ -66,12 +66,17 @@ dist/
 *.egg
 
 # IDE specific files
-.vscode/
+.vscode/*
+!.vscode/c_cpp_properties.json
+!.vscode/c_cpp_properties_templates.json
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Generated files
+compile_commands.json
 
 # Test outputs
 Testing/
