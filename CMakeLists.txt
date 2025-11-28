@@ -276,3 +276,13 @@ message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Install Prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "=========================================")
 message(STATUS "")
+
+#==============================================================================
+# IDE Support - Trigger VS Code IntelliSense Reload
+#==============================================================================
+
+# Touch .vscode/c_cpp_properties.json to trigger VS Code file watcher
+# This forces IntelliSense to reload compile_commands.json without manual reload
+if(EXISTS "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
+    file(TOUCH "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
+endif()
