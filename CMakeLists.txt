@@ -135,6 +135,13 @@ add_library(polynomial_solver STATIC
     src/solver.cpp
 )
 
+# Add high-precision source files if enabled
+if(ENABLE_HIGH_PRECISION)
+    target_sources(polynomial_solver PRIVATE
+        src/precision_conversion.cpp
+    )
+endif()
+
 # Set include directories for the library
 target_include_directories(polynomial_solver PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

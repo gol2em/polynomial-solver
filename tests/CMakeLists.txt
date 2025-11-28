@@ -1,5 +1,12 @@
 # Tests directory
 
+# High-precision types test (only if high precision is enabled)
+if(ENABLE_HIGH_PRECISION)
+    add_executable(test_high_precision_types test_high_precision_types.cpp)
+    target_link_libraries(test_high_precision_types PRIVATE polynomial_solver)
+    add_test(NAME HighPrecisionTypesTest COMMAND test_high_precision_types)
+endif()
+
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)
 target_link_libraries(test_polynomial_conversion PRIVATE polynomial de_casteljau)
 add_test(NAME PolynomialConversionTest COMMAND test_polynomial_conversion)
