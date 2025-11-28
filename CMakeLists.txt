@@ -36,6 +36,12 @@ option(USE_MPFR "Use MPFR library (requires Boost)" ON)
 option(USE_GMP "Use GMP library (requires Boost and MPFR)" ON)
 option(USE_QUADMATH "Use quadmath library for __float128 support" ON)
 
+# Build options
+option(BUILD_EXAMPLES "Build example programs" ON)
+
+# Note: For configuration help, run: ./configure-help.sh
+# Or use: cmake -L .. to list all options
+
 #==============================================================================
 # High-Precision Configuration
 #==============================================================================
