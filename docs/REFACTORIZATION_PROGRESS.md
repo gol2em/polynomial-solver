@@ -220,7 +220,7 @@ This document tracks the progress of the high-precision refactorization plan for
 
 ---
 
-### ⏸️ Phase 7: Documentation
+### ⏸️ Phase 7: Documentation and Tier 2 Evaluation
 
 **Estimated time**: 5 hours
 
@@ -228,6 +228,28 @@ This document tracks the progress of the high-precision refactorization plan for
 1. Update build documentation
 2. Create API documentation
 3. Update README
+4. **Evaluate Tier 2 vs Tier 3**: Decide whether to keep, deprecate, or remove Tier 2
+
+**Important Decision Point**:
+
+After Tier 3 is complete, **Tier 2 becomes mostly redundant** because:
+- Tier 3 templates can be instantiated with single type (same as Tier 2)
+- Tier 3 has no code duplication (better architecture)
+- Tier 3 is more flexible
+
+**Tier 2 might still be useful for**:
+- Users who refuse templates (policy reasons)
+- Faster compilation times
+- Simpler debugging (no template errors)
+
+**Action items for Phase 7**:
+1. ✅ Compare compilation times: Tier 2 vs Tier 3
+2. ✅ Compare binary sizes: Tier 2 vs Tier 3
+3. ✅ Survey users: Do you need non-template version?
+4. ✅ Decide: Keep (with clear docs), deprecate, or remove Tier 2
+5. ✅ Update documentation accordingly
+
+See `docs/TIER2_IMPLEMENTATION_PLAN.md` for detailed analysis.
 
 **Status**: ⏸️ Not started
 

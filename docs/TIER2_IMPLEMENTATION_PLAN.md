@@ -1,5 +1,83 @@
 # Tier 2 Implementation Plan
 
+## ⚠️ IMPORTANT: Tier 2 vs Tier 3 Relationship
+
+### Will Tier 2 be redundant when Tier 3 is implemented?
+
+**SHORT ANSWER: Mostly YES, but keep it for specific use cases.**
+
+#### Tier 2 (Fixed Backend, No Templates)
+```cpp
+// Tier 2: Separate classes, code duplication
+class PolynomialHP {
+    std::vector<mpreal> coeffs_;
+    mpreal evaluate(const std::vector<mpreal>& x) const;
+};
+
+class DifferentiationHP {
+    static PolynomialHP derivative(const PolynomialHP& poly, ...);
+};
+```
+
+#### Tier 3 (Template-Based, Flexible)
+```cpp
+// Tier 3: Single template, no duplication
+template<typename T>
+class PolynomialImpl {
+    std::vector<T> coeffs_;
+    T evaluate(const std::vector<T>& x) const;
+};
+
+// Instantiate for specific types
+using Polynomial = PolynomialImpl<double>;
+using PolynomialHP = PolynomialImpl<mpreal>;  // Same functionality as Tier 2!
+```
+
+**Tier 3 can do everything Tier 2 can do, plus more!**
+
+### When to Keep Tier 2 (After Tier 3 is Done)
+
+**Keep Tier 2 for users who**:
+1. ✅ **Refuse templates** - Some codebases ban templates for policy reasons
+2. ✅ **Want faster compilation** - No template instantiation overhead
+3. ✅ **Want simpler debugging** - No template error messages
+4. ✅ **Need simple integration** - Just link against non-template code
+
+**Remove Tier 2 if**:
+1. ❌ No users request non-template version
+2. ❌ Maintenance burden is too high (duplicate code)
+3. ❌ Tier 3 compilation is fast enough
+
+### Recommendation for Phase 7 (After Tier 3 is Complete)
+
+**Option A: Keep Both (Recommended)**
+- Tier 2: For template-averse users
+- Tier 3: For everyone else (default)
+- Document clearly: "Tier 2 is for users who cannot use templates"
+
+**Option B: Deprecate Tier 2**
+- Mark Tier 2 as deprecated in Phase 7
+- Remove in next major version
+- Migrate all users to Tier 3
+
+**Option C: Remove Tier 2 Immediately**
+- If no one uses Tier 2 during testing
+- If Tier 3 compilation is fast enough
+- If maintenance burden is too high
+
+### Action Items for Phase 7
+
+**TODO when Tier 3 is complete**:
+1. ✅ Compare compilation times: Tier 2 vs Tier 3
+2. ✅ Compare binary sizes: Tier 2 vs Tier 3
+3. ✅ Survey users: Do you need non-template version?
+4. ✅ Decide: Keep, deprecate, or remove Tier 2
+5. ✅ Update documentation accordingly
+
+**For now**: Implement Tier 2 as planned, decide later.
+
+---
+
 ## Analysis Summary
 
 ### Current State
