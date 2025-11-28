@@ -128,6 +128,10 @@ def parse_dump_file(filename):
             elif line.startswith('Projected_Points'):
                 state = 'projected'
                 count = int(line.split()[1])
+            elif line.startswith('Reduced_Points'):
+                # Informational line about optimization, skip it
+                # Format: "Reduced_Points N (from M control points)"
+                state = None
             elif line.startswith('ConvexHull'):
                 parts = line.split()
                 if len(parts) > 1 and parts[1] == 'EMPTY':

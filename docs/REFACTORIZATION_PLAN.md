@@ -122,8 +122,17 @@ ENABLE_HIGH_PRECISION=ON
 3. Define precision constants:
    - `DEFAULT_HP_PRECISION` (e.g., 256 bits)
    - `DEFAULT_HP_DECIMAL_DIGITS` (e.g., 77 digits)
+4. Add runtime precision control utilities (MPFR backend only):
+   ```cpp
+   inline void setPrecision(int bits);
+   inline int getPrecision();
+   ```
+5. Document backend differences:
+   - MPFR: Runtime precision control ✅
+   - cpp_dec_float: Fixed precision at compile time
+   - quadmath: Fixed 128-bit precision
 
-**Estimated time**: 30 minutes
+**Estimated time**: 45 minutes (increased from 30 to add utilities)
 
 ### Step 2.2: Create Configuration Header Template
 
@@ -147,6 +156,30 @@ ENABLE_HIGH_PRECISION=ON
 3. Add generated header to include path
 
 **Estimated time**: 30 minutes
+
+### Step 2.3: Create Precision Control Utilities
+
+**File**: `include/precision_context.h`
+
+**Purpose**: Provide runtime precision control utilities
+
+**Tasks**:
+1. Create `PrecisionContext` class (RAII pattern):
+   ```cpp
+   class PrecisionContext {
+       int old_precision_;
+   public:
+       PrecisionContext(int new_precision);
+       ~PrecisionContext();  // Restores old precision
+   };
+   ```
+2. Add convenience functions for precision estimation
+3. Document MPFR vs cpp_dec_float differences
+4. Add usage examples
+
+**Estimated time**: 30 minutes
+
+**Total for Phase 2**: ~1.75 hours (increased from 1 hour)
 
 ---
 

@@ -10,6 +10,7 @@ cmake_install.cmake
 Makefile
 *.cmake
 !CMakeLists.txt
+!cmake/*.cmake
 
 # But allow Makefiles in specific directories
 !playground/Makefile
@@ -66,12 +67,16 @@ dist/
 *.egg
 
 # IDE specific files
-.vscode/
+.vscode/*
+!.vscode/c_cpp_properties.json
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Generated files (symlink to build/compile_commands.json)
+compile_commands.json
 
 # Test outputs
 Testing/

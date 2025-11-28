@@ -62,6 +62,9 @@ def parse_1d_dump_file(filename):
                 
             if line.startswith('Projected_Points'):
                 state = 'projected'
+            elif line.startswith('Reduced_Points'):
+                # Informational line about optimization, skip it
+                state = None
             elif line.startswith('ConvexHull'):
                 state = 'hull'
             elif line.startswith('Intersection'):

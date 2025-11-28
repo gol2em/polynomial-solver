@@ -30,11 +30,16 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
 ### 1. Build the Project
 
 ```bash
-# Build with tests and examples
-./build.sh --test
+# Default build (double precision only)
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
 
-# Or build without tests
-./build.sh
+# For configuration options, run:
+./configure-help.sh
+
+# Or see available options:
+cd build && cmake -L ..
 ```
 
 ### 2. Run the Simple Example

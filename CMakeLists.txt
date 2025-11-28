@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
 project(PolynomialSolver VERSION 1.0.0 LANGUAGES CXX)
 
+# Always export compile_commands.json for IDE support (VS Code, CLion, etc.)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Set C++11 standard
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,50 +28,114 @@ endif()
 
 # High-precision arithmetic options
 option(ENABLE_HIGH_PRECISION "Enable high-precision arithmetic support" OFF)
-option(DISABLE_TEMPLATES "Disable template-based implementation (use fallback)" OFF)
-option(ENABLE_QUADMATH "Enable quadmath (__float128) support" OFF)
+option(ENABLE_TEMPLATES "Enable template-based implementation (Tier 3)" ON)
+
+# Manual control over which libraries to use
+option(USE_BOOST "Use Boost multiprecision library" ON)
+option(USE_MPFR "Use MPFR library (requires Boost)" ON)
+option(USE_GMP "Use GMP library (requires Boost and MPFR)" ON)
+option(USE_QUADMATH "Use quadmath library for __float128 support" ON)
+
+# Backend selection for Tier 2 (no templates)
+# Only used when ENABLE_HIGH_PRECISION=ON and ENABLE_TEMPLATES=OFF
+set(HP_BACKEND "AUTO" CACHE STRING "High-precision backend for Tier 2: AUTO, MPFR, CPP_DEC_FLOAT, QUADMATH")
+set_property(CACHE HP_BACKEND PROPERTY STRINGS AUTO MPFR CPP_DEC_FLOAT QUADMATH)
+
+# Build options
+option(BUILD_EXAMPLES "Build example programs" ON)
+
+# Note: For configuration help, run: ./configure-help.sh
+# Or use: cmake -L .. to list all options
 
 #==============================================================================
 # High-Precision Configuration
 #==============================================================================
 
+# Always check for high-precision dependencies to enable auto-detection
+include(FindHighPrecision)
+
+# Auto-enable high-precision if libraries are detected and not explicitly disabled
+if(NOT ENABLE_HIGH_PRECISION AND HIGH_PRECISION_FOUND)
+    message(STATUS "")
+    message(STATUS "High-precision libraries detected!")
+    message(STATUS "  To enable: cmake .. -DENABLE_HIGH_PRECISION=ON")
+    message(STATUS "  (Currently disabled by default)")
+    message(STATUS "")
+endif()
+
 if(ENABLE_HIGH_PRECISION)
-    # Find high-precision dependencies
-    include(FindHighPrecision)
-
     if(NOT HIGH_PRECISION_FOUND)
-        message(FATAL_ERROR "High-precision support requested but dependencies not found")
-    endif()
-
-    # Set preprocessor definitions
-    add_compile_definitions(ENABLE_HIGH_PRECISION)
-
-    # Determine if templates should be used
-    if(DISABLE_TEMPLATES)
-        message(STATUS "Template support: DISABLED (using fallback implementation)")
+        message(WARNING
+            "High-precision support requested but no suitable libraries found.\n"
+            "  Boost or quadmath is required.\n"
+            "  Disabling high-precision support and continuing with double precision.\n"
+            "\n"
+            "  To enable high-precision, install dependencies:\n"
+            "    Ubuntu/Debian: sudo apt-get install libboost-dev libmpfr-dev libgmp-dev\n"
+            "    Fedora/RHEL:   sudo dnf install boost-devel mpfr-devel gmp-devel\n"
+            "    macOS:         brew install boost mpfr gmp\n"
+            "  Or specify custom paths:\n"
+            "    -DBOOST_ROOT=/path/to/boost\n"
+            "    -DMPFR_ROOT=/path/to/mpfr -DGMP_ROOT=/path/to/gmp\n"
+        )
+        set(ENABLE_HIGH_PRECISION OFF CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     else()
-        add_compile_definitions(USE_TEMPLATES)
-        message(STATUS "Template support: ENABLED")
-    endif()
+        # Set preprocessor definitions
+        add_compile_definitions(ENABLE_HIGH_PRECISION)
 
-    # Set backend type
-    if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
-        add_compile_definitions(USE_MPFR_BACKEND)
-    elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
-        add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
-    endif()
+        # Determine if templates should be used
+        if(ENABLE_TEMPLATES)
+            add_compile_definitions(USE_TEMPLATES)
+            message(STATUS "Implementation: Tier 3 (template-based, flexible)")
+        else()
+            message(STATUS "Implementation: Tier 2 (fixed high-precision, no templates)")
 
-    # Add quadmath support if requested and available
-    if(ENABLE_QUADMATH AND QUADMATH_FOUND)
-        add_compile_definitions(ENABLE_QUADMATH)
-        message(STATUS "Quadmath support: ENABLED")
-    elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
-        message(WARNING "Quadmath support requested but library not found")
-    endif()
+            # For Tier 2, enforce single backend selection
+            if(HP_BACKEND STREQUAL "AUTO")
+                # Auto-select based on available libraries
+                message(STATUS "Backend selection: AUTO (using detected backend: ${HIGH_PRECISION_BACKEND})")
+            else()
+                # User specified backend - validate it's available
+                if(HP_BACKEND STREQUAL "MPFR" AND NOT HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+                    message(FATAL_ERROR "HP_BACKEND=MPFR requested but MPFR not available. Install MPFR or choose different backend.")
+                elseif(HP_BACKEND STREQUAL "CPP_DEC_FLOAT" AND NOT BOOST_FOUND_LOCAL)
+                    message(FATAL_ERROR "HP_BACKEND=CPP_DEC_FLOAT requested but Boost not available. Install Boost or choose different backend.")
+                elseif(HP_BACKEND STREQUAL "QUADMATH" AND NOT QUADMATH_FOUND)
+                    message(FATAL_ERROR "HP_BACKEND=QUADMATH requested but quadmath not available. Use GCC compiler or choose different backend.")
+                endif()
 
-    # Add include directories
-    include_directories(${HIGH_PRECISION_INCLUDE_DIRS})
-else()
+                # Override detected backend with user choice
+                set(HIGH_PRECISION_BACKEND ${HP_BACKEND})
+                message(STATUS "Backend selection: ${HP_BACKEND} (user specified)")
+            endif()
+        endif()
+
+        # Set backend type
+        if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+            add_compile_definitions(USE_MPFR_BACKEND)
+            message(STATUS "Backend: MPFR (best performance, runtime precision)")
+        elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
+            add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
+            message(STATUS "Backend: cpp_dec_float (header-only, fixed precision)")
+        elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
+            add_compile_definitions(USE_QUADMATH_BACKEND)
+            message(STATUS "Backend: quadmath (native __float128, 128-bit)")
+        endif()
+
+        # Add quadmath support if available
+        if(QUADMATH_FOUND)
+            add_compile_definitions(ENABLE_QUADMATH)
+            message(STATUS "Quadmath support: ENABLED")
+        elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
+            message(WARNING "Quadmath support requested but library not found")
+        endif()
+
+        # Add include directories
+        include_directories(${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+endif()
+
+if(NOT ENABLE_HIGH_PRECISION)
     message(STATUS "High-precision support: DISABLED (using double precision only)")
 endif()
 
@@ -104,6 +171,16 @@ add_library(polynomial_solver STATIC
     src/solver.cpp
 )
 
+# Add high-precision source files if enabled
+if(ENABLE_HIGH_PRECISION)
+    target_sources(polynomial_solver PRIVATE
+        src/precision_conversion.cpp
+        src/polynomial_hp.cpp
+        src/differentiation_hp.cpp
+        src/result_refiner_hp.cpp
+    )
+endif()
+
 # Set include directories for the library
 target_include_directories(polynomial_solver PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -113,7 +190,14 @@ target_include_directories(polynomial_solver PUBLIC
 
 # Link high-precision libraries if enabled
 if(ENABLE_HIGH_PRECISION)
+    # Add include directories for high-precision libraries
+    if(HIGH_PRECISION_INCLUDE_DIRS)
+        target_include_directories(polynomial_solver PUBLIC ${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+
+    # Link libraries
     target_link_libraries(polynomial_solver PUBLIC ${HIGH_PRECISION_LIBRARIES})
+
     if(ENABLE_QUADMATH AND QUADMATH_FOUND)
         target_link_libraries(polynomial_solver PUBLIC ${QUADMATH_LIBRARY})
     endif()
@@ -201,6 +285,11 @@ add_executable(test_multiplicity_detection
 )
 target_link_libraries(test_multiplicity_detection polynomial_solver)
 
+add_executable(deflation_test
+    examples/deflation_test.cpp
+)
+target_link_libraries(deflation_test polynomial_solver)
+
 add_executable(test_1d_refinement
     tools/test_1d_refinement.cpp
 )
@@ -229,3 +318,12 @@ message(STATUS "Install Prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "=========================================")
 message(STATUS "")
 
+#==============================================================================
+# IDE Support - Trigger VS Code IntelliSense Reload
+#==============================================================================
+
+# Touch .vscode/c_cpp_properties.json to trigger VS Code file watcher
+# This forces IntelliSense to reload compile_commands.json without manual reload
+if(EXISTS "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
+    file(TOUCH "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
+endif()
