@@ -266,18 +266,24 @@ A root at x=r has multiplicity m if:
 
 **Description:** Enable geometry dump for visualization.
 
-**Type:** `bool`  
-**Default:** `false`  
+**Type:** `bool`
+**Default:** `false`
 **Command-line:** `--dump-geometry`
 
 **Usage:**
 ```cpp
 SubdivisionConfig config;
+#ifdef ENABLE_GEOMETRY_DUMP
 config.dump_geometry = true;
 config.dump_prefix = "dumps/my_problem";
+#endif
 ```
 
-**Note:** Only available when compiled with `ENABLE_GEOMETRY_DUMP=ON` (default).
+**Build Mode Behavior:**
+- **Debug mode** (`CMAKE_BUILD_TYPE=Debug` or unspecified): The `ENABLE_GEOMETRY_DUMP` macro is defined. Geometry dumping is available and controlled by the `dump_geometry` runtime flag.
+- **Release mode** (`CMAKE_BUILD_TYPE=Release`): The `ENABLE_GEOMETRY_DUMP` macro is not defined. All geometry dumping code is compiled out for maximum performance.
+
+**Note:** Always wrap `dump_geometry` flag usage with `#ifdef ENABLE_GEOMETRY_DUMP` to ensure code compiles in both debug and release modes.
 
 ---
 

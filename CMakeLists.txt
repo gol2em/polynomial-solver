@@ -6,15 +6,14 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Option to enable geometry dump for debugging
-# Set to ON for development, OFF for release builds
-option(ENABLE_GEOMETRY_DUMP "Enable geometry dump for debugging" ON)
-
-if(ENABLE_GEOMETRY_DUMP)
+# Geometry dump macro control
+# In Debug mode: macro is defined, feature is enabled and controlled by runtime flag
+# In Release mode: macro is not defined, all dump code is compiled out
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "")
     add_compile_definitions(ENABLE_GEOMETRY_DUMP)
-    message(STATUS "Geometry dump: ENABLED (development mode)")
+    message(STATUS "Geometry dump: ENABLED (Debug mode - controlled by runtime flag)")
 else()
-    message(STATUS "Geometry dump: DISABLED (release mode)")
+    message(STATUS "Geometry dump: DISABLED (Release mode - code compiled out)")
 endif()
 
 # Set output directories

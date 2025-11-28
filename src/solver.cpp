@@ -638,6 +638,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     const double tolerance = config.tolerance;
 
     // Setup dump file if requested
+#ifdef ENABLE_GEOMETRY_DUMP
     std::string dump_file;
     unsigned int dump_iteration = 0;
     if (config.dump_geometry) {
@@ -662,6 +663,7 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             clear_dump.close();
         }
     }
+#endif
 
     // Track boxes that need subdivision per depth for degeneracy detection
     // Only count boxes that would be subdivided, not pruned or converged boxes

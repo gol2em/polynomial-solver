@@ -53,8 +53,11 @@ int main(int argc, char* argv[]) {
     config.tolerance = 1e-8;
     config.max_depth = 100;
     config.degeneracy_multiplier = degeneracy_multiplier;
+
+#ifdef ENABLE_GEOMETRY_DUMP
     config.dump_geometry = true;
     config.dump_prefix = "dumps/circle";
+#endif
     
     Solver solver;
     SubdivisionSolverResult result = solver.subdivisionSolve(

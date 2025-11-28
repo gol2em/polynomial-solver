@@ -471,6 +471,12 @@ int main(int argc, char* argv[]) {
             config.max_depth = 12;
             config.degeneracy_multiplier = degeneracy_multiplier;
 
+#ifdef ENABLE_GEOMETRY_DUMP
+            // Geometry dumping is available in debug mode but disabled by default
+            // config.dump_geometry = true;
+            // config.dump_prefix = "dumps/hessian_det_region";
+#endif
+
             Solver solver;
             SubdivisionSolverResult result = solver.subdivisionSolve(
                 local_system, config, RootBoundingMethod::ProjectedPolyhedral);

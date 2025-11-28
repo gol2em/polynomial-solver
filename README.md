@@ -409,17 +409,21 @@ config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
 
 **Build-time control:**
 
-The `ENABLE_GEOMETRY_DUMP` macro is controlled by CMake:
+The `ENABLE_GEOMETRY_DUMP` macro is automatically controlled by the build type:
 
 ```bash
-# Enable geometry dump (default, for development)
-cmake -DENABLE_GEOMETRY_DUMP=ON ..
+# Debug mode: macro is defined, feature is enabled and controlled by runtime flag
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+# or simply (Debug is default if not specified)
+cmake ..
 
-# Disable geometry dump (for release builds, removes all dump code)
-cmake -DENABLE_GEOMETRY_DUMP=OFF ..
+# Release mode: macro is not defined, all dump code is compiled out
+cmake -DCMAKE_BUILD_TYPE=Release ..
 ```
 
-When `ENABLE_GEOMETRY_DUMP=OFF`, all geometry dumping code is compiled out for maximum performance.
+**Behavior:**
+- **Debug mode**: The `ENABLE_GEOMETRY_DUMP` macro is defined. Geometry dumping code is compiled in and can be enabled/disabled at runtime using the `dump_geometry` flag.
+- **Release mode**: The `ENABLE_GEOMETRY_DUMP` macro is not defined. All geometry dumping code is compiled out for maximum performance.
 
 The solver automatically creates the `dumps/` directory if it doesn't exist.
 

@@ -36,6 +36,7 @@ int main(int argc, char* argv[]) {
             geom_config.debug = true;
             std::cout << "Debug mode enabled" << std::endl;
         } else if (std::strcmp(argv[i], "--dump") == 0) {
+#ifdef ENABLE_GEOMETRY_DUMP
             config.dump_geometry = true;
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 config.dump_prefix = argv[++i];
@@ -43,6 +44,13 @@ int main(int argc, char* argv[]) {
             } else {
                 std::cout << "Geometry dump enabled with default prefix: " << config.dump_prefix << std::endl;
             }
+#else
+            std::cout << "Warning: Geometry dump is not available (compiled out in release mode)" << std::endl;
+            // Skip the next argument if it looks like a prefix
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                ++i;
+            }
+#endif
         } else if (std::strcmp(argv[i], "--tolerance") == 0) {
             if (i + 1 < argc) {
                 config.tolerance = std::atof(argv[++i]);
@@ -80,10 +88,14 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
     std::cout << "Configuration:" << std::endl;
     std::cout << "  Debug mode: " << (geom_config.debug ? "enabled" : "disabled") << std::endl;
+#ifdef ENABLE_GEOMETRY_DUMP
     std::cout << "  Geometry dump: " << (config.dump_geometry ? "enabled" : "disabled") << std::endl;
     if (config.dump_geometry) {
         std::cout << "  Dump prefix: " << config.dump_prefix << std::endl;
     }
+#else
+    std::cout << "  Geometry dump: disabled (compiled out in release mode)" << std::endl;
+#endif
     std::cout << "  Tolerance: " << config.tolerance << std::endl;
     std::cout << "  Max depth: " << config.max_depth << std::endl;
     std::cout << "  Degeneracy multiplier: " << config.degeneracy_multiplier << std::endl;
