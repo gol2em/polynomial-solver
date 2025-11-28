@@ -6,6 +6,13 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Add cmake module path
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+#==============================================================================
+# Configuration Options
+#==============================================================================
+
 # Geometry dump macro control
 # In Debug mode: macro is defined, feature is enabled and controlled by runtime flag
 # In Release mode: macro is not defined, all dump code is compiled out
@@ -15,6 +22,65 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "")
 else()
     message(STATUS "Geometry dump: DISABLED (Release mode - code compiled out)")
 endif()
+
+# High-precision arithmetic options
+option(ENABLE_HIGH_PRECISION "Enable high-precision arithmetic support" OFF)
+option(DISABLE_TEMPLATES "Disable template-based implementation (use fallback)" OFF)
+option(ENABLE_QUADMATH "Enable quadmath (__float128) support" OFF)
+
+#==============================================================================
+# High-Precision Configuration
+#==============================================================================
+
+if(ENABLE_HIGH_PRECISION)
+    # Find high-precision dependencies
+    include(FindHighPrecision)
+
+    if(NOT HIGH_PRECISION_FOUND)
+        message(FATAL_ERROR "High-precision support requested but dependencies not found")
+    endif()
+
+    # Set preprocessor definitions
+    add_compile_definitions(ENABLE_HIGH_PRECISION)
+
+    # Determine if templates should be used
+    if(DISABLE_TEMPLATES)
+        message(STATUS "Template support: DISABLED (using fallback implementation)")
+    else()
+        add_compile_definitions(USE_TEMPLATES)
+        message(STATUS "Template support: ENABLED")
+    endif()
+
+    # Set backend type
+    if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+        add_compile_definitions(USE_MPFR_BACKEND)
+    elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
+        add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
+    endif()
+
+    # Add quadmath support if requested and available
+    if(ENABLE_QUADMATH AND QUADMATH_FOUND)
+        add_compile_definitions(ENABLE_QUADMATH)
+        message(STATUS "Quadmath support: ENABLED")
+    elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
+        message(WARNING "Quadmath support requested but library not found")
+    endif()
+
+    # Add include directories
+    include_directories(${HIGH_PRECISION_INCLUDE_DIRS})
+else()
+    message(STATUS "High-precision support: DISABLED (using double precision only)")
+endif()
+
+# Generate config.h from config.h.in
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/config.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/include/config.h"
+    @ONLY
+)
+
+# Add generated include directory
+include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -41,8 +107,17 @@ add_library(polynomial_solver STATIC
 # Set include directories for the library
 target_include_directories(polynomial_solver PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+
+# Link high-precision libraries if enabled
+if(ENABLE_HIGH_PRECISION)
+    target_link_libraries(polynomial_solver PUBLIC ${HIGH_PRECISION_LIBRARIES})
+    if(ENABLE_QUADMATH AND QUADMATH_FOUND)
+        target_link_libraries(polynomial_solver PUBLIC ${QUADMATH_LIBRARY})
+    endif()
+endif()
 
 # Install library and headers
 install(TARGETS polynomial_solver
