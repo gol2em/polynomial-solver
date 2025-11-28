@@ -280,9 +280,11 @@ make -j$(nproc)
 
 ### Custom Library Paths
 
-If libraries are not installed globally (e.g., on dedicated servers without admin rights):
+If libraries are not installed globally (e.g., on dedicated servers without admin rights), you can specify custom paths.
 
-#### Specify Custom Paths
+#### Method 1: Individual Library Paths (Recommended)
+
+Specify the root directory for each library:
 
 ```bash
 mkdir build && cd build
@@ -294,7 +296,21 @@ cmake .. \
 make -j$(nproc)
 ```
 
-#### Using CMake Prefix Path
+**Expected directory structure**:
+```
+$HOME/local/
+├── include/
+│   ├── boost/           # Boost headers
+│   ├── gmp.h            # GMP header
+│   └── mpfr.h           # MPFR header
+└── lib/
+    ├── libgmp.a         # GMP library
+    └── libmpfr.a        # MPFR library
+```
+
+#### Method 2: CMake Prefix Path
+
+Use a common prefix for all libraries:
 
 ```bash
 cmake .. \
@@ -303,7 +319,11 @@ cmake .. \
 make -j$(nproc)
 ```
 
-#### Environment Variables
+**Note**: CMake will search `<prefix>/include` and `<prefix>/lib` for each prefix.
+
+#### Method 3: Environment Variables
+
+Set environment variables before running CMake:
 
 ```bash
 export CMAKE_PREFIX_PATH=$HOME/local
@@ -312,6 +332,76 @@ export LD_LIBRARY_PATH=$HOME/local/lib:$LD_LIBRARY_PATH
 mkdir build && cd build
 cmake .. -DENABLE_HIGH_PRECISION=ON
 make -j$(nproc)
+```
+
+**Tip**: Add these to your `~/.bashrc` or `~/.bash_profile` for persistence.
+
+#### Method 4: Project-Local Libraries
+
+Copy libraries directly to your project:
+
+```bash
+# Create external directory
+mkdir -p external
+
+# Copy Boost headers
+cp -r /path/to/boost external/
+
+# CMake will automatically detect external/boost/
+cmake .. -DENABLE_HIGH_PRECISION=ON
+```
+
+**Expected structure**:
+```
+polynomial-solver/
+├── external/
+│   └── boost/
+│       └── version.hpp
+├── include/
+├── src/
+└── CMakeLists.txt
+```
+
+#### Troubleshooting Custom Paths
+
+**Problem**: CMake can't find libraries even with custom paths
+
+**Solution 1**: Verify directory structure
+```bash
+# Check if headers exist
+ls $HOME/local/include/boost/version.hpp
+ls $HOME/local/include/mpfr.h
+ls $HOME/local/include/gmp.h
+
+# Check if libraries exist
+ls $HOME/local/lib/libmpfr.*
+ls $HOME/local/lib/libgmp.*
+```
+
+**Solution 2**: Use absolute paths
+```bash
+cmake .. \
+  -DENABLE_HIGH_PRECISION=ON \
+  -DBOOST_ROOT=/home/username/local \
+  -DMPFR_ROOT=/home/username/local \
+  -DGMP_ROOT=/home/username/local
+```
+
+**Solution 3**: Check CMake output
+```bash
+# Run CMake with verbose output
+cmake .. -DENABLE_HIGH_PRECISION=ON --debug-find 2>&1 | grep -i "boost\|mpfr\|gmp"
+```
+
+**Solution 4**: Manually specify library files
+```bash
+cmake .. \
+  -DENABLE_HIGH_PRECISION=ON \
+  -DBOOST_ROOT=$HOME/local \
+  -DMPFR_LIBRARY=$HOME/local/lib/libmpfr.a \
+  -DGMP_LIBRARY=$HOME/local/lib/libgmp.a \
+  -DMPFR_INCLUDE_DIR=$HOME/local/include \
+  -DGMP_INCLUDE_DIR=$HOME/local/include
 ```
 
 ### Building Dependencies from Source (No Admin Rights)

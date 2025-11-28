@@ -10,11 +10,12 @@
 // Template-based implementation
 #cmakedefine USE_TEMPLATES
 
-// Multiprecision backend
+// Multiprecision backend (mutually exclusive)
 #cmakedefine USE_MPFR_BACKEND
 #cmakedefine USE_CPP_DEC_FLOAT_BACKEND
+#cmakedefine USE_QUADMATH_BACKEND
 
-// Quadmath support
+// Quadmath support (can be used alongside other backends in template mode)
 #cmakedefine ENABLE_QUADMATH
 
 // Version information

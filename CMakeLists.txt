@@ -32,43 +32,69 @@ option(ENABLE_QUADMATH "Enable quadmath (__float128) support" OFF)
 # High-Precision Configuration
 #==============================================================================
 
+# Always check for high-precision dependencies to enable auto-detection
+include(FindHighPrecision)
+
+# Auto-enable high-precision if libraries are detected and not explicitly disabled
+if(NOT ENABLE_HIGH_PRECISION AND HIGH_PRECISION_FOUND)
+    message(STATUS "")
+    message(STATUS "High-precision libraries detected!")
+    message(STATUS "  To enable: cmake .. -DENABLE_HIGH_PRECISION=ON")
+    message(STATUS "  (Currently disabled by default)")
+    message(STATUS "")
+endif()
+
 if(ENABLE_HIGH_PRECISION)
-    # Find high-precision dependencies
-    include(FindHighPrecision)
-
     if(NOT HIGH_PRECISION_FOUND)
-        message(FATAL_ERROR "High-precision support requested but dependencies not found")
-    endif()
-
-    # Set preprocessor definitions
-    add_compile_definitions(ENABLE_HIGH_PRECISION)
-
-    # Determine if templates should be used
-    if(DISABLE_TEMPLATES)
-        message(STATUS "Template support: DISABLED (using fallback implementation)")
+        message(WARNING
+            "High-precision support requested but no suitable libraries found.\n"
+            "  Boost or quadmath is required.\n"
+            "  Disabling high-precision support and continuing with double precision.\n"
+            "\n"
+            "  To enable high-precision, install dependencies:\n"
+            "    Ubuntu/Debian: sudo apt-get install libboost-dev libmpfr-dev libgmp-dev\n"
+            "    Fedora/RHEL:   sudo dnf install boost-devel mpfr-devel gmp-devel\n"
+            "    macOS:         brew install boost mpfr gmp\n"
+            "  Or specify custom paths:\n"
+            "    -DBOOST_ROOT=/path/to/boost\n"
+            "    -DMPFR_ROOT=/path/to/mpfr -DGMP_ROOT=/path/to/gmp\n"
+        )
+        set(ENABLE_HIGH_PRECISION OFF CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     else()
-        add_compile_definitions(USE_TEMPLATES)
-        message(STATUS "Template support: ENABLED")
-    endif()
+        # Set preprocessor definitions
+        add_compile_definitions(ENABLE_HIGH_PRECISION)
 
-    # Set backend type
-    if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
-        add_compile_definitions(USE_MPFR_BACKEND)
-    elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
-        add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
-    endif()
+        # Determine if templates should be used
+        if(DISABLE_TEMPLATES)
+            message(STATUS "Template support: DISABLED (using fallback implementation)")
+        else()
+            add_compile_definitions(USE_TEMPLATES)
+            message(STATUS "Template support: ENABLED")
+        endif()
 
-    # Add quadmath support if requested and available
-    if(ENABLE_QUADMATH AND QUADMATH_FOUND)
-        add_compile_definitions(ENABLE_QUADMATH)
-        message(STATUS "Quadmath support: ENABLED")
-    elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
-        message(WARNING "Quadmath support requested but library not found")
-    endif()
+        # Set backend type
+        if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+            add_compile_definitions(USE_MPFR_BACKEND)
+        elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
+            add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
+        elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
+            add_compile_definitions(USE_QUADMATH_BACKEND)
+        endif()
 
-    # Add include directories
-    include_directories(${HIGH_PRECISION_INCLUDE_DIRS})
-else()
+        # Add quadmath support if available
+        if(QUADMATH_FOUND)
+            add_compile_definitions(ENABLE_QUADMATH)
+            message(STATUS "Quadmath support: ENABLED")
+        elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
+            message(WARNING "Quadmath support requested but library not found")
+        endif()
+
+        # Add include directories
+        include_directories(${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+endif()
+
+if(NOT ENABLE_HIGH_PRECISION)
     message(STATUS "High-precision support: DISABLED (using double precision only)")
 endif()
 
