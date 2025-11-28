@@ -5,6 +5,10 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_high_precision_types test_high_precision_types.cpp)
     target_link_libraries(test_high_precision_types PRIVATE polynomial_solver)
     add_test(NAME HighPrecisionTypesTest COMMAND test_high_precision_types)
+
+    add_executable(test_polynomial_hp test_polynomial_hp.cpp)
+    target_link_libraries(test_polynomial_hp PRIVATE polynomial_solver)
+    add_test(NAME PolynomialHPTest COMMAND test_polynomial_hp)
 endif()
 
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)

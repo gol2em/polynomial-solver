@@ -175,6 +175,7 @@ add_library(polynomial_solver STATIC
 if(ENABLE_HIGH_PRECISION)
     target_sources(polynomial_solver PRIVATE
         src/precision_conversion.cpp
+        src/polynomial_hp.cpp
     )
 endif()
 
