@@ -118,6 +118,22 @@ private:
  */
 PolynomialHP convertToHighPrecision(const Polynomial& poly);
 
+/**
+ * @brief Create PolynomialHP from power basis coefficients (high-precision)
+ *
+ * Converts power basis coefficients to Bernstein basis in high precision.
+ * This avoids double precision limitations when creating test polynomials.
+ *
+ * @param degrees Degrees per variable (size = dimension)
+ * @param power_coeffs Power basis coefficients in high precision
+ * @return High-precision polynomial in Bernstein basis
+ *
+ * Example for 1D polynomial f(x) = a₀ + a₁x + a₂x² + ... + aₙxⁿ:
+ * power_coeffs = [a₀, a₁, a₂, ..., aₙ]
+ */
+PolynomialHP fromPowerHP(const std::vector<unsigned int>& degrees,
+                         const std::vector<mpreal>& power_coeffs);
+
 } // namespace polynomial_solver
 
 #endif // ENABLE_HIGH_PRECISION
