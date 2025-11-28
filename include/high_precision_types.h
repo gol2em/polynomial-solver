@@ -48,8 +48,11 @@
 #ifdef ENABLE_HIGH_PRECISION
 
 // Include Boost.Multiprecision headers based on backend
-#if defined(USE_MPFR_BACKEND) || defined(USE_CPP_DEC_FLOAT_BACKEND)
+#ifdef USE_MPFR_BACKEND
     #include <boost/multiprecision/mpfr.hpp>
+#endif
+
+#ifdef USE_CPP_DEC_FLOAT_BACKEND
     #include <boost/multiprecision/cpp_dec_float.hpp>
 #endif
 
