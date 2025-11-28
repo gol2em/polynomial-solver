@@ -58,53 +58,63 @@ void test_precision_control() {
 
 void test_precision_context() {
     std::cout << "\nTesting PrecisionContext..." << std::endl;
-    
+
+    if (!HP_RUNTIME_PRECISION) {
+        std::cout << "  ⊗ Skipped (backend has fixed precision)" << std::endl;
+        return;
+    }
+
     setPrecision(256);
     int base_precision = getPrecision();
     std::cout << "  Base precision: " << base_precision << " bits" << std::endl;
-    
+
     {
         PrecisionContext ctx(512);
         int high_precision = getPrecision();
         std::cout << "  Inside context: " << high_precision << " bits" << std::endl;
         assert(high_precision >= 500);  // Allow some rounding
-        
+
         mpreal x = 1.0;
         // x should have high precision
     }
-    
+
     int restored_precision = getPrecision();
     std::cout << "  After context: " << restored_precision << " bits" << std::endl;
     assert(std::abs(restored_precision - base_precision) < 10);  // Allow small difference
-    
+
     std::cout << "  ✓ Precision correctly restored" << std::endl;
 }
 
 void test_nested_contexts() {
     std::cout << "\nTesting nested PrecisionContext..." << std::endl;
-    
+
+    if (!HP_RUNTIME_PRECISION) {
+        std::cout << "  ⊗ Skipped (backend has fixed precision)" << std::endl;
+        return;
+    }
+
     setPrecision(128);
     std::cout << "  Level 0: " << getPrecision() << " bits" << std::endl;
-    
+
     {
         PrecisionContext ctx1(256);
         std::cout << "  Level 1: " << getPrecision() << " bits" << std::endl;
-        
+
         {
             PrecisionContext ctx2(512);
             std::cout << "  Level 2: " << getPrecision() << " bits" << std::endl;
-            
+
             {
                 PrecisionContext ctx3(1024);
                 std::cout << "  Level 3: " << getPrecision() << " bits" << std::endl;
             }
-            
+
             std::cout << "  Back to level 2: " << getPrecision() << " bits" << std::endl;
         }
-        
+
         std::cout << "  Back to level 1: " << getPrecision() << " bits" << std::endl;
     }
-    
+
     std::cout << "  Back to level 0: " << getPrecision() << " bits" << std::endl;
     std::cout << "  ✓ Nested contexts work correctly" << std::endl;
 }
@@ -137,17 +147,22 @@ void test_precision_conversion() {
 
 void test_initialization() {
     std::cout << "\nTesting initialization..." << std::endl;
-    
+
     initHighPrecision();
     int default_bits = getPrecision();
     std::cout << "  Default precision: " << default_bits << " bits" << std::endl;
-    assert(std::abs(default_bits - DEFAULT_HP_PRECISION_BITS) < 10);
-    
-    initHighPrecision(512);
-    int custom_bits = getPrecision();
-    std::cout << "  Custom precision: " << custom_bits << " bits" << std::endl;
-    assert(custom_bits >= 500);
-    
+
+    if (HP_RUNTIME_PRECISION) {
+        assert(std::abs(default_bits - DEFAULT_HP_PRECISION_BITS) < 10);
+
+        initHighPrecision(512);
+        int custom_bits = getPrecision();
+        std::cout << "  Custom precision: " << custom_bits << " bits" << std::endl;
+        assert(custom_bits >= 500);
+    } else {
+        std::cout << "  (Fixed precision backend - initialization is no-op)" << std::endl;
+    }
+
     std::cout << "  ✓ Initialization works" << std::endl;
 }
 

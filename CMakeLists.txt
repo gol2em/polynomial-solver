@@ -151,7 +151,14 @@ target_include_directories(polynomial_solver PUBLIC
 
 # Link high-precision libraries if enabled
 if(ENABLE_HIGH_PRECISION)
+    # Add include directories for high-precision libraries
+    if(HIGH_PRECISION_INCLUDE_DIRS)
+        target_include_directories(polynomial_solver PUBLIC ${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+
+    # Link libraries
     target_link_libraries(polynomial_solver PUBLIC ${HIGH_PRECISION_LIBRARIES})
+
     if(ENABLE_QUADMATH AND QUADMATH_FOUND)
         target_link_libraries(polynomial_solver PUBLIC ${QUADMATH_LIBRARY})
     endif()

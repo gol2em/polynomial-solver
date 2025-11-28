@@ -53,8 +53,11 @@
     #include <boost/multiprecision/cpp_dec_float.hpp>
 #endif
 
+// Use GCC's native quadmath instead of Boost wrapper
 #ifdef ENABLE_QUADMATH
-    #include <boost/multiprecision/float128.hpp>
+    extern "C" {
+        #include <quadmath.h>
+    }
 #endif
 
 namespace polynomial_solver {
@@ -128,14 +131,15 @@ constexpr int QUADMATH_DECIMAL_DIGITS = 34;
 #elif defined(USE_QUADMATH_BACKEND)
     /**
      * @brief High-precision floating-point type (quadmath backend)
-     * 
-     * Uses __float128 for fixed 128-bit precision arithmetic.
+     *
+     * Uses GCC's native __float128 for fixed 128-bit precision arithmetic.
      * Precision is fixed at 113 bits (approximately 34 decimal digits).
-     * 
+     *
      * @note This backend is fast but limited to 128-bit precision.
+     * @note Uses GCC's libquadmath directly, not Boost wrapper.
      */
-    using mpreal = boost::multiprecision::float128;
-    
+    using mpreal = __float128;
+
     /**
      * @brief Backend identifier
      */
@@ -149,11 +153,12 @@ constexpr int QUADMATH_DECIMAL_DIGITS = 34;
 #ifdef ENABLE_QUADMATH
     /**
      * @brief Quadmath type (__float128)
-     * 
+     *
      * Available when quadmath support is enabled.
      * Can be used alongside other backends in template mode.
+     * Uses GCC's native __float128 type directly.
      */
-    using quad = boost::multiprecision::float128;
+    using quad = __float128;
 #endif
 
 // ============================================================================

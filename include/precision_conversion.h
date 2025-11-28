@@ -34,6 +34,13 @@
 #include "high_precision_types.h"
 #include <vector>
 #include <iostream>
+#include <sstream>
+#include <string>
+
+// For quadmath backend
+#ifdef USE_QUADMATH_BACKEND
+    #include <cstdio>
+#endif
 
 namespace polynomial_solver {
 
@@ -152,11 +159,20 @@ inline std::string toString(const mpreal& value, int digits = 0) {
     if (digits <= 0) {
         digits = getPrecisionDigits();
     }
-    
+
+#ifdef USE_QUADMATH_BACKEND
+    // Use quadmath's native formatting
+    char buf[256];
+    int width = digits + 10;  // Extra space for exponent
+    quadmath_snprintf(buf, sizeof(buf), "%.*Qe", digits, value);
+    return std::string(buf);
+#else
+    // Use Boost.Multiprecision's stream operators
     std::ostringstream oss;
     oss.precision(digits);
     oss << std::scientific << value;
     return oss.str();
+#endif
 }
 
 /**
@@ -173,7 +189,13 @@ inline std::string toString(const mpreal& value, int digits = 0) {
  * @endcode
  */
 inline mpreal fromString(const std::string& str) {
+#ifdef USE_QUADMATH_BACKEND
+    // Use quadmath's native parsing
+    return strtoflt128(str.c_str(), nullptr);
+#else
+    // Use Boost.Multiprecision's string constructor
     return mpreal(str);
+#endif
 }
 
 } // namespace polynomial_solver
