@@ -12,52 +12,46 @@
 
 using namespace polynomial_solver;
 
-// Test 1: First derivative of 1D polynomial - verify HP precision
+// Test 1: First derivative of 1D polynomial - verify true HP precision
 bool test_first_derivative_1d() {
-    std::cout << "\nTest: First derivative of 1D polynomial - verify HP precision\n";
+    std::cout << "\nTest: First derivative of 1D polynomial - verify true HP precision\n";
 
     // Set precision to 256 bits (~77 decimal digits)
     PrecisionContext ctx(256);
 
-    // Polynomial: f(x) = x^3 - 2x + 1
-    // Bernstein coefficients for degree 3: [1, 1/3, -1/3, 0]
-    std::vector<double> coeffs_double = {1.0, 1.0/3.0, -1.0/3.0, 0.0};
-    Polynomial poly(std::vector<unsigned int>{3}, coeffs_double);
+    // Create polynomial DIRECTLY in HP: f(x) = x^3 - 2x + 1
+    std::vector<unsigned int> degrees = {3};
+    std::vector<mpreal> power_coeffs_hp = {
+        mpreal(1), mpreal(-2), mpreal(0), mpreal(1)
+    };
+    PolynomialHP poly_hp = fromPowerHP(degrees, power_coeffs_hp);
 
-    // Convert to HP and differentiate
-    PolynomialHP poly_hp(poly);
+    // Differentiate in HP
     PolynomialHP dpoly_hp = DifferentiationHP::derivative(poly_hp, 0, 1);
 
-    // Also compute with double precision for comparison
-    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
-
     // Evaluate at x = 0.5 (exactly representable)
-    mpreal x_hp = toHighPrecision(0.5);
+    mpreal x_hp = mpreal("0.5");
     mpreal df_hp = dpoly_hp.evaluate(x_hp);
-    double df_double = dpoly.evaluate(0.5);
 
     // Expected: f'(x) = 3x^2 - 2, so f'(0.5) = 3*0.25 - 2 = -1.25 (exactly representable)
-    mpreal expected_hp = mpreal(-1.25);
+    mpreal expected_hp = mpreal("-1.25");
 
     // Compute error in high precision
     mpreal error_hp = abs(df_hp - expected_hp);
-    double error_double = std::abs(df_double - (-1.25));
 
     std::cout << "  f(x) = x^3 - 2x + 1\n";
-    std::cout << "  f'(0.5) double = " << df_double << "\n";
-    std::cout << "  f'(0.5) HP     = " << toString(df_hp, 30) << "\n";
-    std::cout << "  Expected       = " << toString(expected_hp, 30) << "\n";
-    std::cout << "  Error (double) = " << error_double << "\n";
+    std::cout << "  f'(0.5) HP     = " << toString(df_hp, 80) << "\n";
+    std::cout << "  Expected       = " << toString(expected_hp, 80) << "\n";
     std::cout << "  Error (HP)     = " << toString(error_hp, 10) << "\n";
 
     // For 256-bit precision, machine epsilon is ~2^-256 ≈ 1e-77
-    // However, coefficients came from double precision, so we're limited by that
-    std::cout << "  Note: Coefficients from double, so limited by double precision\n";
-    std::cout << "  HP machine epsilon: ~1e-77, but double limits us to ~1e-16\n";
+    // Since we constructed polynomial directly in HP, error should be near machine precision
+    std::cout << "  HP machine epsilon: ~1e-77 for 256-bit precision\n";
+    std::cout << "  Note: Polynomial constructed directly in HP (no double precision limitation)\n";
 
-    // Error should be better than or equal to double precision
-    bool pass = error_hp < mpreal(1e-15);  // Limited by double precision input
-    std::cout << "  " << (pass ? "PASSED" : "FAILED") << " (HP error < 1e-15)\n";
+    // Error should be near HP machine precision
+    bool pass = error_hp < mpreal(1e-70);  // Should be ~1e-77, allow slack
+    std::cout << "  " << (pass ? "PASSED" : "FAILED") << " (HP error < 1e-70)\n";
     return pass;
 }
 
