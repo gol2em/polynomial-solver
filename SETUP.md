@@ -256,12 +256,38 @@ make -j$(nproc)
 - ✅ Supports double, mpreal, __float128
 - ✅ No code duplication
 
-#### Optional: Enable Quadmath Support
+### Manual Library Control
+
+You can explicitly control which multiprecision libraries to use:
 
 ```bash
-cmake .. -DENABLE_HIGH_PRECISION=ON -DENABLE_QUADMATH=ON
-make -j$(nproc)
+# Use only Boost (cpp_dec_float backend, no MPFR/GMP)
+cmake .. -DENABLE_HIGH_PRECISION=ON -DUSE_MPFR=OFF -DUSE_GMP=OFF
+
+# Use only quadmath (no Boost)
+cmake .. -DENABLE_HIGH_PRECISION=ON -DUSE_BOOST=OFF
+
+# Disable quadmath even if available
+cmake .. -DENABLE_HIGH_PRECISION=ON -DUSE_QUADMATH=OFF
+
+# Custom combination
+cmake .. -DENABLE_HIGH_PRECISION=ON \
+  -DUSE_BOOST=ON \
+  -DUSE_MPFR=OFF \
+  -DUSE_GMP=OFF \
+  -DUSE_QUADMATH=ON
 ```
+
+**Available flags**:
+- `USE_BOOST=ON/OFF` - Enable/disable Boost multiprecision (default: ON)
+- `USE_MPFR=ON/OFF` - Enable/disable MPFR backend (default: ON, requires Boost)
+- `USE_GMP=ON/OFF` - Enable/disable GMP (default: ON, requires Boost and MPFR)
+- `USE_QUADMATH=ON/OFF` - Enable/disable quadmath support (default: ON)
+
+**Backend selection**:
+- If `USE_BOOST=ON` and `USE_MPFR=ON` and `USE_GMP=ON` → MPFR backend (fastest)
+- If `USE_BOOST=ON` but MPFR/GMP disabled → cpp_dec_float backend
+- If `USE_BOOST=OFF` and `USE_QUADMATH=ON` → quadmath backend (standalone)
 
 ### Tier 2: Fallback Version (No Templates)
 

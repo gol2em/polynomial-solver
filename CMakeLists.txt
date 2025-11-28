@@ -26,7 +26,12 @@ endif()
 # High-precision arithmetic options
 option(ENABLE_HIGH_PRECISION "Enable high-precision arithmetic support" OFF)
 option(DISABLE_TEMPLATES "Disable template-based implementation (use fallback)" OFF)
-option(ENABLE_QUADMATH "Enable quadmath (__float128) support" OFF)
+
+# Manual control over which libraries to use
+option(USE_BOOST "Use Boost multiprecision library" ON)
+option(USE_MPFR "Use MPFR library (requires Boost)" ON)
+option(USE_GMP "Use GMP library (requires Boost and MPFR)" ON)
+option(USE_QUADMATH "Use quadmath library for __float128 support" ON)
 
 #==============================================================================
 # High-Precision Configuration
