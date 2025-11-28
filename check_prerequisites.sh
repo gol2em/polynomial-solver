@@ -111,6 +111,71 @@ check_git() {
     check_command "git" "Git" "yes"
 }
 
+# Function to check high-precision libraries (optional)
+check_high_precision() {
+    echo -e "\n${BLUE}Checking High-Precision Libraries (optional)...${NC}"
+
+    local boost_found=false
+    local mpfr_found=false
+    local gmp_found=false
+    local quadmath_found=false
+
+    # Check for Boost headers
+    if [ -d "/usr/include/boost" ] || [ -d "/usr/local/include/boost" ]; then
+        echo -e "${GREEN}✓${NC} Boost headers found"
+        boost_found=true
+        ((PASSED++))
+    else
+        echo -e "${YELLOW}⚠${NC} Boost headers not found (optional for high-precision)"
+        ((WARNINGS++))
+    fi
+
+    # Check for MPFR library
+    if ldconfig -p 2>/dev/null | grep -q libmpfr || [ -f "/usr/lib/x86_64-linux-gnu/libmpfr.so" ] || [ -f "/usr/local/lib/libmpfr.so" ]; then
+        echo -e "${GREEN}✓${NC} MPFR library found"
+        mpfr_found=true
+        ((PASSED++))
+    else
+        echo -e "${YELLOW}⚠${NC} MPFR library not found (optional for high-precision)"
+        ((WARNINGS++))
+    fi
+
+    # Check for GMP library
+    if ldconfig -p 2>/dev/null | grep -q libgmp || [ -f "/usr/lib/x86_64-linux-gnu/libgmp.so" ] || [ -f "/usr/local/lib/libgmp.so" ]; then
+        echo -e "${GREEN}✓${NC} GMP library found"
+        gmp_found=true
+        ((PASSED++))
+    else
+        echo -e "${YELLOW}⚠${NC} GMP library not found (optional for high-precision)"
+        ((WARNINGS++))
+    fi
+
+    # Check for quadmath library
+    if ldconfig -p 2>/dev/null | grep -q libquadmath || [ -f "/usr/lib/x86_64-linux-gnu/libquadmath.so.0" ] || [ -f "/usr/local/lib/libquadmath.so" ]; then
+        echo -e "${GREEN}✓${NC} Quadmath library found"
+        quadmath_found=true
+        ((PASSED++))
+    else
+        echo -e "${YELLOW}⚠${NC} Quadmath library not found (optional for high-precision)"
+        ((WARNINGS++))
+    fi
+
+    # Summary of high-precision support
+    if $boost_found && $mpfr_found && $gmp_found; then
+        echo -e "  ${GREEN}→${NC} High-precision support available (MPFR backend - fastest)"
+        echo -e "  ${GREEN}→${NC} Enable with: ${BLUE}cmake .. -DENABLE_HIGH_PRECISION=ON${NC}"
+    elif $boost_found; then
+        echo -e "  ${GREEN}→${NC} High-precision support available (cpp_dec_float backend)"
+        echo -e "  ${GREEN}→${NC} Enable with: ${BLUE}cmake .. -DENABLE_HIGH_PRECISION=ON${NC}"
+    elif $quadmath_found; then
+        echo -e "  ${GREEN}→${NC} High-precision support available (quadmath backend)"
+        echo -e "  ${GREEN}→${NC} Enable with: ${BLUE}cmake .. -DENABLE_HIGH_PRECISION=ON${NC}"
+    else
+        echo -e "  ${YELLOW}→${NC} No high-precision libraries found (will use double precision)"
+        echo -e "  ${YELLOW}→${NC} To install: ${BLUE}sudo apt-get install libboost-dev libmpfr-dev libgmp-dev${NC}"
+    fi
+}
+
 # Function to check system info
 check_system() {
     echo -e "\n${BLUE}System Information...${NC}"
@@ -130,6 +195,7 @@ check_cpp_compiler
 check_cmake
 check_python
 check_git
+check_high_precision
 
 # Summary
 echo -e "\n${BLUE}========================================${NC}"
@@ -145,9 +211,20 @@ if [ $FAILED -eq 0 ]; then
     echo -e "${GREEN}  You can proceed with building the project.${NC}"
     echo ""
     echo -e "Next steps:"
-    echo -e "  1. Run: ${BLUE}./build.sh${NC}"
-    echo -e "  2. Or manually: ${BLUE}mkdir -p build && cd build && cmake .. && make -j4${NC}"
-    echo -e "  3. Run tests: ${BLUE}cd build && ctest${NC}"
+    echo -e "  ${BLUE}# Standard build (double precision)${NC}"
+    echo -e "  mkdir -p build && cd build"
+    echo -e "  cmake .."
+    echo -e "  make -j\$(nproc)"
+    echo ""
+    echo -e "  ${BLUE}# High-precision build (if libraries available)${NC}"
+    echo -e "  mkdir -p build && cd build"
+    echo -e "  cmake .. -DENABLE_HIGH_PRECISION=ON"
+    echo -e "  make -j\$(nproc)"
+    echo ""
+    echo -e "  ${BLUE}# Run tests${NC}"
+    echo -e "  cd build && ctest --output-on-failure"
+    echo ""
+    echo -e "See ${BLUE}SETUP.md${NC} for more build options and configurations."
     exit 0
 else
     echo -e "${RED}✗ Some required prerequisites are missing!${NC}"
@@ -157,6 +234,11 @@ else
     echo -e "  Ubuntu/Debian: ${BLUE}sudo apt-get install build-essential cmake git${NC}"
     echo -e "  Fedora/RHEL:   ${BLUE}sudo dnf install gcc-c++ cmake git${NC}"
     echo -e "  Arch Linux:    ${BLUE}sudo pacman -S base-devel cmake git${NC}"
+    echo ""
+    echo -e "For high-precision support (optional):"
+    echo -e "  Ubuntu/Debian: ${BLUE}sudo apt-get install libboost-dev libmpfr-dev libgmp-dev${NC}"
+    echo -e "  Fedora/RHEL:   ${BLUE}sudo dnf install boost-devel mpfr-devel gmp-devel${NC}"
+    echo -e "  macOS:         ${BLUE}brew install boost mpfr gmp${NC}"
     exit 1
 fi
 
