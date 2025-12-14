@@ -2,6 +2,7 @@
 
 #include "result_refiner_hp.h"
 #include "polynomial_hp.h"
+#include "differentiation_hp.h"
 #include "polynomial.h"
 #include "precision_context.h"
 #include "precision_conversion.h"
@@ -43,6 +44,26 @@ void test_simple_root_hp() {
     std::cout << "  Multiplicity: " << result.multiplicity << std::endl;
     std::cout << "  Condition: " << toString(result.condition_estimate, 5) << std::endl;
 
+    if (result.has_guaranteed_bounds) {
+        std::cout << "  Error bounds: [" << toString(result.interval_lower, 10)
+                  << ", " << toString(result.interval_upper, 10) << "]" << std::endl;
+        std::cout << "  Max error: " << toString(result.max_error, 10) << std::endl;
+        mpreal interval_width = result.interval_upper - result.interval_lower;
+        std::cout << "  Interval width: " << toString(interval_width, 10) << std::endl;
+
+        // Verify that the true root is in the interval
+        // For f(x) = x^3 - 2x + 1, the root near 0.618 is the golden ratio - 1
+        mpreal golden_ratio = (mpreal(1) + sqrt(mpreal(5))) / mpreal(2);
+        mpreal expected_root = golden_ratio - mpreal(1);
+
+        bool root_in_interval = (expected_root >= result.interval_lower) &&
+                                (expected_root <= result.interval_upper);
+        std::cout << "  True root in interval: " << (root_in_interval ? "YES ✓" : "NO ✗") << std::endl;
+        assert(root_in_interval);  // Rigorous bounds must contain true root
+    } else {
+        std::cout << "  Warning: No guaranteed error bounds computed" << std::endl;
+    }
+
     if (!result.converged) {
         std::cout << "  Error: " << result.error_message << std::endl;
     }
@@ -51,8 +72,9 @@ void test_simple_root_hp() {
     assert(result.converged);
     assert(abs(result.residual) < mpreal("1e-70"));
     assert(result.multiplicity == 1);  // Simple root
+    assert(result.has_guaranteed_bounds);  // Should have rigorous bounds
 
-    std::cout << "  PASSED" << std::endl;
+    std::cout << "  ✓ PASSED" << std::endl;
 }
 
 // Test 2: Refine root near multiple root (ill-conditioned)
@@ -154,11 +176,36 @@ void test_multiple_root_hp() {
 
     std::cout << "  Polynomial: (x - 0.5)^3" << std::endl;
     std::cout << "  Initial guess: " << initial_guess << std::endl;
+
+    // Debug: Evaluate derivatives at the found root
+    std::cout << "\n  Debug - Derivatives at found root:" << std::endl;
+    PolynomialHP d1 = DifferentiationHP::derivative(poly_hp, 0, 1);
+    PolynomialHP d2 = DifferentiationHP::derivative(poly_hp, 0, 2);
+    PolynomialHP d3 = DifferentiationHP::derivative(poly_hp, 0, 3);
+    mpreal f1 = d1.evaluate(result.location);
+    mpreal f2 = d2.evaluate(result.location);
+    mpreal f3 = d3.evaluate(result.location);
+    std::cout << "    f'(x)  = " << toString(f1, 10) << std::endl;
+    std::cout << "    f''(x) = " << toString(f2, 10) << std::endl;
+    std::cout << "    f'''(x) = " << toString(f3, 10) << std::endl;
+
+    // Expected values at x = 0.5:
+    // f'(0.5) = 0, f''(0.5) = 0, f'''(0.5) = 6
+    std::cout << "  Expected at x=0.5: f'=0, f''=0, f'''=6" << std::endl;
+    std::cout << std::endl;
     std::cout << "  Converged: " << (result.converged ? "YES" : "NO") << std::endl;
     std::cout << "  Iterations: " << result.iterations << std::endl;
     std::cout << "  Root (HP): " << toString(result.location, 80) << std::endl;
     std::cout << "  Residual: " << toString(result.residual, 10) << std::endl;
     std::cout << "  Multiplicity: " << result.multiplicity << std::endl;
+
+    if (result.has_guaranteed_bounds) {
+        std::cout << "  Error bounds: [" << toString(result.interval_lower, 10)
+                  << ", " << toString(result.interval_upper, 10) << "]" << std::endl;
+        std::cout << "  Max error: " << toString(result.max_error, 10) << std::endl;
+        mpreal interval_width = result.interval_upper - result.interval_lower;
+        std::cout << "  Interval width: " << toString(interval_width, 10) << std::endl;
+    }
 
     if (!result.converged) {
         std::cout << "  Error: " << result.error_message << std::endl;
@@ -169,6 +216,14 @@ void test_multiple_root_hp() {
     mpreal error = abs(result.location - expected_root);
     std::cout << "  Error from true root (0.5): " << toString(error, 10) << std::endl;
     std::cout << "  First nonzero deriv: " << toString(result.first_nonzero_derivative, 10) << std::endl;
+
+    // Verify that the true root is inside the error bounds
+    if (result.has_guaranteed_bounds) {
+        bool root_in_interval = (expected_root >= result.interval_lower) &&
+                                (expected_root <= result.interval_upper);
+        std::cout << "  True root in interval: " << (root_in_interval ? "YES ✓" : "NO ✗") << std::endl;
+        assert(root_in_interval);  // Rigorous bounds must contain true root
+    }
 
     // For multiple roots, convergence is slower but we should still get close
     // With HP and modified Newton, we should achieve good accuracy
@@ -184,6 +239,154 @@ void test_multiple_root_hp() {
     }
 }
 
+void test_schroder_vs_newton_comparison() {
+    std::cout << "\n=== Test 4: Schröder vs Modified Newton Comparison ===" << std::endl;
+    std::cout << "Testing convergence speed for triple root at x = 0.5\n" << std::endl;
+
+    // Use same precision for fair comparison
+    PrecisionContext ctx(512);
+
+    // Same polynomial: (x - 0.5)^3
+    std::vector<unsigned int> degrees = {3};
+    std::vector<mpreal> power_coeffs_hp = {
+        mpreal("-0.125"),   // -0.5^3
+        mpreal("0.75"),     // 3*0.5^2
+        mpreal("-1.5"),     // -3*0.5
+        mpreal(1)
+    };
+    PolynomialHP poly_hp = fromPowerHP(degrees, power_coeffs_hp);
+
+    double initial_guess = 0.48;
+
+    RefinementConfigHP config;
+    config.target_tolerance_str = "1e-50";
+    config.residual_tolerance_str = "1e-50";
+    config.max_newton_iters = 200;
+    config.max_multiplicity = 10;
+
+    // Test Modified Newton (current method)
+    std::cout << "--- Modified Newton Method ---" << std::endl;
+    RefinedRootHP result_newton = ResultRefinerHP::refineRoot1D(initial_guess, poly_hp, config);
+
+    mpreal expected_root = mpreal("0.5");
+    mpreal error_newton = abs(result_newton.location - expected_root);
+
+    std::cout << "  Converged: " << (result_newton.converged ? "YES" : "NO") << std::endl;
+    std::cout << "  Iterations: " << result_newton.iterations << std::endl;
+    std::cout << "  Error from true root: " << toString(error_newton, 10) << std::endl;
+    std::cout << "  Residual: " << toString(result_newton.residual, 10) << std::endl;
+    std::cout << "  Multiplicity detected: " << result_newton.multiplicity << std::endl;
+
+    // Test Schröder's method
+    std::cout << "\n--- Schröder's Method ---" << std::endl;
+    RefinedRootHP result_schroder = ResultRefinerHP::refineRoot1DSchroder(initial_guess, poly_hp, config);
+
+    mpreal error_schroder = abs(result_schroder.location - expected_root);
+
+    std::cout << "  Converged: " << (result_schroder.converged ? "YES" : "NO") << std::endl;
+    std::cout << "  Iterations: " << result_schroder.iterations << std::endl;
+    std::cout << "  Error from true root: " << toString(error_schroder, 10) << std::endl;
+    std::cout << "  Residual: " << toString(result_schroder.residual, 10) << std::endl;
+
+    // Comparison
+    std::cout << "\n--- Comparison ---" << std::endl;
+    std::cout << "  Modified Newton iterations: " << result_newton.iterations << std::endl;
+    std::cout << "  Schröder iterations: " << result_schroder.iterations << std::endl;
+
+    if (result_schroder.iterations < result_newton.iterations) {
+        std::cout << "  ✓ Schröder converged " << (result_newton.iterations - result_schroder.iterations)
+                  << " iterations faster!" << std::endl;
+    } else if (result_schroder.iterations > result_newton.iterations) {
+        std::cout << "  ✓ Modified Newton converged " << (result_schroder.iterations - result_newton.iterations)
+                  << " iterations faster!" << std::endl;
+    } else {
+        std::cout << "  ✓ Both methods converged in same number of iterations" << std::endl;
+    }
+
+    std::cout << "  Modified Newton final error: " << toString(error_newton, 10) << std::endl;
+    std::cout << "  Schröder final error: " << toString(error_schroder, 10) << std::endl;
+
+    // Both should converge
+    assert(result_newton.converged);
+    assert(result_schroder.converged);
+    assert(error_newton < mpreal("1e-10"));
+    assert(error_schroder < mpreal("1e-10"));
+
+    std::cout << "  ✓ PASSED (both methods converged successfully)" << std::endl;
+}
+
+void test_schroder_simple_root() {
+    std::cout << "\n=== Test 5: Schröder vs Newton for Simple Root ===" << std::endl;
+    std::cout << "Testing convergence speed for simple root (golden ratio)\n" << std::endl;
+
+    // Use 256 bits precision
+    PrecisionContext ctx(256);
+
+    // Polynomial: x^2 - x - 1 (root at golden ratio ≈ 1.618)
+    std::vector<unsigned int> degrees = {2};
+    std::vector<mpreal> power_coeffs_hp = {
+        mpreal(-1),  // constant
+        mpreal(-1),  // x
+        mpreal(1)    // x^2
+    };
+    PolynomialHP poly_hp = fromPowerHP(degrees, power_coeffs_hp);
+
+    double initial_guess = 1.5;
+
+    RefinementConfigHP config;
+    config.target_tolerance_str = "1e-70";
+    config.residual_tolerance_str = "1e-70";
+    config.max_newton_iters = 50;
+    config.max_multiplicity = 10;
+
+    // Test standard Newton
+    std::cout << "--- Standard Newton Method ---" << std::endl;
+    RefinedRootHP result_newton = ResultRefinerHP::refineRoot1D(initial_guess, poly_hp, config);
+
+    mpreal expected_root = (mpreal(1) + sqrt(mpreal(5))) / mpreal(2);  // Golden ratio
+    mpreal error_newton = abs(result_newton.location - expected_root);
+
+    std::cout << "  Converged: " << (result_newton.converged ? "YES" : "NO") << std::endl;
+    std::cout << "  Iterations: " << result_newton.iterations << std::endl;
+    std::cout << "  Error from true root: " << toString(error_newton, 10) << std::endl;
+    std::cout << "  Residual: " << toString(result_newton.residual, 10) << std::endl;
+
+    // Test Schröder's method
+    std::cout << "\n--- Schröder's Method ---" << std::endl;
+    RefinedRootHP result_schroder = ResultRefinerHP::refineRoot1DSchroder(initial_guess, poly_hp, config);
+
+    mpreal error_schroder = abs(result_schroder.location - expected_root);
+
+    std::cout << "  Converged: " << (result_schroder.converged ? "YES" : "NO") << std::endl;
+    std::cout << "  Iterations: " << result_schroder.iterations << std::endl;
+    std::cout << "  Error from true root: " << toString(error_schroder, 10) << std::endl;
+    std::cout << "  Residual: " << toString(result_schroder.residual, 10) << std::endl;
+
+    // Comparison
+    std::cout << "\n--- Comparison ---" << std::endl;
+    std::cout << "  Newton iterations: " << result_newton.iterations << std::endl;
+    std::cout << "  Schröder iterations: " << result_schroder.iterations << std::endl;
+
+    if (result_schroder.iterations < result_newton.iterations) {
+        std::cout << "  ✓ Schröder converged " << (result_newton.iterations - result_schroder.iterations)
+                  << " iterations faster (third-order convergence advantage)!" << std::endl;
+    } else if (result_schroder.iterations > result_newton.iterations) {
+        std::cout << "  ✓ Newton converged " << (result_schroder.iterations - result_newton.iterations)
+                  << " iterations faster!" << std::endl;
+    } else {
+        std::cout << "  ✓ Both methods converged in same number of iterations" << std::endl;
+    }
+
+    std::cout << "  Newton final error: " << toString(error_newton, 10) << std::endl;
+    std::cout << "  Schröder final error: " << toString(error_schroder, 10) << std::endl;
+
+    // Both should converge
+    assert(result_newton.converged);
+    assert(result_schroder.converged);
+
+    std::cout << "  ✓ PASSED" << std::endl;
+}
+
 int main() {
     std::cout << "\n========================================" << std::endl;
     std::cout << "  ResultRefinerHP Test Suite" << std::endl;
@@ -193,6 +396,8 @@ int main() {
         test_simple_root_hp();
         test_ill_conditioned_root_hp();
         test_multiple_root_hp();
+        test_schroder_vs_newton_comparison();
+        test_schroder_simple_root();
 
         std::cout << "\n========================================" << std::endl;
         std::cout << "  All tests PASSED!" << std::endl;

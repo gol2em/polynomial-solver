@@ -67,7 +67,7 @@ struct RefinementConfigHP {
 };
 
 /**
- * @brief A refined root with high-precision results
+ * @brief A refined root with high-precision results and guaranteed error bounds
  */
 struct RefinedRootHP {
     mpreal location;                     ///< Root location (high precision)
@@ -79,10 +79,18 @@ struct RefinedRootHP {
     bool converged;                      ///< True if converged to target tolerance
     std::string error_message;           ///< Error message if not converged
 
+    // Error bounds (interval containing the true root)
+    mpreal max_error;                    ///< Maximum error bound (radius of interval)
+    mpreal interval_lower;               ///< Lower bound of interval containing root
+    mpreal interval_upper;               ///< Upper bound of interval containing root
+    bool has_guaranteed_bounds;          ///< True if interval bounds are rigorous
+
     RefinedRootHP()
         : location(0), residual(0), multiplicity(1),
           first_nonzero_derivative(0), condition_estimate(1),
-          iterations(0), converged(false)
+          iterations(0), converged(false),
+          max_error(0), interval_lower(0), interval_upper(0),
+          has_guaranteed_bounds(false)
     {}
 };
 
@@ -109,6 +117,25 @@ public:
      * @return Refined root with convergence information
      */
     static RefinedRootHP refineRoot1D(
+        double initial_guess,
+        const PolynomialHP& poly,
+        const RefinementConfigHP& config = RefinementConfigHP());
+
+    /**
+     * @brief Refine a 1D root using Schröder's method (third-order convergence)
+     *
+     * Schröder's method provides third-order convergence and is particularly
+     * effective for multiple roots. It automatically handles multiplicity
+     * without explicit detection.
+     *
+     * Formula: x_{n+1} = x_n - (f * f') / (f'^2 - f * f'')
+     *
+     * @param initial_guess Initial guess (double precision is fine)
+     * @param poly High-precision polynomial
+     * @param config Refinement configuration
+     * @return Refined root with convergence information
+     */
+    static RefinedRootHP refineRoot1DSchroder(
         double initial_guess,
         const PolynomialHP& poly,
         const RefinementConfigHP& config = RefinementConfigHP());
@@ -149,6 +176,29 @@ public:
         const mpreal& location,
         const PolynomialHP& poly,
         const mpreal& derivative_value);
+
+    /**
+     * @brief Compute rigorous error bounds for a refined root
+     *
+     * Uses interval Newton method or a posteriori error estimation to compute
+     * a guaranteed interval containing the true root. For simple roots, uses
+     * the Kantorovich theorem. For multiple roots, uses derivative-based bounds.
+     *
+     * @param location Refined root location
+     * @param poly High-precision polynomial
+     * @param multiplicity Estimated multiplicity
+     * @param first_nonzero_deriv First non-zero derivative value
+     * @param lower Output: lower bound of interval
+     * @param upper Output: upper bound of interval
+     * @return True if rigorous bounds were computed successfully
+     */
+    static bool computeErrorBounds(
+        const mpreal& location,
+        const PolynomialHP& poly,
+        unsigned int multiplicity,
+        const mpreal& first_nonzero_deriv,
+        mpreal& lower,
+        mpreal& upper);
 };
 
 } // namespace polynomial_solver
