@@ -905,67 +905,27 @@ bool ResultRefinerHP::computeErrorBounds(
 // New Multiplicity Detection Methods
 // ============================================================================
 
-unsigned int ResultRefinerHP::estimateMultiplicityDerivativeRatio(
+unsigned int ResultRefinerHP::estimateMultiplicitySimpleThreshold(
     const mpreal& location,
     const PolynomialHP& poly,
-    unsigned int max_order)
+    unsigned int max_order,
+    const mpreal& threshold)
 {
-    // For a root of multiplicity m:
-    // |f^(k)(x)| / |f^(k-1)(x)| should be large for k <= m
-    // and bounded for k > m
+    // Simplest method: find first derivative |f^(k)| > threshold
+    // No ratio test, no fancy logic - just absolute threshold
 
-    std::vector<mpreal> deriv_values(max_order + 1);
-
-    // Compute all derivatives
     for (unsigned int k = 1; k <= max_order; ++k) {
         PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
-        deriv_values[k] = abs(deriv.evaluate(location));
-    }
-
-    // Find first non-negligible derivative
-    mpreal threshold = mpreal("1e-50");
-    for (unsigned int k = 1; k <= max_order; ++k) {
-        if (deriv_values[k] > threshold) {
-            // Check if next derivative is also significant
-            if (k < max_order && deriv_values[k+1] > threshold) {
-                // Compute ratio
-                mpreal ratio = deriv_values[k+1] / deriv_values[k];
-                // If ratio is bounded (< 100), we found the multiplicity
-                if (ratio < mpreal("100.0")) {
-                    return k;
-                }
-            } else {
-                // Next derivative is negligible, k is the multiplicity
-                return k;
-            }
-        }
-    }
-
-    return 1;  // Default to simple root
-}
-
-unsigned int ResultRefinerHP::estimateMultiplicityGCD(
-    const mpreal& location,
-    const PolynomialHP& poly,
-    unsigned int max_order)
-{
-    // GCD-based method: if gcd(f, f') has the root, it's a multiple root
-    // We'll use a numerical approach: check if location is a root of f^(k) for k=1,2,...
-
-    mpreal threshold = mpreal("1e-50");
-
-    for (unsigned int m = 1; m <= max_order; ++m) {
-        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, m);
         mpreal val = abs(deriv.evaluate(location));
 
         if (val > threshold) {
-            // f^(m) is non-zero at location, so multiplicity is m
-            return m;
+            // f^(k) is non-zero at location, so multiplicity is k
+            return k;
         }
     }
 
-    // All derivatives up to max_order are zero - return max_order
-    return max_order;
+    // All derivatives up to max_order are below threshold
+    return max_order + 1;
 }
 
 unsigned int ResultRefinerHP::estimateMultiplicitySturm(
@@ -973,26 +933,55 @@ unsigned int ResultRefinerHP::estimateMultiplicitySturm(
     const PolynomialHP& poly,
     const mpreal& interval_radius)
 {
-    // Sturm sequence method
-    // For now, implement a simplified version that counts sign changes
-    // A full Sturm sequence implementation would require polynomial GCD
+    // Sturm sequence method for multiplicity detection
+    //
+    // Key insight: For a root of multiplicity m at x=r:
+    // - f has m roots at r (counted with multiplicity)
+    // - f' has m-1 roots at r
+    // - f'' has m-2 roots at r, etc.
+    //
+    // Strategy: Count how many consecutive derivatives vanish at the location
+    // If f^(0), f^(1), ..., f^(m-1) all vanish but f^(m) doesn't, then multiplicity = m
+    //
+    // We use a small interval [location - radius, location + radius] and check
+    // if derivatives change sign across the interval. If f^(k) doesn't change sign,
+    // it likely vanishes at location.
 
-    // Instead, we'll use a derivative-based approach:
-    // Count how many derivatives vanish at the location
-
+    mpreal left = location - interval_radius;
+    mpreal right = location + interval_radius;
     mpreal threshold = mpreal("1e-50");
     unsigned int max_check = 10;
 
+    // Check each derivative order
     for (unsigned int k = 1; k <= max_check; ++k) {
         PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
-        mpreal val = abs(deriv.evaluate(location));
 
-        if (val > threshold) {
+        // Evaluate at endpoints and center
+        mpreal val_left = deriv.evaluate(left);
+        mpreal val_center = deriv.evaluate(location);
+        mpreal val_right = deriv.evaluate(right);
+
+        // Check if derivative is non-zero at center
+        if (abs(val_center) > threshold) {
+            // f^(k) is non-zero at location → multiplicity is k
             return k;
         }
+
+        // Check if derivative changes sign across interval
+        // If it changes sign, there's a root in the interval
+        bool sign_change = (val_left * val_right < mpreal(0));
+
+        if (sign_change) {
+            // f^(k) has a root in the interval → multiplicity is k
+            return k;
+        }
+
+        // If |f^(k)| is very small throughout the interval, it likely vanishes
+        // Continue to next derivative
     }
 
-    return max_check;
+    // All derivatives up to max_check vanish → multiplicity > max_check
+    return max_check + 1;
 }
 
 std::map<std::string, unsigned int> ResultRefinerHP::estimateMultiplicityAllMethods(
@@ -1005,22 +994,23 @@ std::map<std::string, unsigned int> ResultRefinerHP::estimateMultiplicityAllMeth
 {
     std::map<std::string, unsigned int> results;
 
-    // Method 1: Taylor series (original estimateMultiplicity)
+    // Method 1: Taylor series with ratio test (original estimateMultiplicity)
     mpreal dummy_deriv;
     mpreal threshold = mpreal("1e-50");
     results["Taylor"] = estimateMultiplicity(location, poly, max_order, threshold, dummy_deriv);
 
-    // Method 2: Derivative ratio
-    results["DerivRatio"] = estimateMultiplicityDerivativeRatio(location, poly, max_order);
+    // Method 2: Simple threshold (no ratio test)
+    // Test multiple thresholds to see if any work universally
+    results["Thresh_1e-50"] = estimateMultiplicitySimpleThreshold(location, poly, max_order, mpreal("1e-50"));
+    results["Thresh_1e-40"] = estimateMultiplicitySimpleThreshold(location, poly, max_order, mpreal("1e-40"));
+    results["Thresh_1e-30"] = estimateMultiplicitySimpleThreshold(location, poly, max_order, mpreal("1e-30"));
+    results["Thresh_1e-20"] = estimateMultiplicitySimpleThreshold(location, poly, max_order, mpreal("1e-20"));
 
-    // Method 3: GCD-based
-    results["GCD"] = estimateMultiplicityGCD(location, poly, max_order);
-
-    // Method 4: Sturm sequence
+    // Method 3: Sturm sequence
     mpreal interval_radius = mpreal("1e-10");
     results["Sturm"] = estimateMultiplicitySturm(location, poly, interval_radius);
 
-    // Method 5: Ostrowski (if iterates provided)
+    // Method 4: Ostrowski (if iterates provided)
     if (abs(x1) > mpreal("1e-100") || abs(x2) > mpreal("1e-100") || abs(x3) > mpreal("1e-100")) {
         results["Ostrowski"] = estimateMultiplicityOstrowski(x1, x2, x3);
     }

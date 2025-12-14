@@ -72,38 +72,35 @@ void testMultiplicityDetection(const std::string& test_name,
     unsigned int max_iters = 50;
     
     std::cout << std::setprecision(6) << std::fixed;
-    std::cout << "Iter | Error      | Taylor | DerivRatio | GCD | Sturm | Ostr_old | Ostr_new\n";
-    std::cout << "-----+------------+--------+------------+-----+-------+----------+----------\n";
-    
+    std::cout << "Iter | Error      | Taylor | T_1e-50 | T_1e-40 | T_1e-30 | T_1e-20 | Sturm | Ostr\n";
+    std::cout << "-----+------------+--------+---------+---------+---------+---------+-------+------\n";
+
     for (unsigned int iter = 0; iter < max_iters; ++iter) {
         mpreal f = poly.evaluate(x);
         mpreal df = dpoly.evaluate(x);
-        
+
         // Compute error from true root
         mpreal error = abs(x - mpreal(true_root));
-        
+
         // Test all methods
         std::map<std::string, unsigned int> estimates;
 
-        // Always run non-Ostrowski methods
+        // Run all methods
         estimates = ResultRefinerHP::estimateMultiplicityAllMethods(x, poly, 10);
 
         // Add corrected Ostrowski method (performs 3 regular Newton steps from current point)
         estimates["Ostrowski_corrected"] = ResultRefinerHP::estimateMultiplicityOstrowskiFromPoint(x, poly);
-        
+
         // Print results
         std::cout << std::setw(4) << iter << " | ";
         std::cout << std::scientific << std::setprecision(2) << error << " | ";
         std::cout << std::setw(6) << estimates["Taylor"] << " | ";
-        std::cout << std::setw(10) << estimates["DerivRatio"] << " | ";
-        std::cout << std::setw(3) << estimates["GCD"] << " | ";
+        std::cout << std::setw(7) << estimates["Thresh_1e-50"] << " | ";
+        std::cout << std::setw(7) << estimates["Thresh_1e-40"] << " | ";
+        std::cout << std::setw(7) << estimates["Thresh_1e-30"] << " | ";
+        std::cout << std::setw(7) << estimates["Thresh_1e-20"] << " | ";
         std::cout << std::setw(5) << estimates["Sturm"] << " | ";
-        if (estimates.count("Ostrowski")) {
-            std::cout << std::setw(8) << estimates["Ostrowski"] << " | ";
-        } else {
-            std::cout << std::setw(8) << "-" << " | ";
-        }
-        std::cout << std::setw(8) << estimates["Ostrowski_corrected"];
+        std::cout << std::setw(4) << estimates["Ostrowski_corrected"];
         std::cout << "\n";
         
         // Check convergence

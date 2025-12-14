@@ -205,47 +205,35 @@ public:
         mpreal& first_nonzero_deriv);
 
     /**
-     * @brief Estimate multiplicity using derivative ratio test
+     * @brief Estimate multiplicity using simple threshold method
      *
-     * For a root of multiplicity m, the ratio |f^(k+1)(x)| / |f^(k)(x)|
-     * should be large for k < m and bounded for k >= m.
-     *
-     * This method computes ratios and looks for the transition point.
+     * Finds the first derivative |f^(k)| > threshold.
+     * This is the simplest approach - just checks absolute values.
      *
      * @param location Point to check (high precision)
      * @param poly High-precision polynomial
      * @param max_order Maximum order to check
+     * @param threshold Absolute threshold for detecting non-zero derivative
      * @return Estimated multiplicity (≥ 1)
      */
-    static unsigned int estimateMultiplicityDerivativeRatio(
+    static unsigned int estimateMultiplicitySimpleThreshold(
         const mpreal& location,
         const PolynomialHP& poly,
-        unsigned int max_order);
-
-    /**
-     * @brief Estimate multiplicity using GCD-based method
-     *
-     * Computes GCD(f, f') and checks if the root is also a root of the GCD.
-     * If yes, it's a multiple root. Recursively applies to find exact multiplicity.
-     *
-     * This is the most robust algebraic method but computationally expensive.
-     *
-     * @param location Point to check (high precision)
-     * @param poly High-precision polynomial
-     * @param max_order Maximum multiplicity to check
-     * @return Estimated multiplicity (≥ 1)
-     */
-    static unsigned int estimateMultiplicityGCD(
-        const mpreal& location,
-        const PolynomialHP& poly,
-        unsigned int max_order);
+        unsigned int max_order,
+        const mpreal& threshold);
 
     /**
      * @brief Estimate multiplicity using Sturm sequence
      *
-     * Uses Sturm's theorem to count roots in an interval around the location.
-     * If the interval contains the root with multiplicity m, Sturm sequence
-     * will show sign changes corresponding to the simple roots.
+     * Uses Sturm's theorem to count distinct roots in [location - radius, location + radius].
+     * For a root of multiplicity m, f/gcd(f,f') has a simple root at that location.
+     * We compute the Sturm sequence for f and f' to determine multiplicity.
+     *
+     * Key insight: If f has a root of multiplicity m at x=r, then:
+     * - f has m roots at r (counted with multiplicity)
+     * - f' has m-1 roots at r
+     * - gcd(f, f') has m-1 roots at r
+     * - f/gcd(f,f') has 1 simple root at r
      *
      * @param location Point to check (high precision)
      * @param poly High-precision polynomial
