@@ -10,11 +10,21 @@ using namespace polynomial_solver;
 // Test 1: Simple cubic with 3 roots
 int test_cubic_refinement() {
     std::cout << "Test 1: Cubic polynomial refinement" << std::endl;
-    
+
     // p(x) = (x-0.2)(x-0.5)(x-0.8) = x^3 - 1.5*x^2 + 0.66*x - 0.08
+    // Exact power coefficients (computed analytically):
+    // Expanding: (x-0.2)(x-0.5)(x-0.8)
+    //   = (x-0.2)(x^2 - 1.3x + 0.4)
+    //   = x^3 - 1.3x^2 + 0.4x - 0.2x^2 + 0.26x - 0.08
+    //   = x^3 - 1.5x^2 + 0.66x - 0.08
     std::vector<unsigned int> degrees{3u};
     std::vector<double> power_coeffs{-0.08, 0.66, -1.5, 1.0};
+
     Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+
+    // Ensure Bernstein representation is available for subdivision solver
+    p.ensureBernsteinPrimary();
+
     PolynomialSystem system({p});
     
     // Solve with high precision
@@ -25,8 +35,14 @@ int test_cubic_refinement() {
     
     SubdivisionSolverResult result = solver.subdivisionSolve(
         system, config, RootBoundingMethod::ProjectedPolyhedral);
-    
-    std::cout << "  Solver found " << result.num_resolved << " boxes" << std::endl;
+
+    std::cout << "  Solver found " << result.num_resolved << " resolved boxes" << std::endl;
+    std::cout << "  Total boxes: " << result.boxes.size() << std::endl;
+    for (size_t i = 0; i < result.boxes.size(); ++i) {
+        const auto& box = result.boxes[i];
+        std::cout << "    Box " << i << ": [" << box.lower[0] << ", " << box.upper[0]
+                  << "], converged=" << box.converged << std::endl;
+    }
     
     // Refine results
     ResultRefiner refiner;
@@ -35,9 +51,8 @@ int test_cubic_refinement() {
     refine_config.residual_tolerance = 1e-12;
     
     RefinementResult refined = refiner.refine(result, system, refine_config);
-    
+
     std::cout << "  Refined to " << refined.roots.size() << " unique roots" << std::endl;
-    std::cout << "  Cancelled " << refined.cancelled_boxes.size() << " boxes" << std::endl;
     
     // Check results
     if (refined.roots.size() != 3) {

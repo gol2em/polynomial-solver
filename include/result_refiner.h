@@ -153,7 +153,7 @@ public:
         const RefinementConfig& config) const;
 
     /**
-     * @brief Verify root and determine multiplicity from derivatives
+     * @brief Verify root and determine multiplicity from derivatives (Taylor method)
      *
      * Checks derivatives up to max_order and returns the order of the
      * first non-zero derivative. For simple roots, returns 1.
@@ -179,6 +179,59 @@ public:
         unsigned int max_order,
         double derivative_threshold,
         double& first_nonzero_deriv) const;
+
+    /**
+     * @brief Estimate multiplicity using Ostrowski's method from Newton iterates
+     *
+     * Uses 3 consecutive Newton iterates to estimate multiplicity via:
+     *   p = 1/2 + (x₁ - x₂) / (x₃ - 2x₂ + x₁)
+     *   m = floor(p)
+     *
+     * This method is more robust to distance from root and multiple roots
+     * compared to the Taylor derivative method.
+     *
+     * @param x1 First Newton iterate
+     * @param x2 Second Newton iterate
+     * @param x3 Third Newton iterate
+     * @return Estimated multiplicity (1 = simple root, 2+ = multiple root)
+     */
+    unsigned int estimateMultiplicityOstrowski(
+        double x1, double x2, double x3) const;
+
+    /**
+     * @brief Estimate multiplicity using Ostrowski's method from a starting point
+     *
+     * Performs 3 Newton iterations from x0, then uses Ostrowski's formula.
+     * This is the recommended method for multiplicity detection in double precision.
+     *
+     * @param x0 Starting point
+     * @param poly Polynomial (1D)
+     * @return Estimated multiplicity (1 = simple root, 2+ = multiple root)
+     */
+    unsigned int estimateMultiplicityOstrowskiFromPoint(
+        double x0, const Polynomial& poly) const;
+
+    /**
+     * @brief Refine a 1D root from a starting point using Newton's method
+     *
+     * Uses the new Ostrowski-based workflow:
+     * 1. Do 3 standard Newton iterations
+     * 2. Estimate multiplicity using Ostrowski
+     * 3. Use modified Newton with detected multiplicity
+     *
+     * @param x0 Initial guess
+     * @param poly Polynomial (1D)
+     * @param config Refinement configuration
+     * @param refined_location Output: refined root location
+     * @param residual Output: residual at refined location
+     * @return True if refinement succeeded
+     */
+    bool refineRoot1D_fromPoint(
+        double x0,
+        const Polynomial& poly,
+        const RefinementConfig& config,
+        double& refined_location,
+        double& residual) const;
 
     /**
      * @brief Refine a 1D root with known multiplicity using modified Newton method
@@ -235,6 +288,32 @@ public:
         double location,
         const Polynomial& poly,
         double derivative_value) const;
+
+#ifdef ENABLE_HIGH_PRECISION
+    /**
+     * @brief Refine a 1D root with automatic precision escalation
+     *
+     * This method first attempts refinement with double precision.
+     * If the condition number is too large (estimated error > 1e-10),
+     * it automatically switches to high precision with appropriate bit depth.
+     *
+     * Precision selection based on condition number:
+     * - κ < 1e5:  256 bits (~77 decimal digits)
+     * - κ < 1e10: 512 bits (~154 decimal digits)
+     * - κ ≥ 1e10: 1024 bits (~308 decimal digits)
+     *
+     * @param initial_guess Initial guess for root location
+     * @param poly Polynomial to refine (1D, double precision)
+     * @param config Double precision refinement configuration
+     * @param refined_root Output: refined root information
+     * @return True if refinement succeeded (either in double or high precision)
+     */
+    bool refineRoot1DWithPrecisionEscalation(
+        double initial_guess,
+        const Polynomial& poly,
+        const RefinementConfig& config,
+        RefinedRoot& refined_root) const;
+#endif
 
 private:
     /**
@@ -356,25 +435,6 @@ private:
         const Polynomial& poly,
         const RefinementConfig& config) const;
 
-    /**
-     * @brief Refine a root starting from a given point (no box constraint)
-     *
-     * Similar to refineRoot1D but starts from an arbitrary point without
-     * box constraints. Used for refining problematic regions.
-     *
-     * @param x0 Initial guess
-     * @param poly Polynomial (1D)
-     * @param config Refinement configuration
-     * @param refined_location Output: refined root location
-     * @param residual Output: residual at refined location
-     * @return True if refinement succeeded with condition-aware convergence
-     */
-    bool refineRoot1D_fromPoint(
-        double x0,
-        const Polynomial& poly,
-        const RefinementConfig& config,
-        double& refined_location,
-        double& residual) const;
 };
 
 } // namespace polynomial_solver

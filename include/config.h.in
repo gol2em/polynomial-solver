@@ -5,18 +5,34 @@
 #define POLYNOMIAL_SOLVER_CONFIG_H
 
 // High-precision arithmetic support
+// Note: May also be defined via compile flags for IDE support
+#ifndef ENABLE_HIGH_PRECISION
 #cmakedefine ENABLE_HIGH_PRECISION
+#endif
 
 // Template-based implementation
+// Note: May also be defined via compile flags for IDE support
+#ifndef USE_TEMPLATES
 #cmakedefine USE_TEMPLATES
+#endif
 
 // Multiprecision backend (mutually exclusive)
+// Note: May also be defined via compile flags for IDE support
+#ifndef USE_MPFR_BACKEND
 #cmakedefine USE_MPFR_BACKEND
+#endif
+#ifndef USE_CPP_DEC_FLOAT_BACKEND
 #cmakedefine USE_CPP_DEC_FLOAT_BACKEND
+#endif
+#ifndef USE_QUADMATH_BACKEND
 #cmakedefine USE_QUADMATH_BACKEND
+#endif
 
 // Quadmath support (can be used alongside other backends in template mode)
+// Note: May also be defined via compile flags for IDE support
+#ifndef ENABLE_QUADMATH
 #cmakedefine ENABLE_QUADMATH
+#endif
 
 // Version information
 #define POLYNOMIAL_SOLVER_VERSION_MAJOR @PROJECT_VERSION_MAJOR@

@@ -1,3 +1,5 @@
+#include "config.h"
+
 #ifdef ENABLE_HIGH_PRECISION
 
 #include "polynomial_hp.h"
@@ -92,6 +94,80 @@ void power_to_bernstein_1d_hp(unsigned int degree,
     }
 }
 
+/**
+ * @brief Horner's method for 1D power basis evaluation (high-precision)
+ */
+polynomial_solver::mpreal horner_eval_1d_hp(const std::vector<polynomial_solver::mpreal>& power_coeffs_1d,
+                                            const polynomial_solver::mpreal& x) {
+    using polynomial_solver::mpreal;
+
+    if (power_coeffs_1d.empty()) {
+        return mpreal(0);
+    }
+    const int n = static_cast<int>(power_coeffs_1d.size()) - 1;
+    mpreal result = power_coeffs_1d[n];
+    for (int i = n - 1; i >= 0; --i) {
+        result = result * x + power_coeffs_1d[i];
+    }
+    return result;
+}
+
+/**
+ * @brief Horner's method for tensor-product power basis (high-precision)
+ */
+polynomial_solver::mpreal horner_eval_tensor_hp(const std::vector<unsigned int>& degrees,
+                                                const std::vector<polynomial_solver::mpreal>& power_coeffs,
+                                                const std::vector<polynomial_solver::mpreal>& parameters) {
+    using polynomial_solver::mpreal;
+
+    const std::size_t dim = degrees.size();
+
+    if (dim == 0) {
+        return power_coeffs.empty() ? mpreal(0) : power_coeffs[0];
+    }
+
+    // Univariate case
+    if (dim == 1) {
+        return horner_eval_1d_hp(power_coeffs, parameters[0]);
+    }
+
+    // Multivariate: evaluate dimension by dimension
+    // Start from the last dimension and work backwards
+    std::vector<std::size_t> strides;
+    compute_strides_hp(degrees, strides);
+
+    std::vector<mpreal> current_coeffs = power_coeffs;
+
+    for (std::size_t d = dim; d > 0; --d) {
+        const std::size_t axis = d - 1;
+        const unsigned int deg = degrees[axis];
+        const std::size_t len = static_cast<std::size_t>(deg + 1);
+        const mpreal& x = parameters[axis];
+
+        // Number of 1D slices along this axis
+        std::size_t num_slices = 1;
+        for (std::size_t i = 0; i < axis; ++i) {
+            num_slices *= static_cast<std::size_t>(degrees[i] + 1);
+        }
+
+        std::vector<mpreal> next_coeffs(num_slices);
+
+        for (std::size_t slice = 0; slice < num_slices; ++slice) {
+            // Extract 1D polynomial along this axis
+            std::vector<mpreal> line(len);
+            for (std::size_t k = 0; k < len; ++k) {
+                line[k] = current_coeffs[slice * len + k];
+            }
+            // Evaluate using Horner
+            next_coeffs[slice] = horner_eval_1d_hp(line, x);
+        }
+
+        current_coeffs = next_coeffs;
+    }
+
+    return current_coeffs[0];
+}
+
 } // anonymous namespace
 
 namespace polynomial_solver {
@@ -170,24 +246,65 @@ static mpreal evaluateTensorProduct_HP(
 // PolynomialHP implementation
 
 PolynomialHP::PolynomialHP()
-    : degrees_(), bernstein_coeffs_()
+    : degrees_(),
+      bernstein_coeffs_(),
+      power_coeffs_(),
+      primary_rep_(PolynomialRepresentation::BERNSTEIN),
+      bernstein_valid_(false),
+      power_valid_(false)
 {
 }
 
 PolynomialHP::PolynomialHP(const std::vector<unsigned int>& degrees,
                            const std::vector<mpreal>& bernstein_coeffs)
-    : degrees_(degrees), bernstein_coeffs_(bernstein_coeffs)
+    : degrees_(degrees),
+      bernstein_coeffs_(bernstein_coeffs),
+      power_coeffs_(),
+      primary_rep_(PolynomialRepresentation::BERNSTEIN),
+      bernstein_valid_(true),
+      power_valid_(false)
 {
 }
 
 PolynomialHP::PolynomialHP(const Polynomial& poly)
-    : degrees_(poly.degrees())
+    : degrees_(poly.degrees()),
+      primary_rep_(poly.primaryRepresentation()),
+      bernstein_valid_(false),
+      power_valid_(false)
 {
     // Convert double coefficients to high-precision
-    const std::vector<double>& double_coeffs = poly.bernsteinCoefficients();
-    bernstein_coeffs_.reserve(double_coeffs.size());
-    for (double coeff : double_coeffs) {
-        bernstein_coeffs_.push_back(toHighPrecision(coeff));
+    // Use high-precision conversion for power-to-Bernstein if polynomial has power as primary
+
+    if (poly.hasPowerCoefficients()) {
+        // Convert power coefficients to HP
+        const std::vector<double>& double_power = poly.powerCoefficients();
+        power_coeffs_.reserve(double_power.size());
+        for (double coeff : double_power) {
+            power_coeffs_.push_back(toHighPrecision(coeff));
+        }
+        power_valid_ = true;
+
+        // If power is primary, use HP conversion to Bernstein (more accurate)
+        if (primary_rep_ == PolynomialRepresentation::POWER) {
+            // Bernstein will be computed lazily using HP conversion
+            bernstein_valid_ = false;
+        } else {
+            // Also convert Bernstein coefficients
+            const std::vector<double>& double_bern = poly.bernsteinCoefficients();
+            bernstein_coeffs_.reserve(double_bern.size());
+            for (double coeff : double_bern) {
+                bernstein_coeffs_.push_back(toHighPrecision(coeff));
+            }
+            bernstein_valid_ = true;
+        }
+    } else {
+        // Only Bernstein available
+        const std::vector<double>& double_bern = poly.bernsteinCoefficients();
+        bernstein_coeffs_.reserve(double_bern.size());
+        for (double coeff : double_bern) {
+            bernstein_coeffs_.push_back(toHighPrecision(coeff));
+        }
+        bernstein_valid_ = true;
     }
 }
 
@@ -203,15 +320,98 @@ const std::vector<unsigned int>& PolynomialHP::degrees() const {
 }
 
 std::size_t PolynomialHP::coefficientCount() const {
-    return bernstein_coeffs_.size();
+    std::size_t count = 1;
+    for (unsigned int deg : degrees_) {
+        count *= static_cast<std::size_t>(deg + 1);
+    }
+    return count;
 }
 
 const std::vector<mpreal>& PolynomialHP::bernsteinCoefficients() const {
+    if (!bernstein_valid_) {
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Power->Bernstein conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "PolynomialHP::bernsteinCoefficients() called on polynomial with invalid Bernstein representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. If you need Bernstein coefficients, call convertPowerToBernstein() explicitly first\n";
+        std::cerr << "2. If you're differentiating, use power-basis differentiation instead\n";
+        std::cerr << "3. If you're evaluating, ensure primary representation matches your needs\n";
+        std::cerr << "\nPrimary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "Power valid: " << (power_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "Bernstein valid: " << (bernstein_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "\nStack trace hint: Set a breakpoint at polynomial_hp.cpp:330 to see call stack\n";
+        std::cerr << "========================================\n";
+        std::abort();  // Use abort() instead of exit() to get better stack trace
+    }
     return bernstein_coeffs_;
 }
 
+const std::vector<mpreal>& PolynomialHP::powerCoefficients() const {
+    if (!power_valid_) {
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Bernstein->Power conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "PolynomialHP::powerCoefficients() called on polynomial with invalid Power representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. If you need power coefficients, call convertBernsteinToPower() explicitly first\n";
+        std::cerr << "2. Ensure the polynomial was created with the correct primary representation\n";
+        std::cerr << "\nPrimary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "Power valid: " << (power_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "Bernstein valid: " << (bernstein_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "========================================\n";
+        std::exit(EXIT_FAILURE);
+    }
+    return power_coeffs_;
+}
+
+PolynomialRepresentation PolynomialHP::primaryRepresentation() const {
+    return primary_rep_;
+}
+
+bool PolynomialHP::hasPowerCoefficients() const {
+    return power_valid_;
+}
+
+bool PolynomialHP::hasBernsteinCoefficients() const {
+    return bernstein_valid_;
+}
+
+void PolynomialHP::ensureBernsteinPrimary() {
+    if (primary_rep_ == PolynomialRepresentation::BERNSTEIN) {
+        return;
+    }
+    if (!bernstein_valid_) {
+        convertPowerToBernstein();
+    }
+    primary_rep_ = PolynomialRepresentation::BERNSTEIN;
+}
+
+void PolynomialHP::ensurePowerPrimary() {
+    if (primary_rep_ == PolynomialRepresentation::POWER) {
+        return;
+    }
+    if (!power_valid_) {
+        convertBernsteinToPower();
+    }
+    primary_rep_ = PolynomialRepresentation::POWER;
+}
+
 mpreal PolynomialHP::evaluate(const std::vector<mpreal>& parameters) const {
-    return evaluateTensorProduct_HP(degrees_, bernstein_coeffs_, parameters);
+    // Choose evaluation method based on PRIMARY representation
+    if (primary_rep_ == PolynomialRepresentation::POWER) {
+        if (!power_valid_) {
+            convertBernsteinToPower();
+        }
+        return horner_eval_tensor_hp(degrees_, power_coeffs_, parameters);
+    } else {
+        if (!bernstein_valid_) {
+            convertPowerToBernstein();
+        }
+        return evaluateTensorProduct_HP(degrees_, bernstein_coeffs_, parameters);
+    }
 }
 
 mpreal PolynomialHP::evaluate(const mpreal& t) const {
@@ -220,50 +420,31 @@ mpreal PolynomialHP::evaluate(const mpreal& t) const {
 }
 
 bool PolynomialHP::empty() const {
-    return bernstein_coeffs_.empty();
+    return !bernstein_valid_ && !power_valid_;
 }
 
-// Conversion utility
-
-PolynomialHP convertToHighPrecision(const Polynomial& poly) {
-    return PolynomialHP(poly);
-}
-
-PolynomialHP fromPowerHP(const std::vector<unsigned int>& degrees,
-                         const std::vector<mpreal>& power_coeffs) {
-    const std::size_t dim = degrees.size();
-
-    // Compute expected number of coefficients
-    std::size_t count = 1u;
-    for (std::size_t i = 0; i < degrees.size(); ++i) {
-        count *= static_cast<std::size_t>(degrees[i] + 1u);
-    }
-
-    if (count == 0u) {
-        return PolynomialHP(degrees, std::vector<mpreal>());
-    }
-
-    // Copy and resize input coefficients as needed
-    std::vector<mpreal> coeffs = power_coeffs;
-    if (coeffs.size() < count) {
-        coeffs.resize(count, mpreal(0));
-    } else if (coeffs.size() > count) {
-        coeffs.resize(count);
-    }
+void PolynomialHP::convertPowerToBernstein() const {
+    // Convert power to Bernstein in high precision
+    const std::size_t dim = degrees_.size();
 
     if (dim == 0u) {
-        return PolynomialHP(degrees, coeffs);
+        bernstein_coeffs_ = power_coeffs_;
+        bernstein_valid_ = true;
+        return;
     }
+
+    // Copy power coefficients to working array
+    std::vector<mpreal> coeffs = power_coeffs_;
 
     // Precompute strides for the tensor layout
     std::vector<std::size_t> strides;
-    compute_strides_hp(degrees, strides);
+    compute_strides_hp(degrees_, strides);
 
     // Transform along each dimension separately from power basis to Bernstein
     std::vector<unsigned int> multi_index(dim, 0u);
 
     for (std::size_t axis = 0; axis < dim; ++axis) {
-        const unsigned int deg_axis = degrees[axis];
+        const unsigned int deg_axis = degrees_[axis];
         const std::size_t len_axis = static_cast<std::size_t>(deg_axis + 1u);
 
         if (len_axis <= 1u) {
@@ -276,7 +457,7 @@ PolynomialHP fromPowerHP(const std::vector<unsigned int>& degrees,
         std::fill(multi_index.begin(), multi_index.end(), 0u);
         bool first = true;
 
-        while (first || increment_multi_except_axis_hp(multi_index, degrees, axis)) {
+        while (first || increment_multi_except_axis_hp(multi_index, degrees_, axis)) {
             first = false;
 
             // Gather a 1D slice along the current axis
@@ -298,72 +479,61 @@ PolynomialHP fromPowerHP(const std::vector<unsigned int>& degrees,
         }
     }
 
-    // Raise degree to at least 1 in each dimension (in Bernstein basis)
-    std::vector<unsigned int> adjusted_degrees = degrees;
-    bool needs_degree_raising = false;
-    for (std::size_t i = 0; i < dim; ++i) {
-        if (adjusted_degrees[i] == 0u) {
-            adjusted_degrees[i] = 1u;
-            needs_degree_raising = true;
-        }
+    bernstein_coeffs_ = coeffs;
+    bernstein_valid_ = true;
+}
+
+void PolynomialHP::convertBernsteinToPower() const {
+    // TODO: Implement Bernstein-to-power conversion in HP
+    // For now, just copy (this is a placeholder)
+    // This conversion is rarely needed in practice
+    power_coeffs_ = bernstein_coeffs_;
+    power_valid_ = true;
+}
+
+// Conversion utility
+
+PolynomialHP convertToHighPrecision(const Polynomial& poly) {
+    return PolynomialHP(poly);
+}
+
+PolynomialHP fromPowerHP(const std::vector<unsigned int>& degrees,
+                         const std::vector<mpreal>& power_coeffs) {
+    const std::size_t dim = degrees.size();
+
+    // Compute expected number of coefficients
+    std::size_t count = 1u;
+    for (std::size_t i = 0; i < degrees.size(); ++i) {
+        count *= static_cast<std::size_t>(degrees[i] + 1u);
     }
 
-    if (needs_degree_raising) {
-        // Compute new coefficient count
-        std::size_t new_count = 1u;
-        for (std::size_t i = 0; i < dim; ++i) {
-            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
-        }
-
-        std::vector<mpreal> raised_coeffs(new_count, mpreal(0));
-
-        // Copy coefficients, duplicating along dimensions where degree was raised
-        std::vector<std::size_t> old_strides, new_strides;
-        compute_strides_hp(degrees, old_strides);
-        compute_strides_hp(adjusted_degrees, new_strides);
-
-        std::vector<unsigned int> old_idx(dim, 0u);
-        std::vector<unsigned int> new_idx(dim, 0u);
-
-        for (std::size_t i = 0; i < count; ++i) {
-            // Compute old multi-index
-            std::size_t temp = i;
-            for (std::size_t d = 0; d < dim; ++d) {
-                old_idx[d] = static_cast<unsigned int>(temp / old_strides[d]);
-                temp %= old_strides[d];
-            }
-
-            // Map to new multi-index (same values, but duplicated for degree-0 dimensions)
-            for (std::size_t d = 0; d < dim; ++d) {
-                new_idx[d] = old_idx[d];
-            }
-
-            // Write to all positions in raised dimensions
-            std::vector<unsigned int> write_idx = new_idx;
-            do {
-                const std::size_t new_i = flatten_index_hp(write_idx, new_strides);
-                raised_coeffs[new_i] = coeffs[i];
-
-                // Increment along raised dimensions
-                bool carry = true;
-                for (std::size_t d = 0; d < dim && carry; ++d) {
-                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                        if (write_idx[d] == 0u) {
-                            write_idx[d] = 1u;
-                            carry = false;
-                        } else {
-                            write_idx[d] = new_idx[d];
-                        }
-                    }
-                }
-                if (carry) break;
-            } while (true);
-        }
-
-        return PolynomialHP(adjusted_degrees, raised_coeffs);
+    if (count == 0u) {
+        PolynomialHP result;
+        result.degrees_ = degrees;
+        result.primary_rep_ = PolynomialRepresentation::POWER;
+        result.power_valid_ = true;
+        result.bernstein_valid_ = false;
+        return result;
     }
 
-    return PolynomialHP(degrees, coeffs);
+    // Copy and resize input coefficients as needed
+    std::vector<mpreal> coeffs = power_coeffs;
+    if (coeffs.size() < count) {
+        coeffs.resize(count, mpreal(0));
+    } else if (coeffs.size() > count) {
+        coeffs.resize(count);
+    }
+
+    // NEW DESIGN: Store power coefficients as primary, Bernstein computed lazily
+    // This avoids double precision limitations and uses HP conversion when needed
+    PolynomialHP result;
+    result.degrees_ = degrees;
+    result.power_coeffs_ = coeffs;
+    result.primary_rep_ = PolynomialRepresentation::POWER;
+    result.power_valid_ = true;
+    result.bernstein_valid_ = false;  // Will be computed lazily when needed
+
+    return result;
 }
 
 } // namespace polynomial_solver

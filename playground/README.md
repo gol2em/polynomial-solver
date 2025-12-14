@@ -52,20 +52,80 @@ python3 visualize_hessian_det.py
 
 ## Building
 
-Use the Makefile to build individual test programs:
+The playground has an **auto-generated Makefile** that stays in sync with the library's dependencies.
+
+### Quick Start
 
 ```bash
+cd playground
 make test_program_name
+./test_program_name
 ```
 
-The Makefile automatically:
-- Compiles with C++11 standard
-- Links against the library in `../build/lib`
-- Includes headers from `../include`
-- Enables geometry dump with `-DENABLE_GEOMETRY_DUMP`
+That's it! The Makefile is automatically generated when you run `cmake` in the main project.
 
-## Cleaning Up
+### Workflow
+
+1. **Configure the main project** (first time or after adding dependencies):
+   ```bash
+   cd /path/to/polynomial-solver
+   cmake -B build
+   ```
+   This generates `playground/Makefile` with all the correct link flags.
+
+2. **Create your test file**:
+   ```bash
+   cd playground
+   # Create test.cpp with your experimental code
+   ```
+
+3. **Compile and run**:
+   ```bash
+   make test
+   ./test
+   ```
+
+### Building All Programs
+
+```bash
+cd playground
+make all
+```
+
+This compiles all `.cpp` files in the playground directory.
+
+### Cleaning Up
 
 ```bash
 make clean
 ```
+
+### How It Works
+
+- When you run `cmake` in the main project, it generates `playground/Makefile` from `Makefile.in`
+- The generated Makefile includes all necessary:
+  - Compiler flags
+  - Include paths
+  - Link libraries (polynomial_solver, MPFR, GMP, Boost, etc.)
+  - High-precision flags (if enabled)
+- You just use `make <name>` to compile `<name>.cpp` → `<name>` executable
+- No need to manually specify `-I`, `-L`, `-l` flags!
+
+## Research Tests
+
+The `research_tests/` subdirectory also has an auto-generated Makefile:
+
+```bash
+cd playground/research_tests
+make test_multiplicity_methods
+./test_multiplicity_methods
+```
+
+**Note:** Research tests may require updates to compile with the current codebase.
+
+## Why This Approach?
+
+✅ **Simple**: Just `make test` to compile `test.cpp`
+✅ **Automatic**: Dependencies tracked by CMake, no manual updates needed
+✅ **Fast**: Direct compilation, no CMake overhead for quick experiments
+✅ **Flexible**: Add any `.cpp` file and compile it immediately

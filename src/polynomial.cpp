@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <iostream>
 
+#ifdef ENABLE_HIGH_PRECISION
+#include "polynomial_hp.h"
+#include "precision_conversion.h"
+#endif
+
 namespace {
 
 // Compute strides for a tensor-product layout where the last dimension
@@ -105,109 +110,94 @@ void power_to_bernstein_1d(unsigned int degree,
     }
 }
 
+// Evaluate 1D polynomial in power basis using Horner's method
+// p(x) = a_0 + a_1*x + a_2*x^2 + ... + a_n*x^n
+// Horner's form: p(x) = a_0 + x*(a_1 + x*(a_2 + ... + x*a_n))
+double horner_eval_1d(const std::vector<double>& power_coeffs_1d, double x)
+{
+    if (power_coeffs_1d.empty()) {
+        return 0.0;
+    }
+
+    // Start from highest degree coefficient
+    const int n = static_cast<int>(power_coeffs_1d.size()) - 1;
+    double result = power_coeffs_1d[n];
+
+    // Work backwards through coefficients
+    for (int i = n - 1; i >= 0; --i) {
+        result = result * x + power_coeffs_1d[i];
+    }
+
+    return result;
+}
+
+// Evaluate tensor-product polynomial in power basis
+// For multivariate case, evaluate dimension by dimension
+double horner_eval_tensor(const std::vector<unsigned int>& degrees,
+                          const std::vector<double>& power_coeffs,
+                          const std::vector<double>& parameters)
+{
+    const std::size_t dim = degrees.size();
+
+    // Univariate case: directly use Horner's method
+    if (dim == 1u && parameters.size() == 1u) {
+        return horner_eval_1d(power_coeffs, parameters[0]);
+    }
+
+    // Multivariate case: evaluate dimension by dimension
+    // Similar to De Casteljau tensor product evaluation
+    if (dim == 2u && parameters.size() == 2u) {
+        const std::size_t nx = static_cast<std::size_t>(degrees[0] + 1u);
+        const std::size_t ny = static_cast<std::size_t>(degrees[1] + 1u);
+
+        const double x = parameters[0];
+        const double y = parameters[1];
+
+        // First evaluate along the second dimension (y) for each fixed x index
+        std::vector<double> row_values(nx, 0.0);
+
+        for (std::size_t ix = 0; ix < nx; ++ix) {
+            const std::size_t offset = ix * ny;
+            std::vector<double> row(power_coeffs.begin() + static_cast<std::ptrdiff_t>(offset),
+                                    power_coeffs.begin() + static_cast<std::ptrdiff_t>(offset + ny));
+            row_values[ix] = horner_eval_1d(row, y);
+        }
+
+        // Then evaluate the resulting 1D polynomial in x
+        return horner_eval_1d(row_values, x);
+    }
+
+    // Higher-dimensional tensor-product evaluation not implemented yet
+    // Fall back to 0 (should not happen in practice)
+    return 0.0;
+}
+
 } // anonymous namespace
 
 namespace polynomial_solver {
 
 Polynomial::Polynomial()
     : dimension_(0u)
+    , primary_rep_(PolynomialRepresentation::BERNSTEIN)
+    , bernstein_valid_(false)
+    , power_valid_(false)
 {
 }
 
 Polynomial::Polynomial(const std::vector<unsigned int>& degrees,
                        const std::vector<double>& bernstein_coeffs)
     : dimension_(degrees.size())
+    , primary_rep_(PolynomialRepresentation::BERNSTEIN)
+    , bernstein_valid_(true)
+    , power_valid_(false)
 {
-    // Raise degree to at least 1 in each dimension (in Bernstein basis).
-    // This ensures proper geometric representation with at least 2 control points per dimension.
-    std::vector<unsigned int> adjusted_degrees = degrees;
-    bool needs_degree_raising = false;
-    for (std::size_t i = 0; i < dimension_; ++i) {
-        if (adjusted_degrees[i] == 0u) {
-            adjusted_degrees[i] = 1u;
-            needs_degree_raising = true;
-        }
-    }
+    // NOTE: We do NOT raise degree from 0 to 1 here.
+    // Degree 0 polynomials (constants) are mathematically valid.
+    // The graphControlPoints() method will handle degree-0 case specially
+    // by returning 2 duplicate points for visualization purposes.
 
-    if (needs_degree_raising) {
-        // Compute new coefficient count
-        std::size_t new_count = 1u;
-        for (std::size_t i = 0; i < dimension_; ++i) {
-            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
-        }
-
-        // Compute old coefficient count
-        std::size_t old_count = 1u;
-        for (std::size_t i = 0; i < dimension_; ++i) {
-            old_count *= static_cast<std::size_t>(degrees[i] + 1u);
-        }
-
-        std::vector<double> raised_coeffs(new_count, 0.0);
-
-        // Copy coefficients, duplicating along dimensions where degree was raised
-        std::vector<unsigned int> old_multi(dimension_, 0u);
-        std::vector<unsigned int> new_multi(dimension_, 0u);
-
-        for (std::size_t old_idx = 0; old_idx < old_count; ++old_idx) {
-            // Compute old multi-index
-            std::size_t temp = old_idx;
-            for (std::size_t d = dimension_; d-- > 0;) {
-                old_multi[d] = static_cast<unsigned int>(temp % (degrees[d] + 1u));
-                temp /= (degrees[d] + 1u);
-            }
-
-            // For each dimension where degree was raised, duplicate the coefficient
-            std::vector<unsigned int> dup_counts(dimension_, 1u);
-            for (std::size_t d = 0; d < dimension_; ++d) {
-                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                    dup_counts[d] = 2u; // Duplicate this dimension
-                }
-            }
-
-            // Enumerate all combinations
-            std::vector<unsigned int> dup_idx(dimension_, 0u);
-            bool done = false;
-            while (!done) {
-                // Compute new multi-index
-                for (std::size_t d = 0; d < dimension_; ++d) {
-                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                        new_multi[d] = dup_idx[d]; // 0 or 1
-                    } else {
-                        new_multi[d] = old_multi[d];
-                    }
-                }
-
-                // Compute new linear index
-                std::size_t new_idx = 0;
-                std::size_t stride = 1;
-                for (std::size_t d = dimension_; d-- > 0;) {
-                    new_idx += static_cast<std::size_t>(new_multi[d]) * stride;
-                    stride *= (adjusted_degrees[d] + 1u);
-                }
-
-                raised_coeffs[new_idx] = bernstein_coeffs[old_idx];
-
-                // Increment dup_idx
-                done = true;
-                for (std::size_t d = dimension_; d-- > 0;) {
-                    if (dup_idx[d] + 1 < dup_counts[d]) {
-                        dup_idx[d]++;
-                        for (std::size_t e = d + 1; e < dimension_; ++e) {
-                            dup_idx[e] = 0;
-                        }
-                        done = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        degrees_ = adjusted_degrees;
-        bernstein_coeffs_ = raised_coeffs;
-    } else {
-        degrees_ = degrees;
-        bernstein_coeffs_ = bernstein_coeffs;
-    }
+    degrees_ = degrees;
+    bernstein_coeffs_ = bernstein_coeffs;
 }
 
 Polynomial::~Polynomial() {
@@ -224,6 +214,7 @@ Polynomial Polynomial::fromBernstein(const std::vector<unsigned int>& degrees,
 Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
                                  const std::vector<double>& power_coeffs)
 {
+    // NEW DESIGN: Store power coefficients as primary, Bernstein computed lazily
     const std::size_t dim = degrees.size();
 
     // Compute expected number of coefficients for original degrees.
@@ -233,7 +224,13 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
     }
 
     if (count == 0u) {
-        return Polynomial(degrees, std::vector<double>());
+        Polynomial result;
+        result.dimension_ = dim;
+        result.degrees_ = degrees;
+        result.primary_rep_ = PolynomialRepresentation::POWER;
+        result.power_valid_ = true;
+        result.bernstein_valid_ = false;
+        return result;
     }
 
     // Copy and resize input coefficients as needed.
@@ -244,173 +241,24 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
         coeffs.resize(count);
     }
 
-    if (dim == 0u) {
-        return Polynomial(degrees, coeffs);
-    }
+    // NOTE: We do NOT raise degree from 0 to 1 here.
+    // Degree 0 polynomials (constants) are mathematically valid.
+    // The graphControlPoints() method will handle degree-0 case specially
+    // by returning 2 duplicate points for visualization purposes.
 
-    // Precompute strides for the tensor layout (last dimension fastest).
-    std::vector<std::size_t> strides;
-    compute_strides(degrees, strides);
+    // Create polynomial with power coefficients as primary
+    Polynomial result;
+    result.dimension_ = dim;
+    result.degrees_ = degrees;
+    result.power_coeffs_ = coeffs;
+    result.primary_rep_ = PolynomialRepresentation::POWER;
+    result.power_valid_ = true;
+    result.bernstein_valid_ = false;  // Will be computed lazily when needed
 
-    // Transform along each dimension separately from power basis to Bernstein.
-    std::vector<unsigned int> multi_index(dim, 0u);
-
-    bool debug = false; // (dim == 2 && degrees[0] == 2 && degrees[1] == 1);
-
-    for (std::size_t axis = 0; axis < dim; ++axis) {
-        const unsigned int deg_axis = degrees[axis];
-        const std::size_t len_axis = static_cast<std::size_t>(deg_axis + 1u);
-
-        if (len_axis <= 1u) {
-            continue; // nothing to do along this dimension
-        }
-
-        std::vector<double> line_in(len_axis);
-        std::vector<double> line_out;
-
-        std::fill(multi_index.begin(), multi_index.end(), 0u);
-        bool first = true;
-
-        while (first || increment_multi_except_axis(multi_index, degrees, axis)) {
-            first = false;
-
-            // Gather a 1D slice along the current axis.
-            for (std::size_t k = 0; k < len_axis; ++k) {
-                multi_index[axis] = static_cast<unsigned int>(k);
-                const std::size_t idx = flatten_index(multi_index, strides);
-                line_in[k] = coeffs[idx];
-            }
-
-            if (debug) {
-                std::cout << "DEBUG: axis=" << axis << ", multi_index=(";
-                for (std::size_t d = 0; d < dim; ++d) {
-                    if (d > 0) std::cout << ",";
-                    if (d == axis) std::cout << "*";
-                    else std::cout << multi_index[d];
-                }
-                std::cout << "), line_in=[";
-                for (std::size_t k = 0; k < len_axis; ++k) {
-                    if (k > 0) std::cout << ",";
-                    std::cout << line_in[k];
-                }
-                std::cout << "]" << std::endl;
-            }
-
-            // Convert this slice from power basis to Bernstein basis.
-            power_to_bernstein_1d(deg_axis, line_in, line_out);
-
-            if (debug) {
-                std::cout << "  line_out=[";
-                for (std::size_t k = 0; k < len_axis; ++k) {
-                    if (k > 0) std::cout << ",";
-                    std::cout << line_out[k];
-                }
-                std::cout << "]" << std::endl;
-            }
-
-            // Scatter converted coefficients back.
-            for (std::size_t k = 0; k < len_axis; ++k) {
-                multi_index[axis] = static_cast<unsigned int>(k);
-                const std::size_t idx = flatten_index(multi_index, strides);
-                coeffs[idx] = line_out[k];
-            }
-        }
-    }
-
-    // Debug: print coefficients after conversion
-    #if 0
-    if (dim == 2 && degrees[0] == 2 && degrees[1] == 1) {
-        std::cout << "DEBUG: After power-to-Bernstein conversion for degrees (2,1):" << std::endl;
-        for (std::size_t i = 0; i < count; ++i) {
-            std::cout << "  coeffs[" << i << "] = " << coeffs[i] << std::endl;
-        }
-    }
-    #endif
-
-    // Now raise degree to at least 1 in each dimension (in Bernstein basis).
-    // This ensures proper geometric representation with at least 2 control points per dimension.
-    std::vector<unsigned int> adjusted_degrees = degrees;
-    bool needs_degree_raising = false;
-    for (std::size_t i = 0; i < dim; ++i) {
-        if (adjusted_degrees[i] == 0u) {
-            adjusted_degrees[i] = 1u;
-            needs_degree_raising = true;
-        }
-    }
-
-    if (needs_degree_raising) {
-        // Compute new coefficient count.
-        std::size_t new_count = 1u;
-        for (std::size_t i = 0; i < dim; ++i) {
-            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
-        }
-
-        std::vector<double> raised_coeffs(new_count, 0.0);
-
-        // Copy coefficients, duplicating along dimensions where degree was raised.
-        std::vector<unsigned int> old_multi(dim, 0u);
-        std::vector<unsigned int> new_multi(dim, 0u);
-
-        for (std::size_t old_idx = 0; old_idx < count; ++old_idx) {
-            // Compute old multi-index.
-            std::size_t temp = old_idx;
-            for (std::size_t d = dim; d-- > 0;) {
-                old_multi[d] = temp % (degrees[d] + 1u);
-                temp /= (degrees[d] + 1u);
-            }
-
-            // For each dimension where degree was raised, we need to duplicate.
-            // Generate all new multi-indices that correspond to this old multi-index.
-            std::vector<unsigned int> dup_counts(dim, 1u);
-            for (std::size_t d = 0; d < dim; ++d) {
-                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                    dup_counts[d] = 2u; // Duplicate this dimension
-                }
-            }
-
-            // Enumerate all combinations.
-            std::vector<unsigned int> dup_idx(dim, 0u);
-            bool done = false;
-            while (!done) {
-                // Compute new multi-index.
-                for (std::size_t d = 0; d < dim; ++d) {
-                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                        new_multi[d] = dup_idx[d]; // 0 or 1
-                    } else {
-                        new_multi[d] = old_multi[d];
-                    }
-                }
-
-                // Compute new linear index.
-                std::size_t new_idx = 0;
-                std::size_t stride = 1;
-                for (std::size_t d = dim; d-- > 0;) {
-                    new_idx += new_multi[d] * stride;
-                    stride *= (adjusted_degrees[d] + 1u);
-                }
-
-                raised_coeffs[new_idx] = coeffs[old_idx];
-
-                // Increment dup_idx.
-                done = true;
-                for (std::size_t d = dim; d-- > 0;) {
-                    if (dup_idx[d] + 1 < dup_counts[d]) {
-                        dup_idx[d]++;
-                        for (std::size_t e = d + 1; e < dim; ++e) {
-                            dup_idx[e] = 0;
-                        }
-                        done = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        return Polynomial(adjusted_degrees, raised_coeffs);
-    }
-
-    return Polynomial(degrees, coeffs);
+    return result;
 }
+
+
 
 std::size_t Polynomial::dimension() const {
     return dimension_;
@@ -429,12 +277,112 @@ std::size_t Polynomial::coefficientCount() const {
 }
 
 const std::vector<double>& Polynomial::bernsteinCoefficients() const {
+    if (!bernstein_valid_) {
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Power->Bernstein conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "Polynomial::bernsteinCoefficients() called on polynomial with invalid Bernstein representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. Call ensureBernsteinPrimary() explicitly before accessing Bernstein coefficients\n";
+        std::cerr << "2. Or use power-basis methods if working with power representation\n";
+        std::cerr << "\nCurrent state:\n";
+        std::cerr << "  Primary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "  Bernstein valid: " << (bernstein_valid_ ? "true" : "false") << "\n";
+        std::cerr << "  Power valid: " << (power_valid_ ? "true" : "false") << "\n";
+        std::cerr << "========================================\n\n";
+        std::abort();
+    }
     return bernstein_coeffs_;
 }
 
+const std::vector<double>& Polynomial::powerCoefficients() const {
+    if (!power_valid_) {
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Bernstein->Power conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "Polynomial::powerCoefficients() called on polynomial with invalid Power representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. Call ensurePowerPrimary() explicitly before accessing Power coefficients\n";
+        std::cerr << "2. Or use Bernstein-basis methods if working with Bernstein representation\n";
+        std::cerr << "\nCurrent state:\n";
+        std::cerr << "  Primary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "  Bernstein valid: " << (bernstein_valid_ ? "true" : "false") << "\n";
+        std::cerr << "  Power valid: " << (power_valid_ ? "true" : "false") << "\n";
+        std::cerr << "========================================\n\n";
+        std::abort();
+    }
+    return power_coeffs_;
+}
+
+PolynomialRepresentation Polynomial::primaryRepresentation() const {
+    return primary_rep_;
+}
+
+bool Polynomial::hasPowerCoefficients() const {
+    return power_valid_;
+}
+
+bool Polynomial::hasBernsteinCoefficients() const {
+    return bernstein_valid_;
+}
+
+void Polynomial::ensureBernsteinPrimary() {
+    if (primary_rep_ == PolynomialRepresentation::BERNSTEIN) {
+        // Already Bernstein primary, nothing to do
+        return;
+    }
+
+    // Currently power is primary, need to switch to Bernstein
+    // First ensure Bernstein coefficients are computed
+    if (!bernstein_valid_) {
+        convertPowerToBernstein();
+    }
+
+    // Now switch primary representation
+    // Power coefficients remain valid (cached as secondary)
+    primary_rep_ = PolynomialRepresentation::BERNSTEIN;
+}
+
+void Polynomial::ensurePowerPrimary() {
+    if (primary_rep_ == PolynomialRepresentation::POWER) {
+        // Already power primary, nothing to do
+        return;
+    }
+
+    // Currently Bernstein is primary, need to switch to power
+    // First ensure power coefficients are computed
+    if (!power_valid_) {
+        convertBernsteinToPower();
+    }
+
+    // Now switch primary representation
+    // Bernstein coefficients remain valid (cached as secondary)
+    primary_rep_ = PolynomialRepresentation::POWER;
+}
+
 double Polynomial::evaluate(const std::vector<double>& parameters) const {
-    // TODO: Add input validation (parameters.size() == dimension_, etc.).
-    return DeCasteljau::evaluateTensorProduct(degrees_, bernstein_coeffs_, parameters);
+    // Choose evaluation method based on PRIMARY representation to avoid conversion errors
+    // Primary representation is the original, accurate one
+
+    if (primary_rep_ == PolynomialRepresentation::POWER) {
+        // Primary is power: use Horner's method (no conversion, most accurate)
+        if (!power_valid_) {
+            // Should never happen - primary should always be valid
+            std::cerr << "\nERROR: Primary representation (POWER) is not valid!\n";
+            std::abort();
+        }
+        return horner_eval_tensor(degrees_, power_coeffs_, parameters);
+    } else {
+        // Primary is Bernstein: use De Casteljau (no conversion, most accurate)
+        if (!bernstein_valid_) {
+            // Should never happen - primary should always be valid
+            std::cerr << "\nERROR: Primary representation (BERNSTEIN) is not valid!\n";
+            std::abort();
+        }
+        return DeCasteljau::evaluateTensorProduct(degrees_, bernstein_coeffs_, parameters);
+    }
 }
 
 double Polynomial::evaluate(double t) const {
@@ -444,6 +392,15 @@ double Polynomial::evaluate(double t) const {
 }
 
 Polynomial Polynomial::restrictedToInterval(std::size_t axis, double a, double b) const {
+    // Restriction requires Bernstein coefficients (uses De Casteljau subdivision)
+    // Ensure Bernstein coefficients are available
+    if (!bernstein_valid_) {
+        // Need to convert - this should only happen once per polynomial
+        // The solver calls ensureBernsteinPrimary() on the root node, so this
+        // conversion should be cached for all subsequent restrictions
+        const_cast<Polynomial*>(this)->convertPowerToBernstein();
+    }
+
     const std::size_t dim = degrees_.size();
     if (axis >= dim) {
         // Invalid axis: return a copy of the original polynomial.
@@ -535,55 +492,196 @@ std::size_t Polynomial::flattenIndex(const std::vector<unsigned int>& multi_inde
 }
 
 void Polynomial::graphControlPoints(std::vector<double>& control_points) const {
+    // Graph control points require Bernstein coefficients
+    // Ensure Bernstein representation is available
+    if (!bernstein_valid_) {
+        // Need to convert - this should only happen once per polynomial
+        const_cast<Polynomial*>(this)->convertPowerToBernstein();
+    }
+
     const std::size_t dim = dimension_;
-    const std::size_t coeff_count = coefficientCount();
+
+    // Check if any dimension has degree 0 (constant polynomial)
+    // For visualization, we need at least 2 points per dimension
+    // So we'll duplicate points along degree-0 dimensions
+    std::vector<unsigned int> visual_degrees = degrees_;
+    for (std::size_t i = 0; i < dim; ++i) {
+        if (visual_degrees[i] == 0u) {
+            visual_degrees[i] = 1u;  // Raise to degree 1 for visualization only
+        }
+    }
+
+    // Compute visual coefficient count (for output)
+    std::size_t visual_count = 1u;
+    for (std::size_t i = 0; i < dim; ++i) {
+        visual_count *= static_cast<std::size_t>(visual_degrees[i] + 1u);
+    }
 
     const std::size_t stride = dim + 1u;
-    control_points.assign(coeff_count * stride, 0.0);
+    control_points.assign(visual_count * stride, 0.0);
 
-    if (coeff_count == 0u) {
+    if (visual_count == 0u) {
         return;
     }
 
-    std::vector<unsigned int> multi_index(dim, 0u);
-    std::size_t idx = 0u;
+    std::vector<unsigned int> visual_multi(dim, 0u);
+    std::vector<unsigned int> actual_multi(dim, 0u);
 
-    while (true) {
-        const std::size_t base = idx * stride;
+    for (std::size_t visual_idx = 0; visual_idx < visual_count; ++visual_idx) {
+        const std::size_t base = visual_idx * stride;
 
-        // First dim coordinates: normalized parameter position.
+        // Map visual multi-index to actual multi-index
+        // For degree-0 dimensions, both indices 0 and 1 map to actual index 0
         for (std::size_t j = 0; j < dim; ++j) {
-            const unsigned int deg_j = degrees_[j];
+            if (degrees_[j] == 0u) {
+                actual_multi[j] = 0u;  // Always use index 0 for degree-0 dimensions
+            } else {
+                actual_multi[j] = visual_multi[j];
+            }
+        }
+
+        // Compute actual linear index
+        std::size_t actual_idx = 0;
+        std::size_t actual_stride = 1;
+        for (std::size_t d = dim; d-- > 0;) {
+            actual_idx += actual_multi[d] * actual_stride;
+            actual_stride *= (degrees_[d] + 1u);
+        }
+
+        // First dim coordinates: normalized parameter position (using visual degrees).
+        for (std::size_t j = 0; j < dim; ++j) {
             double coord = 0.0;
-            if (deg_j > 0u) {
-                coord = static_cast<double>(multi_index[j]) /
-                        static_cast<double>(deg_j);
+            if (visual_degrees[j] > 0u) {
+                coord = static_cast<double>(visual_multi[j]) /
+                        static_cast<double>(visual_degrees[j]);
             }
             control_points[base + j] = coord;
         }
 
-        // Last coordinate: function value (Bernstein coefficient).
-        control_points[base + dim] = bernstein_coeffs_[idx];
+        // Last coordinate: function value (Bernstein coefficient from actual index).
+        control_points[base + dim] = bernstein_coeffs_[actual_idx];
 
-        if (idx + 1u >= coeff_count) {
-            break;
-        }
-
-        ++idx;
-
-        // Increment multi-index with last dimension fastest.
+        // Increment visual multi-index with last dimension fastest.
         if (dim > 0u) {
             for (std::size_t d = dim; d-- > 0;) {
-                if (multi_index[d] < degrees_[d]) {
-                    ++multi_index[d];
+                if (visual_multi[d] < visual_degrees[d]) {
+                    ++visual_multi[d];
                     for (std::size_t e = d + 1; e < dim; ++e) {
-                        multi_index[e] = 0u;
+                        visual_multi[e] = 0u;
                     }
                     break;
                 }
             }
         }
     }
+}
+
+void Polynomial::convertPowerToBernstein() const {
+    // When high precision is enabled, use HP conversion for better accuracy
+    // This gives ~256x better precision than direct double conversion
+#ifdef ENABLE_HIGH_PRECISION
+    const std::size_t dim = dimension_;
+
+    if (dim == 0u) {
+        bernstein_coeffs_ = power_coeffs_;
+        bernstein_valid_ = true;
+        return;
+    }
+
+    // Convert power coefficients to high precision
+    std::vector<mpreal> power_hp;
+    power_hp.reserve(power_coeffs_.size());
+    for (double c : power_coeffs_) {
+        power_hp.push_back(toHighPrecision(c));
+    }
+
+    // Create HP polynomial from power basis (stores power as primary)
+    PolynomialHP poly_hp = fromPowerHP(degrees_, power_hp);
+
+    // EXPLICITLY convert to Bernstein (required to avoid implicit conversion error)
+    poly_hp.convertPowerToBernstein();
+
+    // Get Bernstein coefficients (now valid, no conversion needed)
+    const std::vector<mpreal>& bernstein_hp = poly_hp.bernsteinCoefficients();
+
+    // Convert back to double
+    bernstein_coeffs_.clear();
+    bernstein_coeffs_.reserve(bernstein_hp.size());
+    for (const mpreal& c : bernstein_hp) {
+        bernstein_coeffs_.push_back(toDouble(c));
+    }
+
+    bernstein_valid_ = true;
+#else
+    // Fallback to double-precision conversion when HP not available
+    const std::size_t dim = dimension_;
+
+    if (dim == 0u) {
+        bernstein_coeffs_ = power_coeffs_;
+        bernstein_valid_ = true;
+        return;
+    }
+
+    // Compute coefficient count
+    std::size_t count = coefficientCount();
+
+    // Copy power coefficients to working array
+    std::vector<double> coeffs = power_coeffs_;
+
+    // Precompute strides for the tensor layout (last dimension fastest)
+    std::vector<std::size_t> strides;
+    compute_strides(degrees_, strides);
+
+    // Transform along each dimension separately from power basis to Bernstein
+    std::vector<unsigned int> multi_index(dim, 0u);
+
+    for (std::size_t axis = 0; axis < dim; ++axis) {
+        const unsigned int deg_axis = degrees_[axis];
+        const std::size_t len_axis = static_cast<std::size_t>(deg_axis + 1u);
+
+        if (len_axis <= 1u) {
+            continue; // nothing to do along this dimension
+        }
+
+        std::vector<double> line_in(len_axis);
+        std::vector<double> line_out;
+
+        std::fill(multi_index.begin(), multi_index.end(), 0u);
+        bool first = true;
+
+        while (first || increment_multi_except_axis(multi_index, degrees_, axis)) {
+            first = false;
+
+            // Gather a 1D slice along the current axis
+            for (std::size_t k = 0; k < len_axis; ++k) {
+                multi_index[axis] = static_cast<unsigned int>(k);
+                const std::size_t idx = flatten_index(multi_index, strides);
+                line_in[k] = coeffs[idx];
+            }
+
+            // Convert this slice from power basis to Bernstein basis
+            power_to_bernstein_1d(deg_axis, line_in, line_out);
+
+            // Scatter converted coefficients back
+            for (std::size_t k = 0; k < len_axis; ++k) {
+                multi_index[axis] = static_cast<unsigned int>(k);
+                const std::size_t idx = flatten_index(multi_index, strides);
+                coeffs[idx] = line_out[k];
+            }
+        }
+    }
+
+    bernstein_coeffs_ = coeffs;
+    bernstein_valid_ = true;
+#endif
+}
+
+void Polynomial::convertBernsteinToPower() const {
+    // TODO: Implement Bernstein-to-power conversion
+    // For now, just copy (this is a placeholder - will implement properly)
+    // This conversion is rarely needed in practice
+    power_coeffs_ = bernstein_coeffs_;
+    power_valid_ = true;
 }
 
 

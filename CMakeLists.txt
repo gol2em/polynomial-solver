@@ -80,11 +80,16 @@ if(ENABLE_HIGH_PRECISION)
         )
         set(ENABLE_HIGH_PRECISION OFF CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     else()
-        # Set preprocessor definitions
+        # Define ENABLE_HIGH_PRECISION for both compilation and IDE support
+        # Also defined in config.h with #ifndef guard to prevent redefinition
         add_compile_definitions(ENABLE_HIGH_PRECISION)
 
         # Determine if templates should be used
         if(ENABLE_TEMPLATES)
+            # Set CMake variable for config.h generation
+            set(USE_TEMPLATES ON)
+            # Define USE_TEMPLATES for both compilation and IDE support
+            # Also defined in config.h with #ifndef guard to prevent redefinition
             add_compile_definitions(USE_TEMPLATES)
             message(STATUS "Implementation: Tier 3 (template-based, flexible)")
         else()
@@ -111,19 +116,25 @@ if(ENABLE_HIGH_PRECISION)
         endif()
 
         # Set backend type
+        # Set CMake variables for config.h generation AND compile definitions for IDE support
         if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
+            set(USE_MPFR_BACKEND ON)
             add_compile_definitions(USE_MPFR_BACKEND)
             message(STATUS "Backend: MPFR (best performance, runtime precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
+            set(USE_CPP_DEC_FLOAT_BACKEND ON)
             add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
             message(STATUS "Backend: cpp_dec_float (header-only, fixed precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
+            set(USE_QUADMATH_BACKEND ON)
             add_compile_definitions(USE_QUADMATH_BACKEND)
             message(STATUS "Backend: quadmath (native __float128, 128-bit)")
         endif()
 
         # Add quadmath support if available
+        # Set CMake variable for config.h generation AND compile definition for IDE support
         if(QUADMATH_FOUND)
+            set(ENABLE_QUADMATH ON)
             add_compile_definitions(ENABLE_QUADMATH)
             message(STATUS "Quadmath support: ENABLED")
         elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
@@ -229,6 +240,20 @@ add_library(polynomial STATIC
     src/polynomial.cpp
 )
 
+# Link HP libraries if enabled (polynomial.cpp uses HP for conversion)
+if(ENABLE_HIGH_PRECISION)
+    if(HIGH_PRECISION_INCLUDE_DIRS)
+        target_include_directories(polynomial PUBLIC ${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(polynomial PUBLIC ${HIGH_PRECISION_LIBRARIES})
+
+    # Also need polynomial_hp for fromPowerHP function
+    target_sources(polynomial PRIVATE
+        src/polynomial_hp.cpp
+        src/precision_conversion.cpp
+    )
+endif()
+
 # Build geometry library
 add_library(geometry STATIC
     src/geometry.cpp
@@ -285,11 +310,6 @@ add_executable(test_multiplicity_detection
 )
 target_link_libraries(test_multiplicity_detection polynomial_solver)
 
-add_executable(deflation_test
-    examples/deflation_test.cpp
-)
-target_link_libraries(deflation_test polynomial_solver)
-
 add_executable(test_1d_refinement
     tools/test_1d_refinement.cpp
 )
@@ -327,3 +347,54 @@ message(STATUS "")
 if(EXISTS "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
     file(TOUCH "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
 endif()
+
+#==============================================================================
+# Generate Playground Makefiles
+#==============================================================================
+# Generate simple Makefiles in playground/ and playground/research_tests/
+# so developers can quickly compile test files with: make test.cpp
+# These Makefiles automatically stay in sync with library dependencies.
+
+# Collect all link flags needed for playground executables
+# Note: We link statically against polynomial_solver.a which already contains
+# all necessary object files, so we only need external libraries (MPFR, GMP, quadmath)
+set(PLAYGROUND_LINK_FLAGS "-L${CMAKE_BINARY_DIR}/lib -lpolynomial_solver -lm")
+
+# Add high-precision library flags if enabled
+if(ENABLE_HIGH_PRECISION)
+    # Note: Boost is header-only for multiprecision, no need to link boost_system
+    # Add all libraries that were found during high-precision detection
+    foreach(LIB ${HIGH_PRECISION_LIBRARIES})
+        get_filename_component(LIB_NAME ${LIB} NAME_WE)
+        string(REGEX REPLACE "^lib" "" LIB_NAME ${LIB_NAME})
+        set(PLAYGROUND_LINK_FLAGS "${PLAYGROUND_LINK_FLAGS} -l${LIB_NAME}")
+    endforeach()
+
+    # Add quadmath if available
+    if(QUADMATH_FOUND AND QUADMATH_LIBRARY)
+        set(PLAYGROUND_LINK_FLAGS "${PLAYGROUND_LINK_FLAGS} -lquadmath")
+    endif()
+
+    set(PLAYGROUND_HP_FLAGS "CXXFLAGS += -DENABLE_HIGH_PRECISION")
+else()
+    set(PLAYGROUND_HP_FLAGS "# High precision disabled")
+endif()
+
+# Generate playground/Makefile
+configure_file(
+    "${CMAKE_SOURCE_DIR}/playground/Makefile.in"
+    "${CMAKE_SOURCE_DIR}/playground/Makefile"
+    @ONLY
+)
+
+# Generate playground/research_tests/Makefile
+configure_file(
+    "${CMAKE_SOURCE_DIR}/playground/research_tests/Makefile.in"
+    "${CMAKE_SOURCE_DIR}/playground/research_tests/Makefile"
+    @ONLY
+)
+
+message(STATUS "Generated playground Makefiles:")
+message(STATUS "  - playground/Makefile")
+message(STATUS "  - playground/research_tests/Makefile")
+message(STATUS "Developers can now use: cd playground && make <name>.cpp")

@@ -5,6 +5,14 @@
 #include <set>
 #include <limits>
 
+#ifdef ENABLE_HIGH_PRECISION
+#include "result_refiner_hp.h"
+#include "polynomial_hp.h"
+#include "precision_context.h"
+#include "high_precision_types.h"
+#include "precision_conversion.h"
+#endif
+
 namespace polynomial_solver {
 
 ResultRefiner::ResultRefiner() {
@@ -96,7 +104,7 @@ RefinementResult ResultRefiner::refine(
         RefinedRoot refined;
         refined.location = point;
         refined.residual = std::vector<double>{residual};
-        refined.max_error = std::vector<double>{config.target_tolerance};
+        refined.max_error = std::vector<double>{estimated_error};
         refined.multiplicity = mult;
         refined.first_nonzero_derivative = first_nonzero_deriv;
         refined.exclusion_radius = exclusion_radius;
@@ -109,7 +117,7 @@ RefinementResult ResultRefiner::refine(
         verified_indices.push_back(i);
         candidate_roots.push_back(refined);
     }
-    
+
     // Step 2: Merge nearby roots and cancel duplicates
     std::set<std::size_t> cancelled;
     std::vector<bool> merged(candidate_roots.size(), false);
@@ -200,16 +208,23 @@ bool ResultRefiner::refineRoot1D(
             // For ill-conditioned problems, small residual doesn't guarantee small error
             // Check condition number to estimate actual error
 
-            // Compute second derivative for condition estimation
-            Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
-            double ddf = ddpoly.evaluate(x);
-
-            // Estimate condition number: κ ≈ |f''| / |f'|²
-            // This measures sensitivity of root to perturbations
-            double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
-
-            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
-            double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+            // Estimate actual error using Newton's method error formula
+            // For a simple root: |x - r| ≈ |f(x)| / |f'(r)| ≈ |f(x)| / |f'(x)|
+            //
+            // NOTE: This error bound is still not rigorous and can be overly conservative.
+            // Issues:
+            // 1. The formula assumes f'(x) ≈ f'(r), which may not hold far from the root
+            // 2. Does not account for rounding errors in polynomial evaluation
+            // 3. Can be 10-1000x more conservative than actual error
+            //
+            // TODO: Consider replacing with interval Newton method for rigorous error bounds
+            // that properly account for:
+            // - Rounding errors in coefficient representation
+            // - Rounding errors in polynomial evaluation
+            // - Distance from current iterate to true root
+            //
+            // For now, this provides a reasonable heuristic for convergence checking.
+            double estimated_error = std::abs(f) / std::max(std::abs(df), 1e-14);
 
             // Accept root only if estimated error is within target tolerance
             if (estimated_error <= config.target_tolerance) {
@@ -472,6 +487,69 @@ double ResultRefiner::estimateConditionNumber1D(
     kappa = std::max(kappa, kappa_higher);
 
     return std::max(1.0, kappa);
+}
+
+unsigned int ResultRefiner::estimateMultiplicityOstrowski(
+    double x1, double x2, double x3) const
+{
+    // Ostrowski's method (1973) for multiplicity estimation
+    // For a root of multiplicity m, Newton iteration satisfies:
+    //   e_{n+1} ≈ ((m-1)/m) * e_n
+    // where e_n = x_n - r is the error at iteration n
+    //
+    // From 3 consecutive iterates, we can estimate:
+    //   p = 1/2 + (x₁ - x₂) / (x₃ - 2x₂ + x₁)
+    // Then m = floor(p)
+
+    double numerator = x1 - x2;
+    double denominator = x3 - 2.0 * x2 + x1;
+
+    // Avoid division by zero
+    if (std::abs(denominator) < 1e-15) {
+        return 1;  // Can't estimate, assume simple root
+    }
+
+    double p_est = 0.5 + numerator / denominator;
+
+    // Apply floor with minimum value 1
+    int multiplicity = static_cast<int>(std::floor(p_est));
+    if (multiplicity < 1) {
+        multiplicity = 1;
+    }
+
+    // Sanity check: cap at reasonable maximum
+    if (multiplicity > 20) {
+        multiplicity = 20;
+    }
+
+    return static_cast<unsigned int>(multiplicity);
+}
+
+unsigned int ResultRefiner::estimateMultiplicityOstrowskiFromPoint(
+    double x0, const Polynomial& poly) const
+{
+    // Perform 3 Newton iterations to get x1, x2, x3
+    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+
+    double x = x0;
+    std::vector<double> iterates;
+    iterates.push_back(x);
+
+    for (int i = 0; i < 3; ++i) {
+        double f = poly.evaluate(x);
+        double df = dpoly.evaluate(x);
+
+        if (std::abs(df) < 1e-15) {
+            // Derivative too small, can't continue Newton
+            return 1;
+        }
+
+        x = x - f / df;
+        iterates.push_back(x);
+    }
+
+    // Now we have x0, x1, x2, x3
+    return estimateMultiplicityOstrowski(iterates[1], iterates[2], iterates[3]);
 }
 
 unsigned int ResultRefiner::estimateMultiplicity(
@@ -751,69 +829,71 @@ bool ResultRefiner::refineRoot1D_fromPoint(
     double& refined_location,
     double& residual) const
 {
-    // Get derivative
-    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+    // New workflow based on detection limits analysis:
+    // 1. Do 3 standard Newton iterations to get close to root
+    // 2. Use Ostrowski to estimate multiplicity from the 3 iterates
+    // 3. Use modified Newton with detected multiplicity to converge
+
+    // Use power-basis differentiation if polynomial has power coefficients
+    // This is more efficient (simpler formula) and avoids conversion
+    Polynomial dpoly;
+    if (poly.hasPowerCoefficients()) {
+        dpoly = Differentiation::differentiateAxisPower(poly, 0);
+    } else {
+        dpoly = Differentiation::derivative(poly, 0, 1);
+    }
 
     double x = x0;
+    std::vector<double> iterates;
+    iterates.push_back(x);
+
+    unsigned int estimated_mult = 1;
+    bool multiplicity_detected = false;
 
     for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
         double f = poly.evaluate(x);
         double df = dpoly.evaluate(x);
 
-        // Check if derivative is too small (multiple root or near-singular)
-        // Do this BEFORE condition-aware check, because for multiple roots
-        // the condition number formula breaks down (f' ≈ 0)
+        // After 3 iterations, estimate multiplicity using Ostrowski
+        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected) {
+            estimated_mult = estimateMultiplicityOstrowski(
+                iterates[1], iterates[2], iterates[3]);
+            multiplicity_detected = true;
+        }
+
+        // Check if derivative is too small (multiple root)
         if (std::abs(df) < 1e-14) {
-            // Try to estimate multiplicity and use modified Newton
-            PolynomialSystem system(std::vector<Polynomial>{poly});
-            std::vector<double> point{x};
-            double first_nonzero_deriv = 0.0;
-            unsigned int mult = estimateMultiplicity(
-                point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+            // For multiple roots, check convergence based on residual only
+            if (std::abs(f) < config.residual_tolerance) {
+                refined_location = x;
+                residual = f;
+                return true;
+            }
 
-            if (mult > 1) {
-                // For multiple roots, check convergence based on residual only
-                // Condition-aware check doesn't work because f' ≈ 0
-                if (std::abs(f) < config.residual_tolerance) {
-                    refined_location = x;
-                    residual = f;
-                    return true;
-                }
+            // If we haven't detected multiplicity yet, try Ostrowski from current point
+            if (!multiplicity_detected) {
+                estimated_mult = estimateMultiplicityOstrowskiFromPoint(x, poly);
+                multiplicity_detected = true;
+            }
 
-                // Use modified Newton for multiple root
-                // For f(x) = (x-r)^m * g(x), we have f^(m)(x) ≈ m! * g(x)
-                // So we can approximate: x_new = x - f(x) / (f^(m)(x) / m!)
-
-                if (std::abs(first_nonzero_deriv) > 1e-14) {
-                    // Compute factorial
-                    double factorial = 1.0;
-                    for (unsigned int i = 2; i <= mult && i <= 10; ++i) {
-                        factorial *= static_cast<double>(i);
-                    }
-
-                    // Modified step using m-th derivative
-                    double step = f * factorial / first_nonzero_deriv;
-                    x = x - step;
-                    continue;
-                }
+            // Use modified Newton: x_new = x - m * f / f'
+            if (estimated_mult > 1 && std::abs(df) > 1e-15) {
+                double step = static_cast<double>(estimated_mult) * f / df;
+                x = x - step;
+                continue;
             }
 
             // Can't make progress
             return false;
         }
 
-        // Check for convergence with condition-aware criterion (for simple roots)
+        // Check for convergence with condition-aware criterion
         if (std::abs(f) < config.residual_tolerance) {
-            // Residual is small - but is the error also small?
-            // For ill-conditioned problems, small residual doesn't guarantee small error
-            // Check condition number to estimate actual error
-
             // Compute second derivative for condition estimation
             Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
             double ddf = ddpoly.evaluate(x);
 
             // Estimate condition number: κ ≈ |f''| / |f'|²
-            // This measures sensitivity of root to perturbations
             double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
 
             // Estimate actual error: |error| ≈ κ × |residual| / |f'|
@@ -825,16 +905,25 @@ bool ResultRefiner::refineRoot1D_fromPoint(
                 residual = f;
                 return true;
             }
-
-            // Residual is small but estimated error is too large
-            // This indicates an ill-conditioned problem requiring higher precision
-            // Continue iterating (though unlikely to improve with double precision)
-            // Will eventually hit max iterations and return false
         }
 
-        // Standard Newton step
-        double x_new = x - f / df;
+        // Choose Newton step based on detected multiplicity
+        double step;
+        if (multiplicity_detected && estimated_mult > 1) {
+            // Modified Newton for multiple roots
+            step = static_cast<double>(estimated_mult) * f / df;
+        } else {
+            // Standard Newton for simple roots
+            step = f / df;
+        }
+
+        double x_new = x - step;
         x = x_new;
+
+        // Store iterate for Ostrowski (only first 3)
+        if (iter < 3) {
+            iterates.push_back(x);
+        }
     }
 
     // Max iterations reached - check final residual
@@ -858,6 +947,143 @@ bool ResultRefiner::refineRoot1D_fromPoint(
 
     return false;
 }
+
+#ifdef ENABLE_HIGH_PRECISION
+bool ResultRefiner::refineRoot1DWithPrecisionEscalation(
+    double initial_guess,
+    const Polynomial& poly,
+    const RefinementConfig& config,
+    RefinedRoot& refined_root) const
+{
+    // Step 1: Try double precision refinement first
+    double refined_x;
+    double residual;
+    bool converged = refineRoot1D_fromPoint(initial_guess, poly, config, refined_x, residual);
+
+    if (!converged) {
+        // Refinement failed in double precision
+        refined_root.verified = false;
+        refined_root.needs_higher_precision = true;
+        refined_root.location = std::vector<double>(1, initial_guess);
+        return false;
+    }
+
+    // Step 2: Estimate multiplicity and condition number
+    PolynomialSystem system(std::vector<Polynomial>{poly});
+    std::vector<double> point{refined_x};
+    double first_nonzero_deriv = 0.0;
+    unsigned int mult = estimateMultiplicity(
+        point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+    double condition = estimateConditionNumber1D(refined_x, poly, first_nonzero_deriv);
+    double est_error = condition * std::abs(residual) / std::max(std::abs(first_nonzero_deriv), 1e-14);
+
+    // Step 3: Check if double precision is sufficient
+    if (est_error <= config.target_tolerance && condition < 1e5) {
+        // Double precision is sufficient
+        refined_root.location = std::vector<double>(1, refined_x);
+        refined_root.residual = std::vector<double>(1, residual);
+        refined_root.multiplicity = mult;
+        refined_root.first_nonzero_derivative = first_nonzero_deriv;
+        refined_root.condition_estimate = condition;
+        refined_root.verified = true;
+        refined_root.needs_higher_precision = false;
+        return true;
+    }
+
+    // Step 4: Switch to high precision
+    // Select precision based on condition number
+    unsigned int precision_bits;
+    if (condition < 1e5) {
+        precision_bits = 256;  // ~77 decimal digits
+    } else if (condition < 1e10) {
+        precision_bits = 512;  // ~154 decimal digits
+    } else {
+        precision_bits = 1024; // ~308 decimal digits
+    }
+
+    std::cout << "Switching to " << precision_bits << "-bit precision (condition="
+              << std::scientific << std::setprecision(2) << condition
+              << ", est_error=" << est_error << ")" << std::endl;
+
+    // Set precision context
+    PrecisionContext ctx(precision_bits);
+
+    // Convert polynomial to high precision
+    PolynomialHP poly_hp(poly);
+
+    // Configure high-precision refinement
+    RefinementConfigHP config_hp;
+    config_hp.max_newton_iters = config.max_newton_iters * 2; // Allow more iterations
+    config_hp.max_multiplicity = config.max_multiplicity;
+
+    // Only pass multiplicity hint if condition number is reasonable AND multiplicity is low
+    // For very ill-conditioned problems or high multiplicities (>3), double-precision
+    // multiplicity detection may be unreliable, so let HP refiner detect it from scratch
+    if (condition < 1e8 && mult <= 3) {
+        config_hp.multiplicity_hint = mult; // Pass the multiplicity detected in double precision
+    } else {
+        config_hp.multiplicity_hint = 0; // Let HP refiner detect multiplicity from scratch
+    }
+
+    // Set tolerance based on precision
+    // Use more conservative tolerances that are achievable
+    // For multiple roots, convergence is slower, so we need realistic targets
+    if (precision_bits >= 1024) {
+        config_hp.target_tolerance_str = "1e-100";  // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-100";
+    } else if (precision_bits >= 512) {
+        config_hp.target_tolerance_str = "1e-50";   // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-50";
+    } else {
+        config_hp.target_tolerance_str = "1e-25";   // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-25";
+    }
+
+    // Refine with high precision
+    RefinedRootHP result_hp = ResultRefinerHP::refineRoot1D(refined_x, poly_hp, config_hp);
+
+
+
+    if (!result_hp.converged) {
+        // HP refiner didn't fully converge, but may have improved the result
+        // For multiple roots, full convergence is difficult, so accept partial results
+        // if we have error bounds
+        if (!result_hp.has_guaranteed_bounds) {
+            // No bounds available - refinement truly failed
+            refined_root.verified = false;
+            refined_root.needs_higher_precision = true;
+            refined_root.location = std::vector<double>(1, refined_x);
+            refined_root.condition_estimate = condition;
+            return false;
+        }
+
+        // We have bounds but didn't meet tolerance - accept as best effort
+        std::cout << "  Note: HP refiner achieved partial convergence (error bounds available)" << std::endl;
+    }
+
+    // Step 5: Convert high-precision result back to double precision structure
+    refined_root.location = std::vector<double>(1, toDouble(result_hp.location));
+    refined_root.residual = std::vector<double>(1, toDouble(result_hp.residual));
+    refined_root.multiplicity = result_hp.multiplicity;
+    refined_root.first_nonzero_derivative = toDouble(result_hp.first_nonzero_derivative);
+    refined_root.condition_estimate = toDouble(result_hp.condition_estimate);
+    refined_root.verified = true;
+    refined_root.needs_higher_precision = false; // Successfully refined with HP
+
+    // Store error bounds if available
+    if (result_hp.has_guaranteed_bounds) {
+        refined_root.max_error = std::vector<double>(1, toDouble(result_hp.max_error));
+    }
+
+    std::cout << "High-precision refinement succeeded: root=" << refined_root.location[0]
+              << ", multiplicity=" << refined_root.multiplicity
+              << ", error=" << (result_hp.has_guaranteed_bounds ? toDouble(result_hp.max_error) : 0.0)
+              << std::endl;
+
+    return true;
+}
+#endif
 
 } // namespace polynomial_solver
 

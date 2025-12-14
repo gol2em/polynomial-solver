@@ -307,14 +307,16 @@ bool compute_projected_polyhedral_bounds_with_dump(
             std::vector<double> control_points;
             poly.graphControlPoints(control_points);
 
-            const std::size_t num_coeffs = poly.coefficientCount();
+            // Note: For degree-0 polynomials, graphControlPoints() duplicates points for visualization,
+            // so the number of control points may be larger than coefficientCount().
             const std::size_t point_dim = dim + 1u;
+            const std::size_t num_points = control_points.size() / point_dim;
 
 #ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 // Dump 3D control points (for 2D problems: x, y, f(x,y))
-                dump << "Control_Points_3D " << num_coeffs << "\n";
-                for (std::size_t i = 0; i < num_coeffs; ++i) {
+                dump << "Control_Points_3D " << num_points << "\n";
+                for (std::size_t i = 0; i < num_points; ++i) {
                     for (std::size_t j = 0; j < point_dim; ++j) {
                         if (j > 0) dump << " ";
                         dump << control_points[i * point_dim + j];
@@ -331,18 +333,18 @@ bool compute_projected_polyhedral_bounds_with_dump(
             // in the projection direction.
 
             std::vector<std::vector<double>> projected_2d_all;
-            projected_2d_all.reserve(num_coeffs);
+            projected_2d_all.reserve(num_points);
 
 #ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
-                dump << "Projected_Points " << num_coeffs << "\n";
+                dump << "Projected_Points " << num_points << "\n";
             }
 #endif
 
             // First pass: collect all projected points and group by x-coordinate
             std::map<double, std::vector<double>> vertical_groups;
 
-            for (std::size_t i = 0; i < num_coeffs; ++i) {
+            for (std::size_t i = 0; i < num_points; ++i) {
                 double x = control_points[i * point_dim + dir];  // coordinate in direction 'dir'
                 double y = control_points[i * point_dim + dim];  // function value (last coordinate)
 
@@ -384,7 +386,7 @@ bool compute_projected_polyhedral_bounds_with_dump(
 #ifdef ENABLE_GEOMETRY_DUMP
             if (do_dump) {
                 dump << "Reduced_Points " << projected_2d.size()
-                     << " (from " << num_coeffs << " control points)\n";
+                     << " (from " << num_points << " control points)\n";
             }
 #endif
 
@@ -557,13 +559,15 @@ bool compute_graph_hull_bounds(
         poly.graphControlPoints(control_points);
 
         // Convert flat array to vector of points in R^{n+1}.
-        const std::size_t num_coeffs = poly.coefficientCount();
+        // Note: For degree-0 polynomials, graphControlPoints() duplicates points for visualization,
+        // so the number of control points may be larger than coefficientCount().
         const std::size_t point_dim = dim + 1u;
+        const std::size_t num_points = control_points.size() / point_dim;
 
         std::vector<std::vector<double>> points;
-        points.reserve(num_coeffs);
+        points.reserve(num_points);
 
-        for (std::size_t i = 0; i < num_coeffs; ++i) {
+        for (std::size_t i = 0; i < num_points; ++i) {
             std::vector<double> pt(point_dim, 0.0);
             for (std::size_t j = 0; j < point_dim; ++j) {
                 pt[j] = control_points[i * point_dim + j];
@@ -670,8 +674,22 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     root.box_lower.assign(dim, 0.0);
     root.box_upper.assign(dim, 1.0);
     root.depth = 0u;
-    root.polys = system.equations();
-    root.original_polys = system.equations();  // Store original for direct contraction
+
+    // Convert polynomials to Bernstein ONCE at the beginning
+    // This ensures restrictedToInterval() doesn't need to convert repeatedly
+    // Note: User keeps original polynomials (may have power basis) and passes them to refiner
+    // Here we store Bernstein-converted versions for solver operations
+    root.polys.reserve(system.equations().size());
+    for (const Polynomial& poly : system.equations()) {
+        // Create a copy and ensure it has Bernstein coefficients
+        Polynomial bernstein_poly = poly;
+        bernstein_poly.ensureBernsteinPrimary();
+        root.polys.push_back(bernstein_poly);
+    }
+
+    // Store Bernstein-converted polynomials as "original" for direct contraction
+    // (Direct contraction uses these to avoid error accumulation)
+    root.original_polys = root.polys;
 
     std::priority_queue<NodeQueueEntry, std::vector<NodeQueueEntry>, NodeQueueCompare> queue;
     std::size_t next_index = 0u;

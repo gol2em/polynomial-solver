@@ -71,6 +71,21 @@ public:
     static PolynomialHP differentiateAxis(const PolynomialHP& p, std::size_t axis);
 
     /**
+     * @brief Power-basis differentiation along one axis.
+     *
+     * Uses the power basis derivative formula with high-precision arithmetic:
+     * d/dx(a_i * x^i) = i * a_i * x^(i-1)
+     *
+     * This avoids Bernstein conversion and preserves exact rational coefficients.
+     * Use this when working with polynomials created via fromPowerHP().
+     *
+     * @param p The high-precision polynomial to differentiate (must have valid power coefficients)
+     * @param axis The variable index
+     * @return The first derivative along the specified axis (in power basis)
+     */
+    static PolynomialHP differentiateAxisPower(const PolynomialHP& p, std::size_t axis);
+
+    /**
      * @brief Compute derivative from double-precision polynomial, return HP result.
      *
      * Convenience function that converts input to HP, then differentiates.

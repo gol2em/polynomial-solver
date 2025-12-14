@@ -138,16 +138,99 @@ Polynomial Differentiation::differentiateAxis(const Polynomial& p, std::size_t a
     return Polynomial(new_degrees, new_coeffs);
 }
 
+Polynomial Differentiation::differentiateAxisPower(const Polynomial& p, std::size_t axis)
+{
+    const std::size_t dim = p.dimension();
+    if (axis >= dim) {
+        // Invalid axis: return zero polynomial
+        std::vector<double> zero_coeffs(p.coefficientCount(), 0.0);
+        return Polynomial::fromPower(p.degrees(), zero_coeffs);
+    }
+
+    const std::vector<unsigned int>& degrees = p.degrees();
+    const std::vector<double>& coeffs = p.powerCoefficients();
+
+    const unsigned int deg_axis = degrees[axis];
+
+    // If degree is 0 along this axis, derivative is zero
+    if (deg_axis == 0u) {
+        std::vector<double> zero_coeffs(p.coefficientCount(), 0.0);
+        return Polynomial::fromPower(degrees, zero_coeffs);
+    }
+
+    // New degrees: reduce degree by 1 along the differentiation axis
+    std::vector<unsigned int> new_degrees = degrees;
+    new_degrees[axis] = deg_axis - 1u;
+
+    // Compute new coefficient count
+    std::size_t new_count = 1u;
+    for (std::size_t i = 0; i < dim; ++i) {
+        new_count *= static_cast<std::size_t>(new_degrees[i] + 1u);
+    }
+
+    std::vector<double> new_coeffs(new_count, 0.0);
+
+    // Compute strides for old and new layouts
+    std::vector<std::size_t> old_strides;
+    std::vector<std::size_t> new_strides;
+    compute_strides(degrees, old_strides);
+    compute_strides(new_degrees, new_strides);
+
+    const std::size_t len_axis = static_cast<std::size_t>(deg_axis + 1u);
+    const std::size_t new_len_axis = static_cast<std::size_t>(deg_axis);
+
+    std::vector<unsigned int> multi_index(dim, 0u);
+    std::vector<double> line(len_axis);
+    std::vector<double> deriv_line(new_len_axis);
+
+    // Iterate over all 1D slices along the given axis
+    std::fill(multi_index.begin(), multi_index.end(), 0u);
+    bool first = true;
+    while (first || increment_multi_except_axis(multi_index, degrees, axis)) {
+        first = false;
+
+        // Gather coefficients along the current axis-line
+        for (std::size_t k = 0; k < len_axis; ++k) {
+            multi_index[axis] = static_cast<unsigned int>(k);
+            const std::size_t idx = flatten_index(multi_index, old_strides);
+            line[k] = coeffs[idx];
+        }
+
+        // Apply power basis derivative formula: d/dx(a_i * x^i) = i * a_i * x^(i-1)
+        // So coefficient of x^i in derivative is (i+1) * a_{i+1} from original
+        for (std::size_t i = 0; i < new_len_axis; ++i) {
+            deriv_line[i] = static_cast<double>(i + 1) * line[i + 1];
+        }
+
+        // Scatter the derivative coefficients back into the tensor
+        for (std::size_t k = 0; k < new_len_axis; ++k) {
+            multi_index[axis] = static_cast<unsigned int>(k);
+            const std::size_t idx = flatten_index(multi_index, new_strides);
+            new_coeffs[idx] = deriv_line[k];
+        }
+    }
+
+    return Polynomial::fromPower(new_degrees, new_coeffs);
+}
+
 Polynomial Differentiation::derivative(const Polynomial& p, std::size_t axis, unsigned int order)
 {
     if (order == 0u) {
         return p;
     }
 
+    // Use differentiation method based on primary representation
+    // Primary is the original, accurate representation with no conversion errors
+    bool use_power = (p.primaryRepresentation() == PolynomialRepresentation::POWER);
+
     // Iteratively apply first-order differentiation
     Polynomial result = p;
     for (unsigned int k = 0; k < order; ++k) {
-        result = differentiateAxis(result, axis);
+        if (use_power) {
+            result = differentiateAxisPower(result, axis);
+        } else {
+            result = differentiateAxis(result, axis);
+        }
     }
 
     return result;
@@ -159,8 +242,9 @@ std::vector<Polynomial> Differentiation::gradient(const Polynomial& p)
     std::vector<Polynomial> grad;
     grad.reserve(dim);
 
+    // Use derivative() which automatically chooses the right method based on primary representation
     for (std::size_t i = 0; i < dim; ++i) {
-        grad.push_back(differentiateAxis(p, i));
+        grad.push_back(derivative(p, i, 1));
     }
 
     return grad;
@@ -171,12 +255,13 @@ std::vector<std::vector<Polynomial>> Differentiation::hessian(const Polynomial& 
     const std::size_t dim = p.dimension();
     std::vector<std::vector<Polynomial>> hess(dim);
 
+    // Use derivative() which automatically chooses the right method based on primary representation
     for (std::size_t i = 0; i < dim; ++i) {
         hess[i].resize(dim);
-        Polynomial df_dxi = differentiateAxis(p, i);
-        
+        Polynomial df_dxi = derivative(p, i, 1);
+
         for (std::size_t j = 0; j < dim; ++j) {
-            hess[i][j] = differentiateAxis(df_dxi, j);
+            hess[i][j] = derivative(df_dxi, j, 1);
         }
     }
 
@@ -275,8 +360,8 @@ const Polynomial& DerivativeCache::computeIfNeeded(const std::vector<unsigned in
     // Recursively get the previous derivative
     const Polynomial& prev = computeIfNeeded(prev_orders);
 
-    // Differentiate once more
-    Polynomial result = Differentiation::differentiateAxis(prev, diff_axis);
+    // Differentiate once more using derivative() which chooses the right method
+    Polynomial result = Differentiation::derivative(prev, diff_axis, 1);
 
     // Cache and return
     cache_[orders] = result;

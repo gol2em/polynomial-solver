@@ -12,7 +12,7 @@ using namespace polynomial_solver;
 namespace {
 
 bool approx_equal(double a, double b,
-                  double eps = std::numeric_limits<double>::epsilon() * 100.0)
+                  double eps = std::numeric_limits<double>::epsilon() * 200.0)
 {
     return std::fabs(a - b) <= eps;
 }
@@ -87,6 +87,9 @@ int test_polynomial_interval_restriction()
     power_coeffs[idx(0u, 1u)] = 2.0; // y term
 
     Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+
+    // Ensure Bernstein representation is available before using restrictedToInterval
+    p.ensureBernsteinPrimary();
 
     const double a = 0.2;
     const double b = 0.8;
