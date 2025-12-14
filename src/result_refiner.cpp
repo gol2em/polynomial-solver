@@ -482,6 +482,69 @@ double ResultRefiner::estimateConditionNumber1D(
     return std::max(1.0, kappa);
 }
 
+unsigned int ResultRefiner::estimateMultiplicityOstrowski(
+    double x1, double x2, double x3) const
+{
+    // Ostrowski's method (1973) for multiplicity estimation
+    // For a root of multiplicity m, Newton iteration satisfies:
+    //   e_{n+1} ≈ ((m-1)/m) * e_n
+    // where e_n = x_n - r is the error at iteration n
+    //
+    // From 3 consecutive iterates, we can estimate:
+    //   p = 1/2 + (x₁ - x₂) / (x₃ - 2x₂ + x₁)
+    // Then m = floor(p)
+
+    double numerator = x1 - x2;
+    double denominator = x3 - 2.0 * x2 + x1;
+
+    // Avoid division by zero
+    if (std::abs(denominator) < 1e-15) {
+        return 1;  // Can't estimate, assume simple root
+    }
+
+    double p_est = 0.5 + numerator / denominator;
+
+    // Apply floor with minimum value 1
+    int multiplicity = static_cast<int>(std::floor(p_est));
+    if (multiplicity < 1) {
+        multiplicity = 1;
+    }
+
+    // Sanity check: cap at reasonable maximum
+    if (multiplicity > 20) {
+        multiplicity = 20;
+    }
+
+    return static_cast<unsigned int>(multiplicity);
+}
+
+unsigned int ResultRefiner::estimateMultiplicityOstrowskiFromPoint(
+    double x0, const Polynomial& poly) const
+{
+    // Perform 3 Newton iterations to get x1, x2, x3
+    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+
+    double x = x0;
+    std::vector<double> iterates;
+    iterates.push_back(x);
+
+    for (int i = 0; i < 3; ++i) {
+        double f = poly.evaluate(x);
+        double df = dpoly.evaluate(x);
+
+        if (std::abs(df) < 1e-15) {
+            // Derivative too small, can't continue Newton
+            return 1;
+        }
+
+        x = x - f / df;
+        iterates.push_back(x);
+    }
+
+    // Now we have x0, x1, x2, x3
+    return estimateMultiplicityOstrowski(iterates[1], iterates[2], iterates[3]);
+}
+
 unsigned int ResultRefiner::estimateMultiplicity(
     const std::vector<double>& point,
     const PolynomialSystem& system,
@@ -759,69 +822,64 @@ bool ResultRefiner::refineRoot1D_fromPoint(
     double& refined_location,
     double& residual) const
 {
-    // Get derivative
+    // New workflow based on detection limits analysis:
+    // 1. Do 3 standard Newton iterations to get close to root
+    // 2. Use Ostrowski to estimate multiplicity from the 3 iterates
+    // 3. Use modified Newton with detected multiplicity to converge
+
     Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
 
     double x = x0;
+    std::vector<double> iterates;
+    iterates.push_back(x);
+
+    unsigned int estimated_mult = 1;
+    bool multiplicity_detected = false;
 
     for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
         double f = poly.evaluate(x);
         double df = dpoly.evaluate(x);
 
-        // Check if derivative is too small (multiple root or near-singular)
-        // Do this BEFORE condition-aware check, because for multiple roots
-        // the condition number formula breaks down (f' ≈ 0)
+        // After 3 iterations, estimate multiplicity using Ostrowski
+        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected) {
+            estimated_mult = estimateMultiplicityOstrowski(
+                iterates[1], iterates[2], iterates[3]);
+            multiplicity_detected = true;
+        }
+
+        // Check if derivative is too small (multiple root)
         if (std::abs(df) < 1e-14) {
-            // Try to estimate multiplicity and use modified Newton
-            PolynomialSystem system(std::vector<Polynomial>{poly});
-            std::vector<double> point{x};
-            double first_nonzero_deriv = 0.0;
-            unsigned int mult = estimateMultiplicity(
-                point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+            // For multiple roots, check convergence based on residual only
+            if (std::abs(f) < config.residual_tolerance) {
+                refined_location = x;
+                residual = f;
+                return true;
+            }
 
-            if (mult > 1) {
-                // For multiple roots, check convergence based on residual only
-                // Condition-aware check doesn't work because f' ≈ 0
-                if (std::abs(f) < config.residual_tolerance) {
-                    refined_location = x;
-                    residual = f;
-                    return true;
-                }
+            // If we haven't detected multiplicity yet, try Ostrowski from current point
+            if (!multiplicity_detected) {
+                estimated_mult = estimateMultiplicityOstrowskiFromPoint(x, poly);
+                multiplicity_detected = true;
+            }
 
-                // Use modified Newton for multiple root
-                // For f(x) = (x-r)^m * g(x), we have f^(m)(x) ≈ m! * g(x)
-                // So we can approximate: x_new = x - f(x) / (f^(m)(x) / m!)
-
-                if (std::abs(first_nonzero_deriv) > 1e-14) {
-                    // Compute factorial
-                    double factorial = 1.0;
-                    for (unsigned int i = 2; i <= mult && i <= 10; ++i) {
-                        factorial *= static_cast<double>(i);
-                    }
-
-                    // Modified step using m-th derivative
-                    double step = f * factorial / first_nonzero_deriv;
-                    x = x - step;
-                    continue;
-                }
+            // Use modified Newton: x_new = x - m * f / f'
+            if (estimated_mult > 1 && std::abs(df) > 1e-15) {
+                double step = static_cast<double>(estimated_mult) * f / df;
+                x = x - step;
+                continue;
             }
 
             // Can't make progress
             return false;
         }
 
-        // Check for convergence with condition-aware criterion (for simple roots)
+        // Check for convergence with condition-aware criterion
         if (std::abs(f) < config.residual_tolerance) {
-            // Residual is small - but is the error also small?
-            // For ill-conditioned problems, small residual doesn't guarantee small error
-            // Check condition number to estimate actual error
-
             // Compute second derivative for condition estimation
             Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
             double ddf = ddpoly.evaluate(x);
 
             // Estimate condition number: κ ≈ |f''| / |f'|²
-            // This measures sensitivity of root to perturbations
             double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
 
             // Estimate actual error: |error| ≈ κ × |residual| / |f'|
@@ -833,16 +891,25 @@ bool ResultRefiner::refineRoot1D_fromPoint(
                 residual = f;
                 return true;
             }
-
-            // Residual is small but estimated error is too large
-            // This indicates an ill-conditioned problem requiring higher precision
-            // Continue iterating (though unlikely to improve with double precision)
-            // Will eventually hit max iterations and return false
         }
 
-        // Standard Newton step
-        double x_new = x - f / df;
+        // Choose Newton step based on detected multiplicity
+        double step;
+        if (multiplicity_detected && estimated_mult > 1) {
+            // Modified Newton for multiple roots
+            step = static_cast<double>(estimated_mult) * f / df;
+        } else {
+            // Standard Newton for simple roots
+            step = f / df;
+        }
+
+        double x_new = x - step;
         x = x_new;
+
+        // Store iterate for Ostrowski (only first 3)
+        if (iter < 3) {
+            iterates.push_back(x);
+        }
     }
 
     // Max iterations reached - check final residual
