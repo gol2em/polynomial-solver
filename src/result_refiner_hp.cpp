@@ -935,52 +935,213 @@ unsigned int ResultRefinerHP::estimateMultiplicitySturm(
 {
     // Sturm sequence method for multiplicity detection
     //
-    // Key insight: For a root of multiplicity m at x=r:
-    // - f has m roots at r (counted with multiplicity)
-    // - f' has m-1 roots at r
-    // - f'' has m-2 roots at r, etc.
+    // Proper Sturm sequence construction in power basis:
+    // For polynomial f, construct sequence: f₀ = f, f₁ = f', f₂ = -rem(f₀, f₁), ...
+    // Count sign changes at interval endpoints to determine number of roots.
     //
-    // Strategy: Count how many consecutive derivatives vanish at the location
-    // If f^(0), f^(1), ..., f^(m-1) all vanish but f^(m) doesn't, then multiplicity = m
-    //
-    // We use a small interval [location - radius, location + radius] and check
-    // if derivatives change sign across the interval. If f^(k) doesn't change sign,
-    // it likely vanishes at location.
+    // For multiplicity detection:
+    // - If f has a root of multiplicity m at x=r, then f^(k) has a root of multiplicity m-k
+    // - We count how many consecutive derivatives f, f', f'', ... have roots in [r-ε, r+ε]
+    // - The first derivative that doesn't have a root gives us the multiplicity
+
+    // Only works for 1D polynomials
+    if (poly.dimension() != 1) {
+        return 1;
+    }
 
     mpreal left = location - interval_radius;
     mpreal right = location + interval_radius;
-    mpreal threshold = mpreal("1e-50");
     unsigned int max_check = 10;
 
-    // Check each derivative order
-    for (unsigned int k = 1; k <= max_check; ++k) {
-        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
+    // Helper: Convert Bernstein coefficients to power basis for 1D polynomial
+    // For degree n, Bernstein basis: B_i^n(x) = C(n,i) * x^i * (1-x)^(n-i)
+    // Power basis: x^i
+    // Conversion: a_i = sum_j b_j * <B_j^n, x^i>
+    auto bernstein_to_power = [](const std::vector<mpreal>& bern_coeffs) -> std::vector<mpreal> {
+        int n = static_cast<int>(bern_coeffs.size()) - 1;
+        if (n < 0) return std::vector<mpreal>();
 
-        // Evaluate at endpoints and center
-        mpreal val_left = deriv.evaluate(left);
-        mpreal val_center = deriv.evaluate(location);
-        mpreal val_right = deriv.evaluate(right);
+        std::vector<mpreal> power_coeffs(n + 1, mpreal(0));
 
-        // Check if derivative is non-zero at center
-        if (abs(val_center) > threshold) {
-            // f^(k) is non-zero at location → multiplicity is k
-            return k;
+        // Use the formula: power_coeff[k] = sum_{i=k}^{n} bern_coeff[i] * C(i,k) / C(n,k)
+        for (int k = 0; k <= n; ++k) {
+            for (int i = k; i <= n; ++i) {
+                // Compute binomial coefficients C(i,k) and C(n,k)
+                mpreal binom_i_k = mpreal(1);
+                mpreal binom_n_k = mpreal(1);
+
+                for (int j = 0; j < k; ++j) {
+                    binom_i_k *= mpreal(i - j) / mpreal(j + 1);
+                    binom_n_k *= mpreal(n - j) / mpreal(j + 1);
+                }
+
+                power_coeffs[k] += bern_coeffs[i] * binom_i_k / binom_n_k;
+            }
         }
 
-        // Check if derivative changes sign across interval
-        // If it changes sign, there's a root in the interval
-        bool sign_change = (val_left * val_right < mpreal(0));
+        return power_coeffs;
+    };
 
-        if (sign_change) {
-            // f^(k) has a root in the interval → multiplicity is k
-            return k;
+    // Helper: Evaluate polynomial in power basis
+    auto eval_power = [](const std::vector<mpreal>& coeffs, const mpreal& x) -> mpreal {
+        if (coeffs.empty()) return mpreal(0);
+
+        // Horner's method: a_n*x^n + ... + a_1*x + a_0 = (...((a_n*x + a_{n-1})*x + ...)*x + a_0)
+        mpreal result = coeffs.back();
+        for (int i = static_cast<int>(coeffs.size()) - 2; i >= 0; --i) {
+            result = result * x + coeffs[i];
+        }
+        return result;
+    };
+
+    // Helper: Polynomial derivative in power basis
+    auto derivative_power = [](const std::vector<mpreal>& coeffs) -> std::vector<mpreal> {
+        if (coeffs.size() <= 1) return std::vector<mpreal>();
+
+        std::vector<mpreal> deriv(coeffs.size() - 1);
+        for (size_t i = 1; i < coeffs.size(); ++i) {
+            deriv[i - 1] = coeffs[i] * mpreal(i);
+        }
+        return deriv;
+    };
+
+    // Helper: Polynomial remainder (pseudo-division)
+    auto poly_remainder = [](const std::vector<mpreal>& dividend, const std::vector<mpreal>& divisor) -> std::vector<mpreal> {
+        if (divisor.empty() || (divisor.size() == 1 && abs(divisor[0]) < mpreal("1e-100"))) {
+            return std::vector<mpreal>();  // Division by zero
         }
 
-        // If |f^(k)| is very small throughout the interval, it likely vanishes
-        // Continue to next derivative
+        std::vector<mpreal> rem = dividend;
+        int deg_divisor = static_cast<int>(divisor.size()) - 1;
+
+        // Find actual degree (skip leading zeros)
+        while (deg_divisor >= 0 && abs(divisor[deg_divisor]) < mpreal("1e-100")) {
+            deg_divisor--;
+        }
+
+        if (deg_divisor < 0) return std::vector<mpreal>();
+
+        // Polynomial long division
+        while (static_cast<int>(rem.size()) > deg_divisor + 1) {
+            int deg_rem = static_cast<int>(rem.size()) - 1;
+            while (deg_rem >= 0 && abs(rem[deg_rem]) < mpreal("1e-100")) {
+                deg_rem--;
+                rem.pop_back();
+            }
+
+            if (deg_rem < deg_divisor) break;
+
+            // Divide leading terms
+            mpreal coeff = rem[deg_rem] / divisor[deg_divisor];
+
+            // Subtract divisor * coeff * x^(deg_rem - deg_divisor)
+            for (int i = 0; i <= deg_divisor; ++i) {
+                rem[deg_rem - deg_divisor + i] -= coeff * divisor[i];
+            }
+
+            rem.pop_back();  // Remove leading term (now zero)
+        }
+
+        return rem;
+    };
+
+    // Helper: Count sign changes in a sequence
+    auto count_sign_changes = [](const std::vector<mpreal>& values) -> int {
+        int changes = 0;
+        mpreal prev_nonzero = mpreal(0);
+        bool found_first = false;
+
+        for (const mpreal& val : values) {
+            if (abs(val) > mpreal("1e-100")) {
+                if (found_first && prev_nonzero * val < mpreal(0)) {
+                    changes++;
+                }
+                prev_nonzero = val;
+                found_first = true;
+            }
+        }
+        return changes;
+    };
+
+    // Convert polynomial to power basis
+    std::vector<mpreal> power_coeffs = bernstein_to_power(poly.bernsteinCoefficients());
+
+    if (power_coeffs.empty()) {
+        return 1;
     }
 
-    // All derivatives up to max_check vanish → multiplicity > max_check
+    // Build Sturm sequence in power basis
+    std::vector<std::vector<mpreal>> sturm_seq;
+    sturm_seq.push_back(power_coeffs);
+    sturm_seq.push_back(derivative_power(power_coeffs));
+
+    // Build rest of sequence: f_i = -rem(f_{i-2}, f_{i-1})
+    for (size_t i = 2; i < 20 && !sturm_seq.back().empty(); ++i) {
+        std::vector<mpreal> rem = poly_remainder(sturm_seq[i-2], sturm_seq[i-1]);
+        if (rem.empty()) break;
+
+        // Negate
+        for (auto& c : rem) {
+            c = -c;
+        }
+        sturm_seq.push_back(rem);
+    }
+
+    // Evaluate Sturm sequence at interval endpoints
+    std::vector<mpreal> vals_left, vals_right;
+    for (const auto& p : sturm_seq) {
+        vals_left.push_back(eval_power(p, left));
+        vals_right.push_back(eval_power(p, right));
+    }
+
+    // Count sign changes
+    int changes_left = count_sign_changes(vals_left);
+    int changes_right = count_sign_changes(vals_right);
+    int num_roots = changes_left - changes_right;
+
+    // If there are no roots in the interval, f doesn't vanish there
+    if (num_roots == 0) {
+        return 1;  // Simple root or no root
+    }
+
+    // If there's exactly 1 root, check derivatives to find multiplicity
+    // For multiplicity m: f, f', ..., f^(m-1) all have roots, but f^(m) doesn't
+    for (unsigned int k = 1; k <= max_check; ++k) {
+        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
+        if (deriv.empty()) return k;
+
+        // Convert derivative to power basis and build its Sturm sequence
+        std::vector<mpreal> deriv_power = bernstein_to_power(deriv.bernsteinCoefficients());
+        if (deriv_power.empty()) return k;
+
+        std::vector<std::vector<mpreal>> deriv_sturm;
+        deriv_sturm.push_back(deriv_power);
+        deriv_sturm.push_back(derivative_power(deriv_power));
+
+        for (size_t i = 2; i < 20 && !deriv_sturm.back().empty(); ++i) {
+            std::vector<mpreal> rem = poly_remainder(deriv_sturm[i-2], deriv_sturm[i-1]);
+            if (rem.empty()) break;
+            for (auto& c : rem) c = -c;
+            deriv_sturm.push_back(rem);
+        }
+
+        // Count roots of derivative in interval
+        std::vector<mpreal> deriv_vals_left, deriv_vals_right;
+        for (const auto& p : deriv_sturm) {
+            deriv_vals_left.push_back(eval_power(p, left));
+            deriv_vals_right.push_back(eval_power(p, right));
+        }
+
+        int deriv_changes_left = count_sign_changes(deriv_vals_left);
+        int deriv_changes_right = count_sign_changes(deriv_vals_right);
+        int deriv_num_roots = deriv_changes_left - deriv_changes_right;
+
+        if (deriv_num_roots == 0) {
+            // f^(k) has no roots in interval → multiplicity is k
+            return k;
+        }
+    }
+
     return max_check + 1;
 }
 
