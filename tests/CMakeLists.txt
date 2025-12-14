@@ -13,6 +13,10 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_differentiation_hp test_differentiation_hp.cpp)
     target_link_libraries(test_differentiation_hp PRIVATE polynomial_solver)
     add_test(NAME DifferentiationHPTest COMMAND test_differentiation_hp)
+
+    add_executable(test_result_refiner_hp test_result_refiner_hp.cpp)
+    target_link_libraries(test_result_refiner_hp PRIVATE polynomial_solver)
+    add_test(NAME ResultRefinerHPTest COMMAND test_result_refiner_hp)
 endif()
 
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)

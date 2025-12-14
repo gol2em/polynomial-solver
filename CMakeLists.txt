@@ -177,6 +177,7 @@ if(ENABLE_HIGH_PRECISION)
         src/precision_conversion.cpp
         src/polynomial_hp.cpp
         src/differentiation_hp.cpp
+        src/result_refiner_hp.cpp
     )
 endif()
 
@@ -283,6 +284,11 @@ add_executable(test_multiplicity_detection
     tools/test_multiplicity_detection.cpp
 )
 target_link_libraries(test_multiplicity_detection polynomial_solver)
+
+add_executable(deflation_test
+    examples/deflation_test.cpp
+)
+target_link_libraries(deflation_test polynomial_solver)
 
 add_executable(test_1d_refinement
     tools/test_1d_refinement.cpp
