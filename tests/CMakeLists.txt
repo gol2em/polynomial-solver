@@ -50,6 +50,9 @@ if(ENABLE_HIGH_PRECISION)
 
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
+
+    add_executable(test_hp_conversion_benefit test_hp_conversion_benefit.cpp)
+    target_link_libraries(test_hp_conversion_benefit PRIVATE polynomial_solver)
 endif()
 
 # Double precision Ostrowski test (no HP required)
