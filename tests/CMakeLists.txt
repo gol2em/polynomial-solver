@@ -24,6 +24,12 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_convergence_comparison test_convergence_comparison.cpp)
     target_link_libraries(test_convergence_comparison PRIVATE polynomial_solver)
 
+    add_executable(test_multiplicity_debug test_multiplicity_debug.cpp)
+    target_link_libraries(test_multiplicity_debug PRIVATE polynomial_solver)
+
+    add_executable(test_high_multiplicity test_high_multiplicity.cpp)
+    target_link_libraries(test_high_multiplicity PRIVATE polynomial_solver)
+
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
 endif()

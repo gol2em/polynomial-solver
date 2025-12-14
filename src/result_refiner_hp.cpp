@@ -454,10 +454,11 @@ unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
     }
     #endif
 
-    // Apply rounding (NOT ceiling!) with minimum value 1
-    // The formula gives p ≈ m + 0.5, so round() gives the correct multiplicity
-    // For example: triple root gives p ≈ 3.5, round(3.5) = 3 ✓
-    int multiplicity = static_cast<int>(round(p_est));
+    // Apply floor (NOT round or ceiling!) with minimum value 1
+    // The formula gives p ≈ m + 0.5, so floor(p) gives the correct multiplicity
+    // For example: triple root gives p ≈ 3.5, floor(3.5) = 3 ✓
+    // Debug showed: m=2→p=2.5, m=3→p=3.5, m=4→p=4.5, so floor is correct!
+    int multiplicity = static_cast<int>(floor(p_est));
     if (multiplicity < 1) {
         multiplicity = 1;
     }
@@ -610,6 +611,16 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
 
     // Second pass: Use ratio test to find true first non-zero derivative
     // Check ratios |f^(k+1)| / |f^(k)| for consecutive significant orders
+    //
+    // For f(x) = (x-r)^m near x = r+ε:
+    // - f^(k) ~ ε^(m-k) for k < m
+    // - f^(m) ~ constant for k = m
+    // So ratio f^(k+1)/f^(k) ~ ε^(-1) for k < m (very large!)
+    //
+    // Strategy: Look for the first order where ratio is NOT extremely large
+    // The ratio decreases as we approach m: for m=6, we see 250→200→150→100→50
+    // Use a simple threshold: ratio > 10 means derivative vanishes
+
     for (size_t i = 0; i < significant_orders.size(); ++i) {
         unsigned int order = significant_orders[i];
         mpreal deriv_val = abs(deriv_values[order]);
@@ -622,9 +633,10 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
             // Compute ratio
             mpreal ratio = next_deriv / max(deriv_val, mpreal("1e-100"));
 
-            // If ratio is very large (>100), current derivative is likely O(ε)
-            // and vanishes at the root, so skip it
-            if (ratio > mpreal(100)) {
+            // Simple threshold: if ratio > 10, derivative vanishes at root
+            // This works because for k < m, ratio ~ 50*(m-k) >> 10
+            // For k = m, ratio ~ O(1) or O(ε) < 10
+            if (ratio > mpreal(10)) {
                 continue;  // Try next order
             }
         }
