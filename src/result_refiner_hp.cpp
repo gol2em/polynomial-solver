@@ -29,9 +29,12 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
     iterates.reserve(4);  // x0, x1, x2, x3
     iterates.push_back(x);  // x0 = initial guess
 
-    // Track if we've detected multiplicity > 1 early
-    unsigned int ostrowski_multiplicity = 1;
-    bool use_modified_newton = false;
+    // Track multiplicity estimate
+    unsigned int estimated_multiplicity = 1;
+    bool multiplicity_detected = false;
+
+    // Track previous error bound to detect stagnation
+    mpreal prev_error_bound = mpreal("1e100");
 
     // Newton iteration
     for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
@@ -44,147 +47,90 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         // Store residual
         result.residual = f;
 
-        // Check convergence first with condition-aware criteria
-        // This works for simple roots
-        if (abs(f) < residual_tol && abs(df) > mpreal("1e-100")) {
-            // Estimate condition number
-            mpreal kappa = estimateConditionNumber1D(x, poly, df);
-            mpreal estimated_error = kappa * abs(f) / abs(df);
+        // Step 1: Verify/detect multiplicity if derivative is small
+        // Always re-verify when close enough, even if Ostrowski gave us an estimate
+        if (abs(df) < mpreal("1e-20")) {
+            // Derivative is small - do Taylor series analysis for exact multiplicity
+            mpreal mult_threshold = mpreal("1e-50");
+            mpreal dummy_deriv;
+            unsigned int verified_mult = estimateMultiplicity(
+                x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
 
-            if (estimated_error <= target_tol) {
-                // Converged with good accuracy
-                result.location = x;
-                result.multiplicity = 1;
-                result.first_nonzero_derivative = df;
-                result.condition_estimate = kappa;
-                result.converged = true;
-
-                // Compute rigorous error bounds
-                mpreal lower, upper;
-                if (computeErrorBounds(x, poly, 1, df, lower, upper)) {
-                    result.interval_lower = lower;
-                    result.interval_upper = upper;
-                    result.max_error = (upper - lower) / mpreal("2.0");
-                    result.has_guaranteed_bounds = true;
-                }
-
-                return result;
+            // Update if we got a better estimate
+            if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
+                estimated_multiplicity = verified_mult;
+                multiplicity_detected = true;
             }
         }
 
-        // Check if derivative is too small (multiple root or near-singular)
-        // Use fixed threshold - adaptive threshold can become too strict near convergence
-        mpreal df_threshold = mpreal("1e-20");
-
-        if (abs(df) < df_threshold) {
-            // Try to estimate multiplicity and use modified Newton
-            mpreal first_nonzero_deriv = mpreal(0);
-            // Use fixed threshold for multiplicity detection
-            // This should be relative to the scale of higher derivatives
-            mpreal mult_threshold = mpreal("1e-50");  // Very strict absolute threshold
-            unsigned int mult = estimateMultiplicity(
-                x, poly, config.max_multiplicity, mult_threshold, first_nonzero_deriv);
-
-            result.multiplicity = mult;
-            result.first_nonzero_derivative = first_nonzero_deriv;
-
-            if (mult > 1 && abs(first_nonzero_deriv) > mpreal("1e-100")) {
-                // For multiple roots, check convergence based on residual only
-                // Condition-aware check doesn't work because f' ≈ 0
-                if (abs(f) < residual_tol) {
-                    result.location = x;
-                    result.condition_estimate = estimateConditionNumber1D(x, poly, first_nonzero_deriv);
-                    result.converged = true;
-
-                    // Compute rigorous error bounds for multiple root
-                    mpreal lower, upper;
-                    if (computeErrorBounds(x, poly, mult, first_nonzero_deriv, lower, upper)) {
-                        result.interval_lower = lower;
-                        result.interval_upper = upper;
-                        result.max_error = (upper - lower) / mpreal("2.0");
-                        result.has_guaranteed_bounds = true;
-                    }
-
-                    return result;
-                }
-
-                // Use modified Newton for multiple root
-                // Standard modified Newton: x_new = x - m * f(x) / f'(x)
-                // where m is the multiplicity
-                //
-                // Even though f'(x) is small, we can still compute it and use it
-                // The key is that m * f / f' gives the correct step size
-
-                mpreal step = mpreal(mult) * f / df;
-
-                // Limit step size to avoid divergence
-                mpreal max_step = mpreal("0.1");
-                if (abs(step) > max_step) {
-                    step = step * max_step / abs(step);
-                }
-
-                x = x - step;
-                continue;
+        // Step 1b: Compute the correct derivative for the current multiplicity
+        mpreal first_nonzero_deriv;
+        if (estimated_multiplicity == 1) {
+            first_nonzero_deriv = df;
+        } else {
+            // Compute m-th derivative explicitly
+            PolynomialHP deriv_m = poly;
+            for (unsigned int k = 0; k < estimated_multiplicity; ++k) {
+                deriv_m = DifferentiationHP::derivative(deriv_m, 0, 1);
             }
+            first_nonzero_deriv = deriv_m.evaluate(x);
+        }
 
-            // Can't make progress
+        // Step 2: Compute rigorous error bounds at each iteration
+        mpreal lower, upper;
+        mpreal current_error_bound = mpreal("1e100");  // Large default
+        bool has_bounds = false;
+
+        // Try to compute bounds with current multiplicity estimate
+        if (abs(first_nonzero_deriv) > mpreal("1e-100")) {
+            has_bounds = computeErrorBounds(x, poly, estimated_multiplicity,
+                                           first_nonzero_deriv, lower, upper);
+            if (has_bounds) {
+                current_error_bound = (upper - lower) / mpreal("2.0");
+            }
+        }
+
+        // Step 3: Check convergence based on error bounds
+        if (has_bounds && current_error_bound <= target_tol) {
+            // Converged! Error bound is small enough
             result.location = x;
-            result.converged = false;
-            result.error_message = "Derivative too small, cannot make progress";
+            result.multiplicity = estimated_multiplicity;
+            result.first_nonzero_derivative = first_nonzero_deriv;
+            result.condition_estimate = estimateConditionNumber1D(x, poly, first_nonzero_deriv);
+            result.converged = true;
+            result.interval_lower = lower;
+            result.interval_upper = upper;
+            result.max_error = current_error_bound;
+            result.has_guaranteed_bounds = true;
+
             return result;
         }
 
-        // Check for convergence with condition-aware criterion (for simple roots)
-        if (abs(f) < residual_tol) {
-            // Residual is small - but is the error also small?
-            // For ill-conditioned problems, small residual doesn't guarantee small error
-            // Check condition number to estimate actual error
+        // Step 4: Check if we're making progress
+        if (has_bounds && current_error_bound >= prev_error_bound * mpreal("0.99")) {
+            // Error bound is not improving - re-verify multiplicity
+            // This catches cases where Ostrowski gave wrong estimate
+            if (!multiplicity_detected) {
+                mpreal mult_threshold = mpreal("1e-50");
+                mpreal dummy_deriv;
+                unsigned int verified_mult = estimateMultiplicity(
+                    x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
 
-            // Compute second derivative for condition estimation
-            PolynomialHP ddpoly = DifferentiationHP::derivative(dpoly, 0, 1);
-            mpreal ddf = ddpoly.evaluate(x);
-
-            // Estimate condition number: κ ≈ |f''| / |f'|²
-            // This measures sensitivity of root to perturbations
-            mpreal kappa = abs(ddf) / (abs(df) * abs(df) + mpreal("1e-100"));
-
-            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
-            mpreal estimated_error = kappa * abs(f) / max(abs(df), mpreal("1e-50"));
-
-            // Store results
-            result.multiplicity = 1;  // Simple root (df is not small)
-            result.first_nonzero_derivative = df;
-            result.condition_estimate = kappa;
-
-            // Accept root only if estimated error is within target tolerance
-            if (estimated_error <= target_tol) {
-                result.location = x;
-                result.residual = f;
-                result.converged = true;
-
-                // Compute rigorous error bounds
-                mpreal lower, upper;
-                if (computeErrorBounds(x, poly, 1, df, lower, upper)) {
-                    result.interval_lower = lower;
-                    result.interval_upper = upper;
-                    result.max_error = (upper - lower) / mpreal("2.0");
-                    result.has_guaranteed_bounds = true;
+                if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
+                    estimated_multiplicity = verified_mult;
+                    multiplicity_detected = true;
                 }
-
-                return result;
             }
-
-            // Residual is small but estimated error is too large
-            // This indicates an ill-conditioned problem
-            // Continue iterating (may still improve with high precision)
         }
 
-        // Compute Newton step
+        prev_error_bound = current_error_bound;
+
+        // Step 5: Compute Newton step based on current multiplicity estimate
         mpreal step;
 
-        if (use_modified_newton && ostrowski_multiplicity > 1) {
-            // Use modified Newton for detected multiple root
-            step = mpreal(ostrowski_multiplicity) * f / df;
+        if (estimated_multiplicity > 1) {
+            // Use modified Newton for multiple root
+            step = mpreal(estimated_multiplicity) * f / df;
         } else {
             // Standard Newton step
             step = f / df;
@@ -204,59 +150,78 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         }
 
         // Apply Ostrowski multiplicity estimation after 3 iterations
-        if (iter == 2 && iterates.size() == 4) {
+        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected) {
             // We have x0, x1, x2, x3
             unsigned int mult_est = estimateMultiplicityOstrowski(
                 iterates[1], iterates[2], iterates[3]);
 
+            // DEBUG
+            #ifdef DEBUG_MULTIPLICITY
+            std::cout << "DEBUG: Ostrowski at iter 2: mult_est = " << mult_est << std::endl;
+            std::cout << "  x1 = " << iterates[1] << std::endl;
+            std::cout << "  x2 = " << iterates[2] << std::endl;
+            std::cout << "  x3 = " << iterates[3] << std::endl;
+            #endif
+
             if (mult_est > 1) {
-                // Multiple root detected - switch to modified Newton
-                ostrowski_multiplicity = mult_est;
-                use_modified_newton = true;
+                // Multiple root suspected - use as hint but don't mark as fully detected
+                // We'll verify this later when derivative becomes small
+                estimated_multiplicity = mult_est;
+                // Note: Don't set multiplicity_detected = true yet
+                // We want to verify this with Taylor series when close enough
             }
         }
     }
 
-    // Max iterations reached - check final residual
+    // Max iterations reached - compute final error bounds
     mpreal f = poly.evaluate(x);
+    mpreal df = dpoly.evaluate(x);
     result.location = x;
     result.residual = f;
 
-    if (abs(f) < residual_tol) {
-        // Check condition-aware convergence one more time
-        mpreal df = dpoly.evaluate(x);
-        PolynomialHP ddpoly = DifferentiationHP::derivative(dpoly, 0, 1);
-        mpreal ddf = ddpoly.evaluate(x);
+    // Determine final multiplicity if not already detected
+    if (!multiplicity_detected && abs(df) < mpreal("1e-20")) {
+        mpreal mult_threshold = mpreal("1e-50");
+        mpreal dummy_deriv;
+        estimated_multiplicity = estimateMultiplicity(
+            x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
+        multiplicity_detected = true;
+    }
 
-        mpreal kappa = abs(ddf) / (abs(df) * abs(df) + mpreal("1e-100"));
-        mpreal estimated_error = kappa * abs(f) / max(abs(df), mpreal("1e-50"));
+    // Compute the correct derivative for the final multiplicity
+    mpreal final_first_nonzero_deriv;
+    if (estimated_multiplicity == 1) {
+        final_first_nonzero_deriv = df;
+    } else {
+        // Compute m-th derivative explicitly
+        PolynomialHP deriv_m = poly;
+        for (unsigned int k = 0; k < estimated_multiplicity; ++k) {
+            deriv_m = DifferentiationHP::derivative(deriv_m, 0, 1);
+        }
+        final_first_nonzero_deriv = deriv_m.evaluate(x);
+    }
 
-        result.multiplicity = 1;
-        result.first_nonzero_derivative = df;
-        result.condition_estimate = kappa;
+    result.multiplicity = estimated_multiplicity;
+    result.first_nonzero_derivative = final_first_nonzero_deriv;
+    result.condition_estimate = estimateConditionNumber1D(x, poly, final_first_nonzero_deriv);
 
-        if (estimated_error <= target_tol) {
+    // Compute final error bounds
+    mpreal lower, upper;
+    if (computeErrorBounds(x, poly, estimated_multiplicity, final_first_nonzero_deriv, lower, upper)) {
+        result.interval_lower = lower;
+        result.interval_upper = upper;
+        result.max_error = (upper - lower) / mpreal("2.0");
+        result.has_guaranteed_bounds = true;
+
+        // Check if we actually converged based on error bounds
+        if (result.max_error <= target_tol) {
             result.converged = true;
-
-            // Compute rigorous error bounds
-            mpreal lower, upper;
-            if (computeErrorBounds(x, poly, 1, df, lower, upper)) {
-                result.interval_lower = lower;
-                result.interval_upper = upper;
-                result.max_error = (upper - lower) / mpreal("2.0");
-                result.has_guaranteed_bounds = true;
-            }
-
             return result;
         }
-
-        result.converged = false;
-        result.error_message = "Residual small but estimated error too large (ill-conditioned)";
-        return result;
     }
 
     result.converged = false;
-    result.error_message = "Maximum iterations reached without convergence";
+    result.error_message = "Maximum iterations reached - error bounds exceed tolerance";
     return result;
 }
 
