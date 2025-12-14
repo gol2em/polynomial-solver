@@ -24,6 +24,15 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
     // Get derivative polynomial
     PolynomialHP dpoly = DifferentiationHP::derivative(poly, 0, 1);
 
+    // For Ostrowski multiplicity estimation: store last 3 iterates
+    std::vector<mpreal> iterates;
+    iterates.reserve(4);  // x0, x1, x2, x3
+    iterates.push_back(x);  // x0 = initial guess
+
+    // Track if we've detected multiplicity > 1 early
+    unsigned int ostrowski_multiplicity = 1;
+    bool use_modified_newton = false;
+
     // Newton iteration
     for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
         result.iterations = iter + 1;
@@ -170,8 +179,16 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
             // Continue iterating (may still improve with high precision)
         }
 
-        // Standard Newton step
-        mpreal step = f / df;
+        // Compute Newton step
+        mpreal step;
+
+        if (use_modified_newton && ostrowski_multiplicity > 1) {
+            // Use modified Newton for detected multiple root
+            step = mpreal(ostrowski_multiplicity) * f / df;
+        } else {
+            // Standard Newton step
+            step = f / df;
+        }
 
         // Limit step size to avoid divergence in ill-conditioned cases
         mpreal max_step = mpreal("1.0");
@@ -180,6 +197,24 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         }
 
         x = x - step;
+
+        // Store iterate for Ostrowski method
+        if (iter < 3) {
+            iterates.push_back(x);
+        }
+
+        // Apply Ostrowski multiplicity estimation after 3 iterations
+        if (iter == 2 && iterates.size() == 4) {
+            // We have x0, x1, x2, x3
+            unsigned int mult_est = estimateMultiplicityOstrowski(
+                iterates[1], iterates[2], iterates[3]);
+
+            if (mult_est > 1) {
+                // Multiple root detected - switch to modified Newton
+                ostrowski_multiplicity = mult_est;
+                use_modified_newton = true;
+            }
+        }
     }
 
     // Max iterations reached - check final residual
@@ -408,6 +443,51 @@ RefinedRootHP ResultRefinerHP::refineRoot1DSchroder(
     result.converged = false;
     result.error_message = "Maximum iterations reached";
     return result;
+}
+
+unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
+    const mpreal& x1,
+    const mpreal& x2,
+    const mpreal& x3)
+{
+    // Ostrowski's method (1973) for multiplicity estimation
+    // Based on the asymptotic error ratio of Newton's method for multiple roots
+    //
+    // For a root of multiplicity m, Newton's method converges linearly:
+    // e_{n+1} / e_n → (m-1)/m  as n → ∞
+    //
+    // From 3 consecutive iterates x₁, x₂, x₃:
+    // p = 1/2 + (x₁ - x₂)/(x₃ - 2x₂ + x₁)
+    //
+    // The formula is derived from:
+    // (x₁ - x₂)/(x₂ - x₃) ≈ (m-1)/m
+    // Solving for m gives the above formula
+
+    mpreal numerator = x1 - x2;
+    mpreal denominator = x3 - mpreal("2.0") * x2 + x1;
+
+    // Check for degenerate case (denominator too small)
+    if (abs(denominator) < mpreal("1e-100")) {
+        // Iterates are converging quadratically → simple root
+        return 1;
+    }
+
+    // Compute estimate
+    mpreal p_est = mpreal("0.5") + numerator / denominator;
+
+    // Apply ceiling with minimum value 1
+    // ⌈p⌉ with p ≥ 1
+    int multiplicity = static_cast<int>(ceil(p_est));
+    if (multiplicity < 1) {
+        multiplicity = 1;
+    }
+
+    // Sanity check: cap at reasonable maximum
+    if (multiplicity > 20) {
+        multiplicity = 20;  // Very high multiplicities are rare
+    }
+
+    return static_cast<unsigned int>(multiplicity);
 }
 
 unsigned int ResultRefinerHP::estimateMultiplicity(

@@ -141,11 +141,32 @@ public:
         const RefinementConfigHP& config = RefinementConfigHP());
 
     /**
-     * @brief Estimate multiplicity of a root from derivatives
+     * @brief Estimate multiplicity using Ostrowski's method (1973)
+     *
+     * Uses 3 consecutive Newton iterates to estimate multiplicity:
+     * p = ⌈1/2 + (x₁ - x₂)/(x₃ - 2x₂ + x₁)⌉
+     *
+     * This method works during convergence and doesn't require high-order derivatives.
+     * Based on the asymptotic error ratio of Newton's method for multiple roots.
+     *
+     * @param x1 First Newton iterate
+     * @param x2 Second Newton iterate
+     * @param x3 Third Newton iterate
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicityOstrowski(
+        const mpreal& x1,
+        const mpreal& x2,
+        const mpreal& x3);
+
+    /**
+     * @brief Estimate multiplicity of a root from derivatives (Taylor series method)
      *
      * Checks derivatives from order 1 to max_order to find the first
      * non-zero derivative. The order of the first non-zero derivative
      * is the multiplicity.
+     *
+     * This method requires a well-converged root approximation.
      *
      * @param location Point to check (high precision)
      * @param poly High-precision polynomial
