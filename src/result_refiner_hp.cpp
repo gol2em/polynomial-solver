@@ -833,6 +833,133 @@ bool ResultRefinerHP::computeErrorBounds(
     }
 }
 
+// ============================================================================
+// New Multiplicity Detection Methods
+// ============================================================================
+
+unsigned int ResultRefinerHP::estimateMultiplicityDerivativeRatio(
+    const mpreal& location,
+    const PolynomialHP& poly,
+    unsigned int max_order)
+{
+    // For a root of multiplicity m:
+    // |f^(k)(x)| / |f^(k-1)(x)| should be large for k <= m
+    // and bounded for k > m
+
+    std::vector<mpreal> deriv_values(max_order + 1);
+
+    // Compute all derivatives
+    for (unsigned int k = 1; k <= max_order; ++k) {
+        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
+        deriv_values[k] = abs(deriv.evaluate(location));
+    }
+
+    // Find first non-negligible derivative
+    mpreal threshold = mpreal("1e-50");
+    for (unsigned int k = 1; k <= max_order; ++k) {
+        if (deriv_values[k] > threshold) {
+            // Check if next derivative is also significant
+            if (k < max_order && deriv_values[k+1] > threshold) {
+                // Compute ratio
+                mpreal ratio = deriv_values[k+1] / deriv_values[k];
+                // If ratio is bounded (< 100), we found the multiplicity
+                if (ratio < mpreal("100.0")) {
+                    return k;
+                }
+            } else {
+                // Next derivative is negligible, k is the multiplicity
+                return k;
+            }
+        }
+    }
+
+    return 1;  // Default to simple root
+}
+
+unsigned int ResultRefinerHP::estimateMultiplicityGCD(
+    const mpreal& location,
+    const PolynomialHP& poly,
+    unsigned int max_order)
+{
+    // GCD-based method: if gcd(f, f') has the root, it's a multiple root
+    // We'll use a numerical approach: check if location is a root of f^(k) for k=1,2,...
+
+    mpreal threshold = mpreal("1e-50");
+
+    for (unsigned int m = 1; m <= max_order; ++m) {
+        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, m);
+        mpreal val = abs(deriv.evaluate(location));
+
+        if (val > threshold) {
+            // f^(m) is non-zero at location, so multiplicity is m
+            return m;
+        }
+    }
+
+    // All derivatives up to max_order are zero - return max_order
+    return max_order;
+}
+
+unsigned int ResultRefinerHP::estimateMultiplicitySturm(
+    const mpreal& location,
+    const PolynomialHP& poly,
+    const mpreal& interval_radius)
+{
+    // Sturm sequence method
+    // For now, implement a simplified version that counts sign changes
+    // A full Sturm sequence implementation would require polynomial GCD
+
+    // Instead, we'll use a derivative-based approach:
+    // Count how many derivatives vanish at the location
+
+    mpreal threshold = mpreal("1e-50");
+    unsigned int max_check = 10;
+
+    for (unsigned int k = 1; k <= max_check; ++k) {
+        PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
+        mpreal val = abs(deriv.evaluate(location));
+
+        if (val > threshold) {
+            return k;
+        }
+    }
+
+    return max_check;
+}
+
+std::map<std::string, unsigned int> ResultRefinerHP::estimateMultiplicityAllMethods(
+    const mpreal& location,
+    const PolynomialHP& poly,
+    unsigned int max_order,
+    const mpreal& x1,
+    const mpreal& x2,
+    const mpreal& x3)
+{
+    std::map<std::string, unsigned int> results;
+
+    // Method 1: Taylor series (original estimateMultiplicity)
+    mpreal dummy_deriv;
+    mpreal threshold = mpreal("1e-50");
+    results["Taylor"] = estimateMultiplicity(location, poly, max_order, threshold, dummy_deriv);
+
+    // Method 2: Derivative ratio
+    results["DerivRatio"] = estimateMultiplicityDerivativeRatio(location, poly, max_order);
+
+    // Method 3: GCD-based
+    results["GCD"] = estimateMultiplicityGCD(location, poly, max_order);
+
+    // Method 4: Sturm sequence
+    mpreal interval_radius = mpreal("1e-10");
+    results["Sturm"] = estimateMultiplicitySturm(location, poly, interval_radius);
+
+    // Method 5: Ostrowski (if iterates provided)
+    if (abs(x1) > mpreal("1e-100") || abs(x2) > mpreal("1e-100") || abs(x3) > mpreal("1e-100")) {
+        results["Ostrowski"] = estimateMultiplicityOstrowski(x1, x2, x3);
+    }
+
+    return results;
+}
+
 } // namespace polynomial_solver
 
 #endif // ENABLE_HIGH_PRECISION

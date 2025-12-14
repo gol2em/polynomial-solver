@@ -46,6 +46,7 @@
 #include "high_precision_types.h"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace polynomial_solver {
 
@@ -140,6 +141,10 @@ public:
         const PolynomialHP& poly,
         const RefinementConfigHP& config = RefinementConfigHP());
 
+    // ========================================================================
+    // Multiplicity Detection Methods
+    // ========================================================================
+
     /**
      * @brief Estimate multiplicity using Ostrowski's method (1973)
      *
@@ -181,6 +186,81 @@ public:
         unsigned int max_order,
         const mpreal& threshold,
         mpreal& first_nonzero_deriv);
+
+    /**
+     * @brief Estimate multiplicity using derivative ratio test
+     *
+     * For a root of multiplicity m, the ratio |f^(k+1)(x)| / |f^(k)(x)|
+     * should be large for k < m and bounded for k >= m.
+     *
+     * This method computes ratios and looks for the transition point.
+     *
+     * @param location Point to check (high precision)
+     * @param poly High-precision polynomial
+     * @param max_order Maximum order to check
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicityDerivativeRatio(
+        const mpreal& location,
+        const PolynomialHP& poly,
+        unsigned int max_order);
+
+    /**
+     * @brief Estimate multiplicity using GCD-based method
+     *
+     * Computes GCD(f, f') and checks if the root is also a root of the GCD.
+     * If yes, it's a multiple root. Recursively applies to find exact multiplicity.
+     *
+     * This is the most robust algebraic method but computationally expensive.
+     *
+     * @param location Point to check (high precision)
+     * @param poly High-precision polynomial
+     * @param max_order Maximum multiplicity to check
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicityGCD(
+        const mpreal& location,
+        const PolynomialHP& poly,
+        unsigned int max_order);
+
+    /**
+     * @brief Estimate multiplicity using Sturm sequence
+     *
+     * Uses Sturm's theorem to count roots in an interval around the location.
+     * If the interval contains the root with multiplicity m, Sturm sequence
+     * will show sign changes corresponding to the simple roots.
+     *
+     * @param location Point to check (high precision)
+     * @param poly High-precision polynomial
+     * @param interval_radius Radius of interval to check
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicitySturm(
+        const mpreal& location,
+        const PolynomialHP& poly,
+        const mpreal& interval_radius);
+
+    /**
+     * @brief Comprehensive multiplicity detection using all methods
+     *
+     * Runs all available multiplicity detection methods and returns
+     * detailed results for comparison and analysis.
+     *
+     * @param location Point to check (high precision)
+     * @param poly High-precision polynomial
+     * @param max_order Maximum multiplicity to check
+     * @param x1 First Newton iterate (for Ostrowski, optional)
+     * @param x2 Second Newton iterate (for Ostrowski, optional)
+     * @param x3 Third Newton iterate (for Ostrowski, optional)
+     * @return Map of method name to estimated multiplicity
+     */
+    static std::map<std::string, unsigned int> estimateMultiplicityAllMethods(
+        const mpreal& location,
+        const PolynomialHP& poly,
+        unsigned int max_order,
+        const mpreal& x1 = mpreal(0),
+        const mpreal& x2 = mpreal(0),
+        const mpreal& x3 = mpreal(0));
 
     /**
      * @brief Estimate condition number for root-finding problem

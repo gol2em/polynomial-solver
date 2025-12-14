@@ -17,6 +17,9 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_result_refiner_hp test_result_refiner_hp.cpp)
     target_link_libraries(test_result_refiner_hp PRIVATE polynomial_solver)
     add_test(NAME ResultRefinerHPTest COMMAND test_result_refiner_hp)
+
+    add_executable(test_multiplicity_methods test_multiplicity_methods.cpp)
+    target_link_libraries(test_multiplicity_methods PRIVATE polynomial_solver)
 endif()
 
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)
