@@ -165,6 +165,23 @@ public:
         const mpreal& x3);
 
     /**
+     * @brief Estimate multiplicity using Ostrowski's method from a starting point
+     *
+     * Performs 3 REGULAR Newton steps (not modified) from the starting point
+     * and applies Ostrowski's formula to the resulting iterates.
+     *
+     * This is the correct way to use Ostrowski's method - it requires regular
+     * Newton steps, not modified Newton steps.
+     *
+     * @param start Starting point (e.g., current iterate or interval midpoint)
+     * @param poly High-precision polynomial
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicityOstrowskiFromPoint(
+        const mpreal& start,
+        const PolynomialHP& poly);
+
+    /**
      * @brief Estimate multiplicity of a root from derivatives (Taylor series method)
      *
      * Checks derivatives from order 1 to max_order to find the first

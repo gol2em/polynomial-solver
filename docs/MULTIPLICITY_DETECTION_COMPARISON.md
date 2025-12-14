@@ -117,10 +117,15 @@ for (k = 1 to max_order) {
 - **Recommendation**: **Not useful for iterative refinement**
 
 ### 4. Ostrowski Method ❌ UNRELIABLE
-- **Accuracy**: Frequently wrong (m=1, 2, 6, 11 for m=5 root!)
-- **Robustness**: Poor - depends on convergence stage
-- **Speed**: Fast (no derivatives needed)
+- **Accuracy**: Frequently wrong (off by ±1 even with corrected formula)
+- **Robustness**: Poor - requires being in asymptotic convergence regime
+- **Speed**: Moderate (requires 3 Newton steps + evaluations)
 - **Recommendation**: **Do NOT use for production**
+
+**Critical bug found and fixed**: Original implementation used `ceil(p)` but should use `round(p)`.
+The formula gives `p ≈ m + 0.5` for multiplicity m, so:
+- Triple root: p ≈ 3.5, round(3.5) = 3 ✓ (ceil would give 4 ✗)
+- However, even with correct rounding, method is unreliable outside asymptotic regime
 
 ## Critical Observation: Divergence Risk
 

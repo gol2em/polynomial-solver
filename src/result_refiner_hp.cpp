@@ -440,9 +440,24 @@ unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
     // Compute estimate
     mpreal p_est = mpreal("0.5") + numerator / denominator;
 
-    // Apply ceiling with minimum value 1
-    // ⌈p⌉ with p ≥ 1
-    int multiplicity = static_cast<int>(ceil(p_est));
+    #ifdef DEBUG_OSTROWSKI
+    std::cout << "DEBUG Ostrowski: x1=" << x1 << ", x2=" << x2 << ", x3=" << x3 << std::endl;
+    std::cout << "  numerator=" << numerator << ", denominator=" << denominator << std::endl;
+    std::cout << "  p_est=" << p_est << std::endl;
+
+    // Also compute the error ratio directly
+    mpreal e1 = x2 - x1;  // error at step 1
+    mpreal e2 = x3 - x2;  // error at step 2
+    if (abs(e1) > mpreal("1e-100")) {
+        mpreal ratio = e2 / e1;
+        std::cout << "  error_ratio e2/e1=" << ratio << " (should be (m-1)/m)" << std::endl;
+    }
+    #endif
+
+    // Apply rounding (NOT ceiling!) with minimum value 1
+    // The formula gives p ≈ m + 0.5, so round() gives the correct multiplicity
+    // For example: triple root gives p ≈ 3.5, round(3.5) = 3 ✓
+    int multiplicity = static_cast<int>(round(p_est));
     if (multiplicity < 1) {
         multiplicity = 1;
     }
@@ -453,6 +468,59 @@ unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
     }
 
     return static_cast<unsigned int>(multiplicity);
+}
+
+unsigned int ResultRefinerHP::estimateMultiplicityOstrowskiFromPoint(
+    const mpreal& start,
+    const PolynomialHP& poly)
+{
+    // Perform 3 REGULAR Newton steps (not modified Newton!)
+    // This is critical - Ostrowski's method requires regular Newton iterates
+
+    PolynomialHP dpoly = DifferentiationHP::derivative(poly, 0, 1);
+
+    mpreal x0 = start;
+    mpreal x1, x2, x3;
+
+    // Step 1: x1 = x0 - f(x0)/f'(x0)
+    {
+        mpreal f0 = poly.evaluate(x0);
+        mpreal df0 = dpoly.evaluate(x0);
+
+        if (abs(df0) < mpreal("1e-100")) {
+            // Derivative too small, can't do Newton step
+            return 1;
+        }
+
+        x1 = x0 - f0 / df0;
+    }
+
+    // Step 2: x2 = x1 - f(x1)/f'(x1)
+    {
+        mpreal f1 = poly.evaluate(x1);
+        mpreal df1 = dpoly.evaluate(x1);
+
+        if (abs(df1) < mpreal("1e-100")) {
+            return 1;
+        }
+
+        x2 = x1 - f1 / df1;
+    }
+
+    // Step 3: x3 = x2 - f(x2)/f'(x2)
+    {
+        mpreal f2 = poly.evaluate(x2);
+        mpreal df2 = dpoly.evaluate(x2);
+
+        if (abs(df2) < mpreal("1e-100")) {
+            return 1;
+        }
+
+        x3 = x2 - f2 / df2;
+    }
+
+    // Now apply Ostrowski's formula to x1, x2, x3
+    return estimateMultiplicityOstrowski(x1, x2, x3);
 }
 
 unsigned int ResultRefinerHP::estimateMultiplicity(

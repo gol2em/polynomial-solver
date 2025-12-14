@@ -72,8 +72,8 @@ void testMultiplicityDetection(const std::string& test_name,
     unsigned int max_iters = 50;
     
     std::cout << std::setprecision(6) << std::fixed;
-    std::cout << "Iter | Error      | Taylor | DerivRatio | GCD | Sturm | Ostrowski\n";
-    std::cout << "-----+------------+--------+------------+-----+-------+----------\n";
+    std::cout << "Iter | Error      | Taylor | DerivRatio | GCD | Sturm | Ostr_old | Ostr_new\n";
+    std::cout << "-----+------------+--------+------------+-----+-------+----------+----------\n";
     
     for (unsigned int iter = 0; iter < max_iters; ++iter) {
         mpreal f = poly.evaluate(x);
@@ -84,17 +84,12 @@ void testMultiplicityDetection(const std::string& test_name,
         
         // Test all methods
         std::map<std::string, unsigned int> estimates;
-        
-        if (iter >= 3) {
-            // Have enough iterates for Ostrowski
-            estimates = ResultRefinerHP::estimateMultiplicityAllMethods(
-                x, poly, 10,
-                iterates[iter-2], iterates[iter-1], iterates[iter]);
-        } else {
-            // No Ostrowski yet
-            estimates = ResultRefinerHP::estimateMultiplicityAllMethods(
-                x, poly, 10);
-        }
+
+        // Always run non-Ostrowski methods
+        estimates = ResultRefinerHP::estimateMultiplicityAllMethods(x, poly, 10);
+
+        // Add corrected Ostrowski method (performs 3 regular Newton steps from current point)
+        estimates["Ostrowski_corrected"] = ResultRefinerHP::estimateMultiplicityOstrowskiFromPoint(x, poly);
         
         // Print results
         std::cout << std::setw(4) << iter << " | ";
@@ -104,10 +99,11 @@ void testMultiplicityDetection(const std::string& test_name,
         std::cout << std::setw(3) << estimates["GCD"] << " | ";
         std::cout << std::setw(5) << estimates["Sturm"] << " | ";
         if (estimates.count("Ostrowski")) {
-            std::cout << std::setw(9) << estimates["Ostrowski"];
+            std::cout << std::setw(8) << estimates["Ostrowski"] << " | ";
         } else {
-            std::cout << std::setw(9) << "-";
+            std::cout << std::setw(8) << "-" << " | ";
         }
+        std::cout << std::setw(8) << estimates["Ostrowski_corrected"];
         std::cout << "\n";
         
         // Check convergence
