@@ -74,6 +74,21 @@ public:
      * @return The first derivative along the specified axis
      */
     static Polynomial differentiateAxis(const Polynomial& p, std::size_t axis);
+
+    /**
+     * @brief Differentiate in power basis (more efficient for Newton methods).
+     *
+     * If the polynomial has power coefficients available, this method differentiates
+     * directly in power basis without converting to Bernstein. The result has power
+     * as primary representation.
+     *
+     * Power basis differentiation: d/dx(a_0 + a_1*x + a_2*x^2 + ...) = a_1 + 2*a_2*x + ...
+     *
+     * @param p The polynomial to differentiate
+     * @param axis The variable index
+     * @return The first derivative along the specified axis (power primary)
+     */
+    static Polynomial differentiateAxisPower(const Polynomial& p, std::size_t axis);
 };
 
 /**

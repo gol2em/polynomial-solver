@@ -15,18 +15,34 @@
 namespace polynomial_solver {
 
 /**
+ * @enum PolynomialRepresentation
+ * @brief Indicates which coefficient representation is primary (original/accurate)
+ */
+enum class PolynomialRepresentation {
+    POWER,      ///< Power basis is primary (from user input or Newton methods)
+    BERNSTEIN   ///< Bernstein basis is primary (from CAD or subdivision solver)
+};
+
+/**
  * @class Polynomial
- * @brief Represents a multivariate polynomial with real coefficients
- *        stored in Bernstein form.
+ * @brief Represents a multivariate polynomial with dual coefficient storage.
  *
- * Each polynomial is defined over a fixed number of variables
- * (the dimension). For each variable i, a non-negative degree d_i is
- * stored. The coefficients are stored in tensor-product Bernstein basis
- * order as a flat array.
+ * This class stores polynomials in BOTH power and Bernstein basis representations,
+ * with lazy conversion between them. One representation is marked as "primary"
+ * (the original, accurate one), and the other is computed on-demand when needed.
  *
- * A polynomial can be constructed either from power basis coefficients
- * or directly from Bernstein coefficients. Internally, coefficients
- * are always stored in Bernstein form.
+ * Design rationale:
+ * - CAD systems provide Bernstein coefficients (exact) → use Bernstein as primary
+ * - User/test inputs provide power coefficients (exact) → use power as primary
+ * - Subdivision solver REQUIRES Bernstein basis (for PP method)
+ * - Newton refinement is MORE EFFICIENT with power basis (Horner's method)
+ * - Differentiation is SIMPLER in power basis
+ *
+ * The dual storage allows each algorithm to use its preferred representation
+ * without precision loss from unnecessary conversions.
+ *
+ * Memory overhead: Only stores primary representation initially. Secondary
+ * representation is computed lazily on first access and cached.
  */
 class Polynomial {
 public:
@@ -83,9 +99,69 @@ public:
     std::size_t coefficientCount() const;
 
     /**
-     * @brief Access underlying Bernstein coefficients.
+     * @brief Access underlying Bernstein coefficients (with lazy conversion).
+     *
+     * If Bernstein coefficients are not yet computed, converts from power basis
+     * using high-precision intermediate step (64-bit) for better accuracy.
+     * The converted coefficients are cached for future access.
+     *
+     * @return Reference to Bernstein coefficients (always valid)
      */
     const std::vector<double>& bernsteinCoefficients() const;
+
+    /**
+     * @brief Access underlying power coefficients (with lazy conversion).
+     *
+     * If power coefficients are not yet computed, converts from Bernstein basis.
+     * The converted coefficients are cached for future access.
+     *
+     * Note: Bernstein→Power conversion may lose some precision compared to
+     * the original Bernstein coefficients.
+     *
+     * @return Reference to power coefficients (always valid)
+     */
+    const std::vector<double>& powerCoefficients() const;
+
+    /**
+     * @brief Query which representation is primary (original/accurate).
+     *
+     * @return POWER if created from power basis, BERNSTEIN if from Bernstein basis
+     */
+    PolynomialRepresentation primaryRepresentation() const;
+
+    /**
+     * @brief Check if power coefficients are currently available (computed).
+     *
+     * @return true if power coefficients are cached, false if they need conversion
+     */
+    bool hasPowerCoefficients() const;
+
+    /**
+     * @brief Check if Bernstein coefficients are currently available (computed).
+     *
+     * @return true if Bernstein coefficients are cached, false if they need conversion
+     */
+    bool hasBernsteinCoefficients() const;
+
+    /**
+     * @brief Switch primary representation to Bernstein.
+     *
+     * This method is called by the solver before using PP method (which requires Bernstein).
+     * After this call, Bernstein becomes the authoritative representation.
+     * If power was primary, it's converted to Bernstein and power becomes secondary.
+     * Power coefficients remain cached and valid unless invalidated by operations.
+     */
+    void ensureBernsteinPrimary();
+
+    /**
+     * @brief Switch primary representation to Power.
+     *
+     * This method can be called by the refiner to use power basis for Newton iteration.
+     * After this call, Power becomes the authoritative representation.
+     * If Bernstein was primary, it's converted to power and Bernstein becomes secondary.
+     * Bernstein coefficients remain cached and valid unless invalidated by operations.
+     */
+    void ensurePowerPrimary();
 
     /**
      * @brief Evaluate the polynomial at a parameter point using De Casteljau.
@@ -163,7 +239,19 @@ private:
     std::vector<unsigned int> degrees_;
 
     /// Coefficients in tensor-product Bernstein basis.
-    std::vector<double> bernstein_coeffs_;
+    mutable std::vector<double> bernstein_coeffs_;
+
+    /// Coefficients in tensor-product power basis.
+    mutable std::vector<double> power_coeffs_;
+
+    /// Which representation is primary (original/accurate)?
+    PolynomialRepresentation primary_rep_;
+
+    /// Is Bernstein representation currently valid/computed?
+    mutable bool bernstein_valid_;
+
+    /// Is power representation currently valid/computed?
+    mutable bool power_valid_;
 
     /**
      * @brief Compute flattened coefficient index from a multi-index.
@@ -172,6 +260,21 @@ private:
      * [0, degrees_[i]].
      */
     std::size_t flattenIndex(const std::vector<unsigned int>& multi_index) const;
+
+    /**
+     * @brief Convert power coefficients to Bernstein (via HP for precision).
+     *
+     * Uses 64-bit high-precision intermediate step to minimize conversion errors.
+     * Updates bernstein_coeffs_ and sets bernstein_valid_ = true.
+     */
+    void convertPowerToBernstein() const;
+
+    /**
+     * @brief Convert Bernstein coefficients to power basis.
+     *
+     * Updates power_coeffs_ and sets power_valid_ = true.
+     */
+    void convertBernsteinToPower() const;
 };
 
 } // namespace polynomial_solver

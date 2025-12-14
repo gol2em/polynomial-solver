@@ -827,7 +827,14 @@ bool ResultRefiner::refineRoot1D_fromPoint(
     // 2. Use Ostrowski to estimate multiplicity from the 3 iterates
     // 3. Use modified Newton with detected multiplicity to converge
 
-    Polynomial dpoly = Differentiation::derivative(poly, 0, 1);
+    // Use power-basis differentiation if polynomial has power coefficients
+    // This is more efficient (simpler formula) and avoids conversion
+    Polynomial dpoly;
+    if (poly.hasPowerCoefficients()) {
+        dpoly = Differentiation::differentiateAxisPower(poly, 0);
+    } else {
+        dpoly = Differentiation::derivative(poly, 0, 1);
+    }
 
     double x = x0;
     std::vector<double> iterates;

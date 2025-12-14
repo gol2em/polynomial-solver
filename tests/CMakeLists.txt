@@ -70,6 +70,14 @@ add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)
 target_link_libraries(test_polynomial_conversion PRIVATE polynomial de_casteljau)
 add_test(NAME PolynomialConversionTest COMMAND test_polynomial_conversion)
 
+add_executable(test_dual_representation test_dual_representation.cpp)
+target_link_libraries(test_dual_representation PRIVATE polynomial de_casteljau)
+add_test(NAME DualRepresentationTest COMMAND test_dual_representation)
+
+add_executable(test_solver_refiner_workflow test_solver_refiner_workflow.cpp)
+target_link_libraries(test_solver_refiner_workflow PRIVATE polynomial_solver)
+add_test(NAME SolverRefinerWorkflowTest COMMAND test_solver_refiner_workflow)
+
 add_executable(test_polynomial_graph test_polynomial_graph.cpp)
 target_link_libraries(test_polynomial_graph PRIVATE solver polynomial de_casteljau geometry)
 add_test(NAME PolynomialGraphTest COMMAND test_polynomial_graph)
