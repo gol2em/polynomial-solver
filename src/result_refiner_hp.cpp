@@ -32,26 +32,48 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         mpreal f = poly.evaluate(x);
         mpreal df = dpoly.evaluate(x);
 
+        // Store residual
+        result.residual = f;
+
+        // Check convergence first with condition-aware criteria
+        // This works for simple roots
+        if (abs(f) < residual_tol && abs(df) > mpreal("1e-100")) {
+            // Estimate condition number
+            mpreal kappa = estimateConditionNumber1D(x, poly, df);
+            mpreal estimated_error = kappa * abs(f) / abs(df);
+
+            if (estimated_error <= target_tol) {
+                // Converged with good accuracy
+                result.location = x;
+                result.multiplicity = 1;
+                result.first_nonzero_derivative = df;
+                result.condition_estimate = kappa;
+                result.converged = true;
+                return result;
+            }
+        }
+
         // Check if derivative is too small (multiple root or near-singular)
-        // Do this BEFORE condition-aware check, because for multiple roots
-        // the condition number formula breaks down (f' ≈ 0)
-        mpreal df_threshold = mpreal("1e-50");
+        // Use fixed threshold - adaptive threshold can become too strict near convergence
+        mpreal df_threshold = mpreal("1e-20");
+
         if (abs(df) < df_threshold) {
             // Try to estimate multiplicity and use modified Newton
             mpreal first_nonzero_deriv = mpreal(0);
-            mpreal mult_threshold = mpreal("1e-50");
+            // Use fixed threshold for multiplicity detection
+            // This should be relative to the scale of higher derivatives
+            mpreal mult_threshold = mpreal("1e-30");
             unsigned int mult = estimateMultiplicity(
                 x, poly, config.max_multiplicity, mult_threshold, first_nonzero_deriv);
 
             result.multiplicity = mult;
             result.first_nonzero_derivative = first_nonzero_deriv;
 
-            if (mult > 1) {
+            if (mult > 1 && abs(first_nonzero_deriv) > mpreal("1e-100")) {
                 // For multiple roots, check convergence based on residual only
                 // Condition-aware check doesn't work because f' ≈ 0
                 if (abs(f) < residual_tol) {
                     result.location = x;
-                    result.residual = f;
                     result.condition_estimate = estimateConditionNumber1D(x, poly, first_nonzero_deriv);
                     result.converged = true;
                     return result;
@@ -61,23 +83,27 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
                 // For f(x) = (x-r)^m * g(x), we have f^(m)(x) ≈ m! * g(x)
                 // So we can approximate: x_new = x - f(x) / (f^(m)(x) / m!)
 
-                if (abs(first_nonzero_deriv) > df_threshold) {
-                    // Compute factorial
-                    mpreal factorial = mpreal(1);
-                    for (unsigned int i = 2; i <= mult && i <= 10; ++i) {
-                        factorial *= mpreal(i);
-                    }
-
-                    // Modified step using m-th derivative
-                    mpreal step = f * factorial / first_nonzero_deriv;
-                    x = x - step;
-                    continue;
+                // Compute factorial
+                mpreal factorial = mpreal(1);
+                for (unsigned int i = 2; i <= mult && i <= 10; ++i) {
+                    factorial *= mpreal(i);
                 }
+
+                // Modified step using m-th derivative
+                mpreal step = f * factorial / first_nonzero_deriv;
+
+                // Limit step size to avoid divergence
+                mpreal max_step = mpreal("0.1");
+                if (abs(step) > max_step) {
+                    step = step * max_step / abs(step);
+                }
+
+                x = x - step;
+                continue;
             }
 
             // Can't make progress
             result.location = x;
-            result.residual = f;
             result.converged = false;
             result.error_message = "Derivative too small, cannot make progress";
             return result;
@@ -119,8 +145,15 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         }
 
         // Standard Newton step
-        mpreal x_new = x - f / df;
-        x = x_new;
+        mpreal step = f / df;
+
+        // Limit step size to avoid divergence in ill-conditioned cases
+        mpreal max_step = mpreal("1.0");
+        if (abs(step) > max_step) {
+            step = step * max_step / abs(step);
+        }
+
+        x = x - step;
     }
 
     // Max iterations reached - check final residual
@@ -165,21 +198,54 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
 {
     first_nonzero_deriv = mpreal(0);
 
-    // Check derivatives from order 1 to max_order
+    // Evaluate all derivatives up to max_order and find the first significant one
+    // We need to account for factorial scaling: f^(m)(x) ≈ m! for (x-r)^m near r
+    std::vector<mpreal> deriv_values(max_order + 1);
+
     for (unsigned int order = 1; order <= max_order; ++order) {
         PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, order);
-        mpreal deriv_val = deriv.evaluate(location);
+        deriv_values[order] = deriv.evaluate(location);
+    }
 
-        if (abs(deriv_val) > threshold) {
-            // Found first non-zero derivative at order 'order'
-            // This means multiplicity = order
-            first_nonzero_deriv = deriv_val;
+    // Find first derivative that is significantly larger than lower-order derivatives
+    // For a root of multiplicity m, we expect:
+    // |f^(k)| << |f^(m)| for k < m
+    // |f^(m)| ≈ m! * (distance to root)^0
+
+    for (unsigned int order = 1; order <= max_order; ++order) {
+        mpreal deriv_val = abs(deriv_values[order]);
+
+        // Check if this derivative is above absolute threshold
+        if (deriv_val > threshold) {
+            // Check if it's significantly larger than previous derivative
+            // (accounting for factorial growth)
+            if (order == 1) {
+                // First derivative is non-zero
+                first_nonzero_deriv = deriv_values[order];
+                return order;
+            } else {
+                // Compare with previous derivative (scaled by order)
+                mpreal prev_deriv = abs(deriv_values[order - 1]);
+                mpreal ratio = deriv_val / max(prev_deriv, mpreal("1e-100"));
+
+                // If this derivative is much larger (>100x), it's likely the first non-zero one
+                if (ratio > mpreal(100) || prev_deriv < threshold) {
+                    first_nonzero_deriv = deriv_values[order];
+                    return order;
+                }
+            }
+        }
+    }
+
+    // Check if we found any non-zero derivative
+    for (unsigned int order = max_order; order >= 1; --order) {
+        if (abs(deriv_values[order]) > threshold) {
+            first_nonzero_deriv = deriv_values[order];
             return order;
         }
     }
 
     // All derivatives zero up to max_order
-    // Multiplicity is at least max_order + 1
     first_nonzero_deriv = mpreal(0);
     return max_order + 1;
 }
