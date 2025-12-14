@@ -45,9 +45,16 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_sturm_debug test_sturm_debug.cpp)
     target_link_libraries(test_sturm_debug PRIVATE polynomial_solver)
 
+    add_executable(test_detection_limits test_detection_limits.cpp)
+    target_link_libraries(test_detection_limits PRIVATE polynomial_solver)
+
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
 endif()
+
+# Double precision limits test (no high precision required)
+add_executable(test_double_precision_limits test_double_precision_limits.cpp)
+target_link_libraries(test_double_precision_limits PRIVATE polynomial_solver)
 
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)
 target_link_libraries(test_polynomial_conversion PRIVATE polynomial de_casteljau)
