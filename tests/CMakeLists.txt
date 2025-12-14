@@ -39,6 +39,12 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_convergence_rate test_convergence_rate.cpp)
     target_link_libraries(test_convergence_rate PRIVATE polynomial_solver)
 
+    add_executable(test_precision_requirements test_precision_requirements.cpp)
+    target_link_libraries(test_precision_requirements PRIVATE polynomial_solver)
+
+    add_executable(test_sturm_debug test_sturm_debug.cpp)
+    target_link_libraries(test_sturm_debug PRIVATE polynomial_solver)
+
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
 endif()
