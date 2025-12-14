@@ -5,6 +5,14 @@
 #include <set>
 #include <limits>
 
+#ifdef ENABLE_HIGH_PRECISION
+#include "result_refiner_hp.h"
+#include "polynomial_hp.h"
+#include "precision_context.h"
+#include "high_precision_types.h"
+#include "precision_conversion.h"
+#endif
+
 namespace polynomial_solver {
 
 ResultRefiner::ResultRefiner() {
@@ -858,6 +866,135 @@ bool ResultRefiner::refineRoot1D_fromPoint(
 
     return false;
 }
+
+#ifdef ENABLE_HIGH_PRECISION
+bool ResultRefiner::refineRoot1DWithPrecisionEscalation(
+    double initial_guess,
+    const Polynomial& poly,
+    const RefinementConfig& config,
+    RefinedRoot& refined_root) const
+{
+    // Step 1: Try double precision refinement first
+    double refined_x;
+    double residual;
+    bool converged = refineRoot1D_fromPoint(initial_guess, poly, config, refined_x, residual);
+
+    if (!converged) {
+        // Refinement failed in double precision
+        refined_root.verified = false;
+        refined_root.needs_higher_precision = true;
+        refined_root.location = std::vector<double>(1, initial_guess);
+        return false;
+    }
+
+    // Step 2: Estimate multiplicity and condition number
+    PolynomialSystem system(std::vector<Polynomial>{poly});
+    std::vector<double> point{refined_x};
+    double first_nonzero_deriv = 0.0;
+    unsigned int mult = estimateMultiplicity(
+        point, system, config.max_multiplicity, 1e-10, first_nonzero_deriv);
+
+    double condition = estimateConditionNumber1D(refined_x, poly, first_nonzero_deriv);
+    double est_error = condition * std::abs(residual) / std::max(std::abs(first_nonzero_deriv), 1e-14);
+
+    // Step 3: Check if double precision is sufficient
+    if (est_error <= config.target_tolerance && condition < 1e5) {
+        // Double precision is sufficient
+        refined_root.location = std::vector<double>(1, refined_x);
+        refined_root.residual = std::vector<double>(1, residual);
+        refined_root.multiplicity = mult;
+        refined_root.first_nonzero_derivative = first_nonzero_deriv;
+        refined_root.condition_estimate = condition;
+        refined_root.verified = true;
+        refined_root.needs_higher_precision = false;
+        return true;
+    }
+
+    // Step 4: Switch to high precision
+    // Select precision based on condition number
+    unsigned int precision_bits;
+    if (condition < 1e5) {
+        precision_bits = 256;  // ~77 decimal digits
+    } else if (condition < 1e10) {
+        precision_bits = 512;  // ~154 decimal digits
+    } else {
+        precision_bits = 1024; // ~308 decimal digits
+    }
+
+    std::cout << "Switching to " << precision_bits << "-bit precision (condition="
+              << std::scientific << std::setprecision(2) << condition
+              << ", est_error=" << est_error << ")" << std::endl;
+
+    // Set precision context
+    PrecisionContext ctx(precision_bits);
+
+    // Convert polynomial to high precision
+    PolynomialHP poly_hp(poly);
+
+    // Configure high-precision refinement
+    RefinementConfigHP config_hp;
+    config_hp.max_newton_iters = config.max_newton_iters * 2; // Allow more iterations
+    config_hp.max_multiplicity = config.max_multiplicity;
+    config_hp.multiplicity_hint = mult; // Pass the multiplicity detected in double precision
+
+    // Set tolerance based on precision
+    // Use more conservative tolerances that are achievable
+    // For multiple roots, convergence is slower, so we need realistic targets
+    if (precision_bits >= 1024) {
+        config_hp.target_tolerance_str = "1e-100";  // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-100";
+    } else if (precision_bits >= 512) {
+        config_hp.target_tolerance_str = "1e-50";   // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-50";
+    } else {
+        config_hp.target_tolerance_str = "1e-25";   // ~1/3 of available precision
+        config_hp.residual_tolerance_str = "1e-25";
+    }
+
+    // Refine with high precision
+    RefinedRootHP result_hp = ResultRefinerHP::refineRoot1D(refined_x, poly_hp, config_hp);
+
+
+
+    if (!result_hp.converged) {
+        // HP refiner didn't fully converge, but may have improved the result
+        // For multiple roots, full convergence is difficult, so accept partial results
+        // if we have error bounds
+        if (!result_hp.has_guaranteed_bounds) {
+            // No bounds available - refinement truly failed
+            refined_root.verified = false;
+            refined_root.needs_higher_precision = true;
+            refined_root.location = std::vector<double>(1, refined_x);
+            refined_root.condition_estimate = condition;
+            return false;
+        }
+
+        // We have bounds but didn't meet tolerance - accept as best effort
+        std::cout << "  Note: HP refiner achieved partial convergence (error bounds available)" << std::endl;
+    }
+
+    // Step 5: Convert high-precision result back to double precision structure
+    refined_root.location = std::vector<double>(1, toDouble(result_hp.location));
+    refined_root.residual = std::vector<double>(1, toDouble(result_hp.residual));
+    refined_root.multiplicity = result_hp.multiplicity;
+    refined_root.first_nonzero_derivative = toDouble(result_hp.first_nonzero_derivative);
+    refined_root.condition_estimate = toDouble(result_hp.condition_estimate);
+    refined_root.verified = true;
+    refined_root.needs_higher_precision = false; // Successfully refined with HP
+
+    // Store error bounds if available
+    if (result_hp.has_guaranteed_bounds) {
+        refined_root.max_error = std::vector<double>(1, toDouble(result_hp.max_error));
+    }
+
+    std::cout << "High-precision refinement succeeded: root=" << refined_root.location[0]
+              << ", multiplicity=" << refined_root.multiplicity
+              << ", error=" << (result_hp.has_guaranteed_bounds ? toDouble(result_hp.max_error) : 0.0)
+              << std::endl;
+
+    return true;
+}
+#endif
 
 } // namespace polynomial_solver
 

@@ -58,12 +58,16 @@ struct RefinementConfigHP {
     std::string residual_tolerance_str;  ///< Residual tolerance as string (default: "1e-50")
     unsigned int max_newton_iters;       ///< Maximum Newton iterations (default: 100)
     unsigned int max_multiplicity;       ///< Maximum multiplicity to check (default: 10)
+    double taylor_ratio_threshold;       ///< Ratio threshold for Taylor method (default: 10.0)
+    unsigned int multiplicity_hint;      ///< Hint for multiplicity (0 = auto-detect)
 
     RefinementConfigHP()
         : target_tolerance_str("1e-50"),
           residual_tolerance_str("1e-50"),
           max_newton_iters(100u),
-          max_multiplicity(10u)
+          max_multiplicity(10u),
+          taylor_ratio_threshold(10.0),
+          multiplicity_hint(0u)
     {}
 };
 
@@ -184,17 +188,16 @@ public:
     /**
      * @brief Estimate multiplicity of a root from derivatives (Taylor series method)
      *
-     * Checks derivatives from order 1 to max_order to find the first
-     * non-zero derivative. The order of the first non-zero derivative
-     * is the multiplicity.
-     *
-     * This method requires a well-converged root approximation.
+     * Uses ratio test on consecutive derivatives to find first non-zero derivative.
+     * For f(x) = c_m * (x-r)^m + ..., the ratio |f^(k+1)| / |f^(k)| reveals
+     * whether f^(k) vanishes at the root.
      *
      * @param location Point to check (high precision)
      * @param poly High-precision polynomial
      * @param max_order Maximum order to check (default: 10)
      * @param threshold Threshold for "non-zero" (default: 1e-50)
      * @param first_nonzero_deriv Output: value of first non-zero derivative
+     * @param ratio_threshold Ratio threshold for detecting vanishing derivatives (default: 10.0)
      * @return Estimated multiplicity
      */
     static unsigned int estimateMultiplicity(
@@ -202,7 +205,8 @@ public:
         const PolynomialHP& poly,
         unsigned int max_order,
         const mpreal& threshold,
-        mpreal& first_nonzero_deriv);
+        mpreal& first_nonzero_deriv,
+        double ratio_threshold = 10.0);
 
     /**
      * @brief Estimate multiplicity using simple threshold method

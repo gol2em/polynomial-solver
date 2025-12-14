@@ -115,23 +115,45 @@ int main() {
     // Test with higher precision
     std::cout << "\n=== Testing with 512-bit precision ===\n";
     PrecisionContext ctx512(512);
-    
+
     std::cout << "True m | Taylor(max=20) | Ostrowski\n";
     std::cout << "-------+----------------+-----------\n";
-    
+
     for (unsigned int m = 2; m <= 15; ++m) {
         PolynomialHP poly = createMultipleRootPolynomial(0.5, m);
         mpreal x = mpreal(0.48);
-        
+
         mpreal first_nonzero;
         unsigned int taylor = ResultRefinerHP::estimateMultiplicity(x, poly, 20, mpreal("1e-50"), first_nonzero);
         unsigned int ostro = ResultRefinerHP::estimateMultiplicityOstrowskiFromPoint(x, poly);
-        
+
         std::cout << std::setw(6) << m << " | ";
         std::cout << std::setw(14) << taylor << " | ";
         std::cout << std::setw(9) << ostro << "\n";
     }
-    
+
+    // Test configurable ratio threshold for extreme multiplicities
+    std::cout << "\n=== Testing configurable ratio threshold (256-bit) ===\n";
+    PrecisionContext ctx256_2(256);
+
+    std::cout << "True m | Thresh=10 | Thresh=50 | Thresh=100\n";
+    std::cout << "-------+-----------+-----------+-----------\n";
+
+    for (unsigned int m = 8; m <= 15; ++m) {
+        PolynomialHP poly = createMultipleRootPolynomial(0.5, m);
+        mpreal x = mpreal(0.48);
+
+        mpreal dummy;
+        unsigned int t10 = ResultRefinerHP::estimateMultiplicity(x, poly, 20, mpreal("1e-50"), dummy, 10.0);
+        unsigned int t50 = ResultRefinerHP::estimateMultiplicity(x, poly, 20, mpreal("1e-50"), dummy, 50.0);
+        unsigned int t100 = ResultRefinerHP::estimateMultiplicity(x, poly, 20, mpreal("1e-50"), dummy, 100.0);
+
+        std::cout << std::setw(6) << m << " | ";
+        std::cout << std::setw(9) << t10 << " | ";
+        std::cout << std::setw(9) << t50 << " | ";
+        std::cout << std::setw(9) << t100 << "\n";
+    }
+
     return 0;
 }
 

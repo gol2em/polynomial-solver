@@ -236,6 +236,32 @@ public:
         const Polynomial& poly,
         double derivative_value) const;
 
+#ifdef ENABLE_HIGH_PRECISION
+    /**
+     * @brief Refine a 1D root with automatic precision escalation
+     *
+     * This method first attempts refinement with double precision.
+     * If the condition number is too large (estimated error > 1e-10),
+     * it automatically switches to high precision with appropriate bit depth.
+     *
+     * Precision selection based on condition number:
+     * - κ < 1e5:  256 bits (~77 decimal digits)
+     * - κ < 1e10: 512 bits (~154 decimal digits)
+     * - κ ≥ 1e10: 1024 bits (~308 decimal digits)
+     *
+     * @param initial_guess Initial guess for root location
+     * @param poly Polynomial to refine (1D, double precision)
+     * @param config Double precision refinement configuration
+     * @param refined_root Output: refined root information
+     * @return True if refinement succeeded (either in double or high precision)
+     */
+    bool refineRoot1DWithPrecisionEscalation(
+        double initial_guess,
+        const Polynomial& poly,
+        const RefinementConfig& config,
+        RefinedRoot& refined_root) const;
+#endif
+
 private:
     /**
      * @brief Refine a 1D root using Newton's method with sign checking

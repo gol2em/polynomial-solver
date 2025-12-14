@@ -30,6 +30,12 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_high_multiplicity test_high_multiplicity.cpp)
     target_link_libraries(test_high_multiplicity PRIVATE polynomial_solver)
 
+    add_executable(test_precision_escalation test_precision_escalation.cpp)
+    target_link_libraries(test_precision_escalation PRIVATE polynomial_solver)
+
+    add_executable(test_hp_refiner_direct test_hp_refiner_direct.cpp)
+    target_link_libraries(test_hp_refiner_direct PRIVATE polynomial_solver)
+
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
 endif()

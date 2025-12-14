@@ -30,8 +30,14 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
     iterates.push_back(x);  // x0 = initial guess
 
     // Track multiplicity estimate
-    unsigned int estimated_multiplicity = 1;
-    bool multiplicity_detected = false;
+    unsigned int estimated_multiplicity = (config.multiplicity_hint > 0) ? config.multiplicity_hint : 1;
+    bool multiplicity_detected = (config.multiplicity_hint > 0);  // If hint provided, consider it detected
+
+    #ifdef DEBUG_MULTIPLICITY
+    if (config.multiplicity_hint > 0) {
+        std::cout << "DEBUG: Using multiplicity hint = " << config.multiplicity_hint << std::endl;
+    }
+    #endif
 
     // Track previous error bound to detect stagnation
     mpreal prev_error_bound = mpreal("1e100");
@@ -48,13 +54,14 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         result.residual = f;
 
         // Step 1: Verify/detect multiplicity if derivative is small
-        // Always re-verify when close enough, even if Ostrowski gave us an estimate
-        if (abs(df) < mpreal("1e-20")) {
+        // Only re-verify if we don't have a hint or if we haven't detected yet
+        if (abs(df) < mpreal("1e-20") && config.multiplicity_hint == 0) {
             // Derivative is small - do Taylor series analysis for exact multiplicity
             mpreal mult_threshold = mpreal("1e-50");
             mpreal dummy_deriv;
             unsigned int verified_mult = estimateMultiplicity(
-                x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
+                x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
+                config.taylor_ratio_threshold);
 
             // Update if we got a better estimate
             if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
@@ -114,7 +121,8 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
                 mpreal mult_threshold = mpreal("1e-50");
                 mpreal dummy_deriv;
                 unsigned int verified_mult = estimateMultiplicity(
-                    x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
+                    x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
+                    config.taylor_ratio_threshold);
 
                 if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
                     estimated_multiplicity = verified_mult;
@@ -150,7 +158,8 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         }
 
         // Apply Ostrowski multiplicity estimation after 3 iterations
-        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected) {
+        // Only if we don't have a hint from caller
+        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected && config.multiplicity_hint == 0) {
             // We have x0, x1, x2, x3
             unsigned int mult_est = estimateMultiplicityOstrowski(
                 iterates[1], iterates[2], iterates[3]);
@@ -184,7 +193,8 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         mpreal mult_threshold = mpreal("1e-50");
         mpreal dummy_deriv;
         estimated_multiplicity = estimateMultiplicity(
-            x, poly, config.max_multiplicity, mult_threshold, dummy_deriv);
+            x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
+            config.taylor_ratio_threshold);
         multiplicity_detected = true;
     }
 
@@ -529,7 +539,8 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
     const PolynomialHP& poly,
     unsigned int max_order,
     const mpreal& threshold,
-    mpreal& first_nonzero_deriv)
+    mpreal& first_nonzero_deriv,
+    double ratio_threshold)
 {
     first_nonzero_deriv = mpreal(0);
 
@@ -633,10 +644,11 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
             // Compute ratio
             mpreal ratio = next_deriv / max(deriv_val, mpreal("1e-100"));
 
-            // Simple threshold: if ratio > 10, derivative vanishes at root
-            // This works because for k < m, ratio ~ 50*(m-k) >> 10
+            // Configurable threshold: if ratio > threshold, derivative vanishes at root
+            // Default threshold=10 works because for k < m, ratio ~ 50*(m-k) >> 10
             // For k = m, ratio ~ O(1) or O(ε) < 10
-            if (ratio > mpreal(10)) {
+            // For extreme multiplicities, increase threshold (e.g., 50 for m>10)
+            if (ratio > mpreal(ratio_threshold)) {
                 continue;  // Try next order
             }
         }
