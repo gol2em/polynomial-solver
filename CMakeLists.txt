@@ -80,12 +80,12 @@ if(ENABLE_HIGH_PRECISION)
         )
         set(ENABLE_HIGH_PRECISION OFF CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     else()
-        # Set preprocessor definitions
-        add_compile_definitions(ENABLE_HIGH_PRECISION)
+        # Note: ENABLE_HIGH_PRECISION is defined in generated config.h, not here
+        # This avoids redefinition warnings
 
         # Determine if templates should be used
         if(ENABLE_TEMPLATES)
-            add_compile_definitions(USE_TEMPLATES)
+            # Note: USE_TEMPLATES is defined in generated config.h, not here
             message(STATUS "Implementation: Tier 3 (template-based, flexible)")
         else()
             message(STATUS "Implementation: Tier 2 (fixed high-precision, no templates)")
@@ -111,20 +111,22 @@ if(ENABLE_HIGH_PRECISION)
         endif()
 
         # Set backend type
+        # Set CMake variables for config.h generation
         if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
-            add_compile_definitions(USE_MPFR_BACKEND)
+            set(USE_MPFR_BACKEND ON)
             message(STATUS "Backend: MPFR (best performance, runtime precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
-            add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
+            set(USE_CPP_DEC_FLOAT_BACKEND ON)
             message(STATUS "Backend: cpp_dec_float (header-only, fixed precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
-            add_compile_definitions(USE_QUADMATH_BACKEND)
+            set(USE_QUADMATH_BACKEND ON)
             message(STATUS "Backend: quadmath (native __float128, 128-bit)")
         endif()
 
         # Add quadmath support if available
+        # Set CMake variable for config.h generation
         if(QUADMATH_FOUND)
-            add_compile_definitions(ENABLE_QUADMATH)
+            set(ENABLE_QUADMATH ON)
             message(STATUS "Quadmath support: ENABLED")
         elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
             message(WARNING "Quadmath support requested but library not found")
