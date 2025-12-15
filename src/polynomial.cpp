@@ -523,8 +523,11 @@ double Polynomial::evaluate(double t) const {
 
 Polynomial Polynomial::restrictedToInterval(std::size_t axis, double a, double b) const {
     // Restriction requires Bernstein coefficients (uses De Casteljau subdivision)
+    // DO NOT automatically convert - caller must ensure Bernstein is available
+    // This avoids repeated conversions during subdivision
     if (!bernstein_valid_) {
-        convertPowerToBernstein();
+        throw std::logic_error("restrictedToInterval requires Bernstein coefficients to be available. "
+                               "Call ensureBernsteinPrimary() before using subdivision solver.");
     }
 
     const std::size_t dim = degrees_.size();

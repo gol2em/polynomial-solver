@@ -229,6 +229,20 @@ add_library(polynomial STATIC
     src/polynomial.cpp
 )
 
+# Link HP libraries if enabled (polynomial.cpp uses HP for conversion)
+if(ENABLE_HIGH_PRECISION)
+    if(HIGH_PRECISION_INCLUDE_DIRS)
+        target_include_directories(polynomial PUBLIC ${HIGH_PRECISION_INCLUDE_DIRS})
+    endif()
+    target_link_libraries(polynomial PUBLIC ${HIGH_PRECISION_LIBRARIES})
+
+    # Also need polynomial_hp for fromPowerHP function
+    target_sources(polynomial PRIVATE
+        src/polynomial_hp.cpp
+        src/precision_conversion.cpp
+    )
+endif()
+
 # Build geometry library
 add_library(geometry STATIC
     src/geometry.cpp

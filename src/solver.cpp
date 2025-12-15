@@ -670,8 +670,22 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
     root.box_lower.assign(dim, 0.0);
     root.box_upper.assign(dim, 1.0);
     root.depth = 0u;
-    root.polys = system.equations();
-    root.original_polys = system.equations();  // Store original for direct contraction
+
+    // Convert polynomials to Bernstein ONCE at the beginning
+    // This ensures restrictedToInterval() doesn't need to convert repeatedly
+    // Note: User keeps original polynomials (may have power basis) and passes them to refiner
+    // Here we store Bernstein-converted versions for solver operations
+    root.polys.reserve(system.equations().size());
+    for (const Polynomial& poly : system.equations()) {
+        // Create a copy and ensure it has Bernstein coefficients
+        Polynomial bernstein_poly = poly;
+        bernstein_poly.ensureBernsteinPrimary();
+        root.polys.push_back(bernstein_poly);
+    }
+
+    // Store Bernstein-converted polynomials as "original" for direct contraction
+    // (Direct contraction uses these to avoid error accumulation)
+    root.original_polys = root.polys;
 
     std::priority_queue<NodeQueueEntry, std::vector<NodeQueueEntry>, NodeQueueCompare> queue;
     std::size_t next_index = 0u;
