@@ -71,7 +71,7 @@ target_link_libraries(test_polynomial_conversion PRIVATE polynomial de_casteljau
 add_test(NAME PolynomialConversionTest COMMAND test_polynomial_conversion)
 
 add_executable(test_dual_representation test_dual_representation.cpp)
-target_link_libraries(test_dual_representation PRIVATE polynomial de_casteljau)
+target_link_libraries(test_dual_representation PRIVATE polynomial_solver)
 add_test(NAME DualRepresentationTest COMMAND test_dual_representation)
 
 add_executable(test_solver_refiner_workflow test_solver_refiner_workflow.cpp)

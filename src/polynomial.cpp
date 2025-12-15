@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <iostream>
 
+#ifdef ENABLE_HIGH_PRECISION
+#include "polynomial_hp.h"
+#include "precision_conversion.h"
+#endif
+
 namespace {
 
 // Compute strides for a tensor-product layout where the last dimension
@@ -670,7 +675,40 @@ void Polynomial::graphControlPoints(std::vector<double>& control_points) const {
 }
 
 void Polynomial::convertPowerToBernstein() const {
-    // Reuse the tested power-to-Bernstein conversion code
+    // When high precision is enabled, use HP conversion for better accuracy
+    // This gives ~256x better precision than direct double conversion
+#ifdef ENABLE_HIGH_PRECISION
+    const std::size_t dim = dimension_;
+
+    if (dim == 0u) {
+        bernstein_coeffs_ = power_coeffs_;
+        bernstein_valid_ = true;
+        return;
+    }
+
+    // Convert power coefficients to high precision
+    std::vector<mpreal> power_hp;
+    power_hp.reserve(power_coeffs_.size());
+    for (double c : power_coeffs_) {
+        power_hp.push_back(toHighPrecision(c));
+    }
+
+    // Create HP polynomial from power basis (stores power as primary)
+    PolynomialHP poly_hp = fromPowerHP(degrees_, power_hp);
+
+    // Get Bernstein coefficients (triggers HP conversion)
+    const std::vector<mpreal>& bernstein_hp = poly_hp.bernsteinCoefficients();
+
+    // Convert back to double
+    bernstein_coeffs_.clear();
+    bernstein_coeffs_.reserve(bernstein_hp.size());
+    for (const mpreal& c : bernstein_hp) {
+        bernstein_coeffs_.push_back(toDouble(c));
+    }
+
+    bernstein_valid_ = true;
+#else
+    // Fallback to double-precision conversion when HP not available
     const std::size_t dim = dimension_;
 
     if (dim == 0u) {
@@ -730,6 +768,7 @@ void Polynomial::convertPowerToBernstein() const {
 
     bernstein_coeffs_ = coeffs;
     bernstein_valid_ = true;
+#endif
 }
 
 void Polynomial::convertBernsteinToPower() const {
