@@ -80,12 +80,17 @@ if(ENABLE_HIGH_PRECISION)
         )
         set(ENABLE_HIGH_PRECISION OFF CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     else()
-        # Note: ENABLE_HIGH_PRECISION is defined in generated config.h, not here
-        # This avoids redefinition warnings
+        # Define ENABLE_HIGH_PRECISION for both compilation and IDE support
+        # Also defined in config.h with #ifndef guard to prevent redefinition
+        add_compile_definitions(ENABLE_HIGH_PRECISION)
 
         # Determine if templates should be used
         if(ENABLE_TEMPLATES)
-            # Note: USE_TEMPLATES is defined in generated config.h, not here
+            # Set CMake variable for config.h generation
+            set(USE_TEMPLATES ON)
+            # Define USE_TEMPLATES for both compilation and IDE support
+            # Also defined in config.h with #ifndef guard to prevent redefinition
+            add_compile_definitions(USE_TEMPLATES)
             message(STATUS "Implementation: Tier 3 (template-based, flexible)")
         else()
             message(STATUS "Implementation: Tier 2 (fixed high-precision, no templates)")
@@ -111,22 +116,26 @@ if(ENABLE_HIGH_PRECISION)
         endif()
 
         # Set backend type
-        # Set CMake variables for config.h generation
+        # Set CMake variables for config.h generation AND compile definitions for IDE support
         if(HIGH_PRECISION_BACKEND STREQUAL "MPFR")
             set(USE_MPFR_BACKEND ON)
+            add_compile_definitions(USE_MPFR_BACKEND)
             message(STATUS "Backend: MPFR (best performance, runtime precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "CPP_DEC_FLOAT")
             set(USE_CPP_DEC_FLOAT_BACKEND ON)
+            add_compile_definitions(USE_CPP_DEC_FLOAT_BACKEND)
             message(STATUS "Backend: cpp_dec_float (header-only, fixed precision)")
         elseif(HIGH_PRECISION_BACKEND STREQUAL "QUADMATH")
             set(USE_QUADMATH_BACKEND ON)
+            add_compile_definitions(USE_QUADMATH_BACKEND)
             message(STATUS "Backend: quadmath (native __float128, 128-bit)")
         endif()
 
         # Add quadmath support if available
-        # Set CMake variable for config.h generation
+        # Set CMake variable for config.h generation AND compile definition for IDE support
         if(QUADMATH_FOUND)
             set(ENABLE_QUADMATH ON)
+            add_compile_definitions(ENABLE_QUADMATH)
             message(STATUS "Quadmath support: ENABLED")
         elseif(ENABLE_QUADMATH AND NOT QUADMATH_FOUND)
             message(WARNING "Quadmath support requested but library not found")
