@@ -48,6 +48,9 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_detection_limits test_detection_limits.cpp)
     target_link_libraries(test_detection_limits PRIVATE polynomial_solver)
 
+    add_executable(test_auto_precision_lift test_auto_precision_lift.cpp)
+    target_link_libraries(test_auto_precision_lift PRIVATE polynomial_solver)
+
     add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
     target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
 

@@ -1,3 +1,5 @@
+#include "config.h"
+
 #ifdef ENABLE_HIGH_PRECISION
 
 #include "polynomial_hp.h"

@@ -1,3 +1,5 @@
+#include "config.h"
+
 #ifdef ENABLE_HIGH_PRECISION
 
 #include "differentiation_hp.h"
