@@ -147,7 +147,7 @@ cd build
 ctest
 
 # Expected output:
-# 100% tests passed, 0 tests failed out of 12
+# 100% tests passed, 0 tests failed out of 21
 ```
 
 ### Run Standard Verification Workflow
@@ -168,7 +168,7 @@ python examples/visualize_circle_ellipse.py
 ```
 
 **Expected Results:**
-- All 12 tests pass
+- All 21 tests pass
 - 3 geometry dumps generated in `dumps/`
 - Visualizations generated in `visualizations/`
 - All strategies converge to root: (0.894427, 0.447214)
@@ -197,14 +197,15 @@ ls -lh build/lib/
 ```
 
 Expected executables:
-- `polynomial_solver_app` - Main application
-- `test_*` - Test executables (12 tests)
-- `test_strategies` - Strategy comparison with geometry dumps
-- `example_circle_ellipse` - Circle-ellipse intersection example
+- `example_*` - Example programs (4 examples)
+- `test_*` - Test executables (21 tests)
 
 Expected libraries:
+- `libpolynomial_solver.a` - Unified library (link against this)
 - `libpolynomial.a` - Polynomial module
 - `libsolver.a` - Solver module
+- `libresult_refiner.a` - Result refiner module
+- `libdifferentiation.a` - Differentiation module
 - `libgeometry.a` - Geometry module
 - `libde_casteljau.a` - De Casteljau module
 
@@ -225,7 +226,7 @@ make -j$(nproc)
 - ✅ Zero dependencies
 - ✅ Maximum performance
 
-### Tier 3: Full Version (Template-Based, Recommended)
+### Tier 2: High-Precision Version (Recommended)
 
 #### Prerequisites
 
@@ -251,10 +252,10 @@ make -j$(nproc)
 ```
 
 **Features**:
-- ✅ Template-based (supports any numeric type)
-- ✅ Flexible precision (change at runtime)
-- ✅ Supports double, mpreal, __float128
-- ✅ No code duplication
+- ✅ Fixed high-precision types (PolynomialHP, ResultRefinerHP)
+- ✅ Runtime-configurable precision (MPFR backend)
+- ✅ Supports MPFR, cpp_dec_float, __float128 backends
+- ✅ Production-ready (Tier 2 complete)
 
 ### Manual Library Control
 
@@ -289,20 +290,23 @@ cmake .. -DENABLE_HIGH_PRECISION=ON \
 - If `USE_BOOST=ON` but MPFR/GMP disabled → cpp_dec_float backend
 - If `USE_BOOST=OFF` and `USE_QUADMATH=ON` → quadmath backend (standalone)
 
-### Tier 2: Fallback Version (No Templates)
+### Future: Tier 3 (Template-Based, Not Yet Implemented)
 
-For users who don't want templates:
+Tier 3 will provide template-based high-precision support for maximum flexibility.
+Currently, Tier 2 (fixed high-precision types) is the recommended approach.
+
+To enable templates in the future (when implemented):
 
 ```bash
 mkdir build && cd build
-cmake .. -DENABLE_HIGH_PRECISION=ON -DDISABLE_TEMPLATES=ON
+cmake .. -DENABLE_HIGH_PRECISION=ON -DENABLE_TEMPLATES=ON
 make -j$(nproc)
 ```
 
-**Features**:
-- ✅ Fixed high precision (mpreal)
-- ✅ No templates
-- ⚠️ Less flexible than Tier 3
+**Planned Features**:
+- ⏳ Template-based (supports any numeric type)
+- ⏳ Flexible precision (change at compile time)
+- ⏳ No code duplication
 
 ### Custom Library Paths
 
@@ -763,11 +767,11 @@ After following this guide, you should have:
 
 1. ✅ All prerequisites installed
 2. ✅ Project cloned and built
-3. ✅ All 11 tests passing
+3. ✅ All 21 tests passing
 4. ✅ Example programs running
 5. ✅ Ready for development or deployment
 
-For quick reference, see [QUICKSTART.md](QUICKSTART.md).
+For quick reference, see [README.md](README.md).
 
 For algorithm details, see documentation in [docs/](docs/).
 

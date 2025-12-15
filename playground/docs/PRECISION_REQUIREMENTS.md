@@ -170,3 +170,78 @@ Ostrowski: 3       ← Correct
 - Sturm sequence requires exact arithmetic - unsuitable for floating-point
 - The challenge is having enough precision for convergence, which scales linearly with multiplicity (128*m bits)
 
+## Critical Finding: Achievable Error Bounds (Dec 2025)
+
+### Test Case: Product Polynomial with High Multiplicity
+
+**Polynomial**: `p(x) = (x - 0.2)(x - 0.6)^6` (degree 7, multiplicity-6 root at x=0.6)
+
+**Setup**:
+- Exact rational power coefficients (e.g., `-729/78125` instead of `-0.0093312`)
+- 1024-bit precision
+- Power-basis differentiation (avoids Bernstein conversion)
+- Modified Newton with multiplicity hint = 6
+
+**Result**:
+- Residual: 5.3e-99 (excellent)
+- Error bound: **1.1e-33** (limited by numerical precision)
+- Iterations: 3
+- **Conclusion**: Cannot achieve error bounds better than ~1e-33 with 1024-bit precision for this polynomial
+
+### Implication for Numerical Solvers
+
+**Key insight**: For a numerical solver, the target is **double precision (1e-15)**, not arbitrary precision.
+
+- Error bound of 1e-33 provides **18 orders of magnitude** better accuracy than required
+- 1024-bit precision is **more than sufficient** for all practical numerical applications
+- Targeting 1e-50 error bounds is unrealistic for high-degree, high-multiplicity polynomials
+
+### Precision Scaling Law
+
+For degree-n polynomial with multiplicity-m root:
+- Error bound scales roughly as `O(2^(-precision/n))`
+- Degree-7 polynomial with 1024 bits → error bound ~ 1e-33
+- To achieve 1e-50 would require > 2048 bits (diminishing returns)
+
+## Critical Implementation Requirements
+
+### 1. Avoid Implicit Basis Conversions
+
+**Problem**: Implicit Power ↔ Bernstein conversions introduce rounding errors.
+
+**Solution**:
+- Added explicit conversion checks that abort with error messages
+- Use power-basis differentiation for polynomials created with `fromPowerHP()`
+- Only convert when explicitly needed via `convertPowerToBernstein()` or `convertBernsteinToPower()`
+
+### 2. Use Exact Rational Coefficients
+
+**Problem**: Decimal approximations introduce errors from the start.
+
+**Solution**:
+```cpp
+// WRONG:
+mpreal("-0.0093312")
+
+// CORRECT:
+mpreal("-729") / mpreal("78125")  // Exact: -(1/5)*(3/5)^6
+```
+
+### 3. Power-Basis Differentiation for HP
+
+**Problem**: Bernstein-basis differentiation forces conversion even for power-basis polynomials.
+
+**Solution**: Implemented `DifferentiationHP::differentiateAxisPower()` that:
+- Works directly with power coefficients
+- Avoids Bernstein conversion
+- Preserves exact rational arithmetic
+- Automatically selected when polynomial has power as primary representation
+
+## References
+
+- Test code: `tests/test_hp_multiplicity.cpp`
+- Working example: `examples/multiplicity_1d_roots.cpp`
+- Implementation: `src/result_refiner_hp.cpp`
+- Power-basis differentiation: `src/differentiation_hp.cpp`
+- Multiplicity detection: `estimateMultiplicity()`, `estimateMultiplicityOstrowski()`, `estimateMultiplicitySturm()`
+

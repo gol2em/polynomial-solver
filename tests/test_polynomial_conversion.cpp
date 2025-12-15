@@ -79,6 +79,7 @@ int main()
         power_coeffs[0] = 1.0;
 
         Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        p.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& b = p.bernsteinCoefficients();
 
         if (b.size() != power_coeffs.size()) {
@@ -104,6 +105,7 @@ int main()
         power_coeffs[1] = 1.0;
 
         Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        p.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& b = p.bernsteinCoefficients();
 
         if (b.size() != power_coeffs.size()) {
@@ -130,6 +132,7 @@ int main()
         power_coeffs[2] = 1.0;
 
         Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        p.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& b = p.bernsteinCoefficients();
 
         if (b.size() != power_coeffs.size()) {
@@ -168,6 +171,7 @@ int main()
         power_coeffs[idx(0u, 1u)] = 1.0; // y term
 
         Polynomial p = Polynomial::fromPower(degrees, power_coeffs);
+        p.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& b = p.bernsteinCoefficients();
 
         if (b.size() != power_coeffs.size()) {

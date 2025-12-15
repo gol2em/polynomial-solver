@@ -115,6 +115,22 @@ public:
     void ensurePowerPrimary();
 
     /**
+     * @brief Explicitly convert power to Bernstein representation
+     *
+     * This is a public method to allow explicit conversion when needed.
+     * Use this instead of relying on implicit conversion via bernsteinCoefficients().
+     */
+    void convertPowerToBernstein() const;
+
+    /**
+     * @brief Explicitly convert Bernstein to power representation
+     *
+     * This is a public method to allow explicit conversion when needed.
+     * Use this instead of relying on implicit conversion via powerCoefficients().
+     */
+    void convertBernsteinToPower() const;
+
+    /**
      * @brief Evaluate polynomial at high-precision point
      *
      * Uses Horner's method for power basis, De Casteljau for Bernstein.
@@ -155,16 +171,6 @@ private:
 
     /// Is power representation currently valid/computed?
     mutable bool power_valid_;
-
-    /**
-     * @brief Convert power to Bernstein (lazy, cached)
-     */
-    void convertPowerToBernstein() const;
-
-    /**
-     * @brief Convert Bernstein to power (lazy, cached)
-     */
-    void convertBernsteinToPower() const;
 
     // Friend function to allow fromPowerHP to access private members
     friend PolynomialHP fromPowerHP(const std::vector<unsigned int>&,

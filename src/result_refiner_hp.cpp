@@ -6,8 +6,154 @@
 #include "differentiation_hp.h"
 #include "precision_conversion.h"
 #include <cmath>
+#include <iostream>
+
+// Temporary debug flag (disabled by default)
+// #define DEBUG_HP_REFINER 1
 
 namespace polynomial_solver {
+
+// ============================================================================
+// Modular Components
+// ============================================================================
+
+unsigned int ResultRefinerHP::estimateMultiplicityModular(
+    const mpreal& x,
+    const PolynomialHP& poly,
+    const RefinementConfigHP& config,
+    const std::vector<mpreal>& iterates)
+{
+    #ifdef DEBUG_HP_REFINER
+    std::cout << "  [HP DEBUG] estimateMultiplicityModular called, method = " << static_cast<int>(config.multiplicity_method) << std::endl;
+    #endif
+
+    switch (config.multiplicity_method) {
+        case MultiplicityMethod::NONE:
+            return 1;
+
+        case MultiplicityMethod::HINT:
+            #ifdef DEBUG_HP_REFINER
+            std::cout << "  [HP DEBUG] Using HINT method, hint = " << config.multiplicity_hint << std::endl;
+            #endif
+            return (config.multiplicity_hint > 0) ? config.multiplicity_hint : 1;
+
+        case MultiplicityMethod::TAYLOR: {
+            mpreal mult_threshold = mpreal("1e-50");
+            mpreal first_nonzero_deriv;
+            return estimateMultiplicity(x, poly, config.max_multiplicity,
+                                       mult_threshold, first_nonzero_deriv,
+                                       config.taylor_ratio_threshold);
+        }
+
+        case MultiplicityMethod::OSTROWSKI:
+            if (iterates.size() >= 4) {
+                // Use last 3 iterates: x1, x2, x3
+                return estimateMultiplicityOstrowski(iterates[1], iterates[2], iterates[3]);
+            } else {
+                // Not enough iterates yet, use Taylor as fallback
+                mpreal mult_threshold = mpreal("1e-50");
+                mpreal first_nonzero_deriv;
+                return estimateMultiplicity(x, poly, config.max_multiplicity,
+                                           mult_threshold, first_nonzero_deriv,
+                                           config.taylor_ratio_threshold);
+            }
+
+        case MultiplicityMethod::TAYLOR_THEN_OSTROWSKI:
+            // Try Taylor first
+            {
+                mpreal mult_threshold = mpreal("1e-50");
+                mpreal first_nonzero_deriv;
+                unsigned int taylor_mult = estimateMultiplicity(
+                    x, poly, config.max_multiplicity, mult_threshold,
+                    first_nonzero_deriv, config.taylor_ratio_threshold);
+
+                // If Taylor gives m>1, trust it
+                if (taylor_mult > 1) {
+                    return taylor_mult;
+                }
+
+                // Otherwise try Ostrowski if we have enough iterates
+                if (iterates.size() >= 4) {
+                    return estimateMultiplicityOstrowski(iterates[1], iterates[2], iterates[3]);
+                }
+
+                return 1;
+            }
+
+        default:
+            return 1;
+    }
+}
+
+mpreal ResultRefinerHP::performIterationStep(
+    mpreal& x,
+    const PolynomialHP& poly,
+    const PolynomialHP& dpoly,
+    const PolynomialHP& ddpoly,
+    unsigned int multiplicity,
+    IterationMethod method)
+{
+    mpreal f = poly.evaluate(x);
+    mpreal df = dpoly.evaluate(x);
+    mpreal step;
+
+    switch (method) {
+        case IterationMethod::NEWTON:
+            // Standard Newton: x_new = x - f/f'
+            if (abs(df) < mpreal("1e-100")) {
+                return mpreal("0.0");  // Can't make progress
+            }
+            step = f / df;
+            break;
+
+        case IterationMethod::MODIFIED_NEWTON:
+            // Modified Newton for multiple roots: x_new = x - m*f/f'
+            if (abs(df) < mpreal("1e-100")) {
+                return mpreal("0.0");
+            }
+            step = mpreal(multiplicity) * f / df;
+            break;
+
+        case IterationMethod::HALLEY: {
+            // Halley's method: x_new = x - 2*f*f' / (2*f'^2 - f*f'')
+            mpreal ddf = ddpoly.evaluate(x);
+            mpreal denom = mpreal("2.0") * df * df - f * ddf;
+            if (abs(denom) < mpreal("1e-100")) {
+                return mpreal("0.0");
+            }
+            step = mpreal("2.0") * f * df / denom;
+            break;
+        }
+
+        case IterationMethod::SCHRODER: {
+            // Schröder's method: x_new = x - f*f' / (f'^2 - f*f'')
+            mpreal ddf = ddpoly.evaluate(x);
+            mpreal denom = df * df - f * ddf;
+            if (abs(denom) < mpreal("1e-100")) {
+                return mpreal("0.0");
+            }
+            step = f * df / denom;
+            break;
+        }
+
+        default:
+            step = f / df;  // Fallback to standard Newton
+            break;
+    }
+
+    // Limit step size to avoid divergence
+    mpreal max_step = mpreal("1.0");
+    if (abs(step) > max_step) {
+        step = step * max_step / abs(step);
+    }
+
+    x = x - step;
+    return step;
+}
+
+// ============================================================================
+// Main Refinement Method (using modular components)
+// ============================================================================
 
 RefinedRootHP ResultRefinerHP::refineRoot1D(
     double initial_guess,
@@ -23,59 +169,57 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
     mpreal target_tol = mpreal(config.target_tolerance_str);
     mpreal residual_tol = mpreal(config.residual_tolerance_str);
 
-    // Get derivative polynomial
+    // Prepare derivative polynomials (compute what we need based on iteration method)
     PolynomialHP dpoly = DifferentiationHP::derivative(poly, 0, 1);
+    PolynomialHP ddpoly;
+    if (config.iteration_method == IterationMethod::HALLEY ||
+        config.iteration_method == IterationMethod::SCHRODER) {
+        ddpoly = DifferentiationHP::derivative(dpoly, 0, 1);
+    }
 
-    // For Ostrowski multiplicity estimation: store last 3 iterates
+    // Store iterates for Ostrowski method
     std::vector<mpreal> iterates;
-    iterates.reserve(4);  // x0, x1, x2, x3
     iterates.push_back(x);  // x0 = initial guess
 
-    // Track multiplicity estimate
-    unsigned int estimated_multiplicity = (config.multiplicity_hint > 0) ? config.multiplicity_hint : 1;
-    bool multiplicity_detected = (config.multiplicity_hint > 0);  // If hint provided, consider it detected
+    // ============================================================
+    // STEP 1: Initial multiplicity estimation
+    // ============================================================
+    unsigned int estimated_multiplicity = 1;
 
-    #ifdef DEBUG_MULTIPLICITY
-    if (config.multiplicity_hint > 0) {
-        std::cout << "DEBUG: Using multiplicity hint = " << config.multiplicity_hint << std::endl;
+    if (config.multiplicity_timing == MultiplicityTiming::ONCE_AT_START) {
+        estimated_multiplicity = estimateMultiplicityModular(x, poly, config, iterates);
+
+        #ifdef DEBUG_HP_REFINER
+        std::cout << "  [HP DEBUG] Initial multiplicity estimate = " << estimated_multiplicity << std::endl;
+        #endif
     }
-    #endif
 
-    // Track previous error bound to detect stagnation
+    // Track previous error for stagnation detection
     mpreal prev_error_bound = mpreal("1e100");
 
-    // Newton iteration
+    // ============================================================
+    // STEP 2: Iteration loop
+    // ============================================================
     for (unsigned int iter = 0; iter < config.max_newton_iters; ++iter) {
         result.iterations = iter + 1;
 
-        // Evaluate function and derivative
-        mpreal f = poly.evaluate(x);
-        mpreal df = dpoly.evaluate(x);
-
-        // Store residual
-        result.residual = f;
-
-        // Step 1: Verify/detect multiplicity if derivative is small
-        // Only re-verify if we don't have a hint or if we haven't detected yet
-        if (abs(df) < mpreal("1e-20") && config.multiplicity_hint == 0) {
-            // Derivative is small - do Taylor series analysis for exact multiplicity
-            mpreal mult_threshold = mpreal("1e-50");
-            mpreal dummy_deriv;
-            unsigned int verified_mult = estimateMultiplicity(
-                x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
-                config.taylor_ratio_threshold);
-
-            // Update if we got a better estimate
-            if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
-                estimated_multiplicity = verified_mult;
-                multiplicity_detected = true;
-            }
+        // Re-estimate multiplicity if configured to do so
+        if (config.multiplicity_timing == MultiplicityTiming::EVERY_ITERATION) {
+            estimated_multiplicity = estimateMultiplicityModular(x, poly, config, iterates);
         }
 
-        // Step 1b: Compute the correct derivative for the current multiplicity
+        #ifdef DEBUG_HP_REFINER
+        if (iter < 5) {
+            mpreal f = poly.evaluate(x);
+            std::cout << "  [HP DEBUG] Iter " << iter << ": x = " << x
+                      << ", f = " << f << ", mult = " << estimated_multiplicity << std::endl;
+        }
+        #endif
+
+        // Compute the m-th derivative (first non-zero derivative)
         mpreal first_nonzero_deriv;
         if (estimated_multiplicity == 1) {
-            first_nonzero_deriv = df;
+            first_nonzero_deriv = dpoly.evaluate(x);
         } else {
             // Compute m-th derivative explicitly
             PolynomialHP deriv_m = poly;
@@ -85,12 +229,11 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
             first_nonzero_deriv = deriv_m.evaluate(x);
         }
 
-        // Step 2: Compute rigorous error bounds at each iteration
+        // Compute rigorous error bounds
         mpreal lower, upper;
-        mpreal current_error_bound = mpreal("1e100");  // Large default
+        mpreal current_error_bound = mpreal("1e100");
         bool has_bounds = false;
 
-        // Try to compute bounds with current multiplicity estimate
         if (abs(first_nonzero_deriv) > mpreal("1e-100")) {
             has_bounds = computeErrorBounds(x, poly, estimated_multiplicity,
                                            first_nonzero_deriv, lower, upper);
@@ -99,10 +242,19 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
             }
         }
 
-        // Step 3: Check convergence based on error bounds
+        #ifdef DEBUG_HP_REFINER
+        if (has_bounds) {
+            std::cout << "  [HP DEBUG] Error bound = " << current_error_bound
+                      << ", target = " << target_tol << std::endl;
+        } else {
+            std::cout << "  [HP DEBUG] No error bounds computed" << std::endl;
+        }
+        #endif
+
+        // Check convergence
         if (has_bounds && current_error_bound <= target_tol) {
-            // Converged! Error bound is small enough
             result.location = x;
+            result.residual = poly.evaluate(x);
             result.multiplicity = estimated_multiplicity;
             result.first_nonzero_derivative = first_nonzero_deriv;
             result.condition_estimate = estimateConditionNumber1D(x, poly, first_nonzero_deriv);
@@ -111,101 +263,46 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
             result.interval_upper = upper;
             result.max_error = current_error_bound;
             result.has_guaranteed_bounds = true;
-
             return result;
         }
 
-        // Step 4: Check if we're making progress
-        if (has_bounds && current_error_bound >= prev_error_bound * mpreal("0.99")) {
-            // Error bound is not improving - re-verify multiplicity
-            // This catches cases where Ostrowski gave wrong estimate
-            if (!multiplicity_detected) {
-                mpreal mult_threshold = mpreal("1e-50");
-                mpreal dummy_deriv;
-                unsigned int verified_mult = estimateMultiplicity(
-                    x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
-                    config.taylor_ratio_threshold);
-
-                if (verified_mult > 0 && verified_mult <= config.max_multiplicity) {
-                    estimated_multiplicity = verified_mult;
-                    multiplicity_detected = true;
-                }
+        // Check for stagnation and re-estimate multiplicity if configured
+        if (config.multiplicity_timing == MultiplicityTiming::WHEN_STAGNANT) {
+            if (has_bounds && current_error_bound >= prev_error_bound * mpreal("0.99")) {
+                estimated_multiplicity = estimateMultiplicityModular(x, poly, config, iterates);
+                #ifdef DEBUG_HP_REFINER
+                std::cout << "  [HP DEBUG] Stagnation detected, re-estimated mult = "
+                          << estimated_multiplicity << std::endl;
+                #endif
             }
         }
 
         prev_error_bound = current_error_bound;
 
-        // Step 5: Compute Newton step based on current multiplicity estimate
-        mpreal step;
+        // Perform iteration step using configured method
+        mpreal step = performIterationStep(x, poly, dpoly, ddpoly,
+                                          estimated_multiplicity, config.iteration_method);
 
-        if (estimated_multiplicity > 1) {
-            // Use modified Newton for multiple root
-            step = mpreal(estimated_multiplicity) * f / df;
-        } else {
-            // Standard Newton step
-            step = f / df;
-        }
-
-        // Limit step size to avoid divergence in ill-conditioned cases
-        mpreal max_step = mpreal("1.0");
-        if (abs(step) > max_step) {
-            step = step * max_step / abs(step);
-        }
-
-        x = x - step;
-
-        // Store iterate for Ostrowski method
+        // Store iterate for Ostrowski method (if needed)
         if (iter < 3) {
             iterates.push_back(x);
         }
-
-        // Apply Ostrowski multiplicity estimation after 3 iterations
-        // Only if we don't have a hint from caller
-        if (iter == 2 && iterates.size() == 4 && !multiplicity_detected && config.multiplicity_hint == 0) {
-            // We have x0, x1, x2, x3
-            unsigned int mult_est = estimateMultiplicityOstrowski(
-                iterates[1], iterates[2], iterates[3]);
-
-            // DEBUG
-            #ifdef DEBUG_MULTIPLICITY
-            std::cout << "DEBUG: Ostrowski at iter 2: mult_est = " << mult_est << std::endl;
-            std::cout << "  x1 = " << iterates[1] << std::endl;
-            std::cout << "  x2 = " << iterates[2] << std::endl;
-            std::cout << "  x3 = " << iterates[3] << std::endl;
-            #endif
-
-            if (mult_est > 1) {
-                // Multiple root suspected - use as hint but don't mark as fully detected
-                // We'll verify this later when derivative becomes small
-                estimated_multiplicity = mult_est;
-                // Note: Don't set multiplicity_detected = true yet
-                // We want to verify this with Taylor series when close enough
-            }
-        }
     }
 
-    // Max iterations reached - compute final error bounds
-    mpreal f = poly.evaluate(x);
-    mpreal df = dpoly.evaluate(x);
+    // ============================================================
+    // STEP 3: Max iterations reached - compute final results
+    // ============================================================
     result.location = x;
-    result.residual = f;
+    result.residual = poly.evaluate(x);
 
-    // Determine final multiplicity if not already detected
-    if (!multiplicity_detected && abs(df) < mpreal("1e-20")) {
-        mpreal mult_threshold = mpreal("1e-50");
-        mpreal dummy_deriv;
-        estimated_multiplicity = estimateMultiplicity(
-            x, poly, config.max_multiplicity, mult_threshold, dummy_deriv,
-            config.taylor_ratio_threshold);
-        multiplicity_detected = true;
-    }
+    // Final multiplicity estimate
+    estimated_multiplicity = estimateMultiplicityModular(x, poly, config, iterates);
 
-    // Compute the correct derivative for the final multiplicity
+    // Compute the m-th derivative
     mpreal final_first_nonzero_deriv;
     if (estimated_multiplicity == 1) {
-        final_first_nonzero_deriv = df;
+        final_first_nonzero_deriv = dpoly.evaluate(x);
     } else {
-        // Compute m-th derivative explicitly
         PolynomialHP deriv_m = poly;
         for (unsigned int k = 0; k < estimated_multiplicity; ++k) {
             deriv_m = DifferentiationHP::derivative(deriv_m, 0, 1);
@@ -225,7 +322,6 @@ RefinedRootHP ResultRefinerHP::refineRoot1D(
         result.max_error = (upper - lower) / mpreal("2.0");
         result.has_guaranteed_bounds = true;
 
-        // Check if we actually converged based on error bounds
         if (result.max_error <= target_tol) {
             result.converged = true;
             return result;
@@ -452,6 +548,11 @@ unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
     // Compute estimate
     mpreal p_est = mpreal("0.5") + numerator / denominator;
 
+    #ifdef DEBUG_HP_REFINER
+    std::cout << "    [Ostrowski] p_est = " << p_est << std::endl;
+    std::cout << "    [Ostrowski] x1=" << x1 << ", x2=" << x2 << ", x3=" << x3 << std::endl;
+    #endif
+
     #ifdef DEBUG_OSTROWSKI
     std::cout << "DEBUG Ostrowski: x1=" << x1 << ", x2=" << x2 << ", x3=" << x3 << std::endl;
     std::cout << "  numerator=" << numerator << ", denominator=" << denominator << std::endl;
@@ -471,6 +572,11 @@ unsigned int ResultRefinerHP::estimateMultiplicityOstrowski(
     // For example: triple root gives p ≈ 3.5, floor(3.5) = 3 ✓
     // Debug showed: m=2→p=2.5, m=3→p=3.5, m=4→p=4.5, so floor is correct!
     int multiplicity = static_cast<int>(floor(p_est));
+
+    #ifdef DEBUG_HP_REFINER
+    std::cout << "    [Ostrowski] floor(p_est) = " << multiplicity << std::endl;
+    #endif
+
     if (multiplicity < 1) {
         multiplicity = 1;
     }
@@ -566,12 +672,19 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
         deriv_values[order] = deriv.evaluate(location);
     }
 
-    // Estimate coefficient scale from the polynomial's Bernstein coefficients
-    // This gives us the typical magnitude of coefficients
-    const std::vector<mpreal>& coeffs = poly.bernsteinCoefficients();
+    // Estimate coefficient scale from the polynomial's coefficients
+    // Use whichever representation is available (prefer power to avoid conversion)
     mpreal coeff_scale = mpreal(0);
-    for (const mpreal& c : coeffs) {
-        coeff_scale = max(coeff_scale, abs(c));
+    if (poly.hasPowerCoefficients()) {
+        const std::vector<mpreal>& coeffs = poly.powerCoefficients();
+        for (const mpreal& c : coeffs) {
+            coeff_scale = max(coeff_scale, abs(c));
+        }
+    } else if (poly.hasBernsteinCoefficients()) {
+        const std::vector<mpreal>& coeffs = poly.bernsteinCoefficients();
+        for (const mpreal& c : coeffs) {
+            coeff_scale = max(coeff_scale, abs(c));
+        }
     }
     if (coeff_scale < mpreal("1e-100")) {
         coeff_scale = mpreal(1);  // Fallback if all coefficients are tiny
@@ -614,7 +727,17 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
         if (abs(deriv_values[order]) > threshold) {
             significant_orders.push_back(order);
         }
+        #ifdef DEBUG_HP_REFINER
+        std::cout << "      f^(" << order << ") = " << deriv_values[order]
+                  << " (abs = " << abs(deriv_values[order]) << ")" << std::endl;
+        #endif
     }
+
+    #ifdef DEBUG_HP_REFINER
+    std::cout << "      Significant orders (above threshold " << threshold << "): ";
+    for (auto o : significant_orders) std::cout << o << " ";
+    std::cout << std::endl;
+    #endif
 
     if (significant_orders.empty()) {
         // All derivatives are zero
@@ -646,11 +769,19 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
             // Compute ratio
             mpreal ratio = next_deriv / max(deriv_val, mpreal("1e-100"));
 
+            #ifdef DEBUG_HP_REFINER
+            std::cout << "      Ratio f^(" << next_order << ")/f^(" << order << ") = "
+                      << ratio << " (threshold = " << ratio_threshold << ")" << std::endl;
+            #endif
+
             // Configurable threshold: if ratio > threshold, derivative vanishes at root
             // Default threshold=10 works because for k < m, ratio ~ 50*(m-k) >> 10
             // For k = m, ratio ~ O(1) or O(ε) < 10
             // For extreme multiplicities, increase threshold (e.g., 50 for m>10)
             if (ratio > mpreal(ratio_threshold)) {
+                #ifdef DEBUG_HP_REFINER
+                std::cout << "        -> Ratio > threshold, f^(" << order << ") vanishes, continue" << std::endl;
+                #endif
                 continue;  // Try next order
             }
         }
@@ -663,7 +794,15 @@ unsigned int ResultRefinerHP::estimateMultiplicity(
         mpreal relative_tol = mpreal("1e-15");
         mpreal deriv_threshold = max(threshold, relative_tol * expected_scale);
 
+        #ifdef DEBUG_HP_REFINER
+        std::cout << "      Final check: deriv_val = " << deriv_val
+                  << ", deriv_threshold = " << deriv_threshold << std::endl;
+        #endif
+
         if (deriv_val > deriv_threshold) {
+            #ifdef DEBUG_HP_REFINER
+            std::cout << "      -> Accepted! Returning multiplicity = " << order << std::endl;
+            #endif
             first_nonzero_deriv = deriv_values[order];
             return order;
         }
@@ -1089,8 +1228,13 @@ unsigned int ResultRefinerHP::estimateMultiplicitySturm(
         return changes;
     };
 
-    // Convert polynomial to power basis
-    std::vector<mpreal> power_coeffs = bernstein_to_power(poly.bernsteinCoefficients());
+    // Get polynomial in power basis (prefer direct access to avoid conversion)
+    std::vector<mpreal> power_coeffs;
+    if (poly.hasPowerCoefficients()) {
+        power_coeffs = poly.powerCoefficients();
+    } else {
+        power_coeffs = bernstein_to_power(poly.bernsteinCoefficients());
+    }
 
     if (power_coeffs.empty()) {
         return 1;
@@ -1136,8 +1280,13 @@ unsigned int ResultRefinerHP::estimateMultiplicitySturm(
         PolynomialHP deriv = DifferentiationHP::derivative(poly, 0, k);
         if (deriv.empty()) return k;
 
-        // Convert derivative to power basis and build its Sturm sequence
-        std::vector<mpreal> deriv_power = bernstein_to_power(deriv.bernsteinCoefficients());
+        // Get derivative in power basis (prefer direct access to avoid conversion)
+        std::vector<mpreal> deriv_power;
+        if (deriv.hasPowerCoefficients()) {
+            deriv_power = deriv.powerCoefficients();
+        } else {
+            deriv_power = bernstein_to_power(deriv.bernsteinCoefficients());
+        }
         if (deriv_power.empty()) return k;
 
         std::vector<std::vector<mpreal>> deriv_sturm;

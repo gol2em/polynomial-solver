@@ -104,7 +104,7 @@ RefinementResult ResultRefiner::refine(
         RefinedRoot refined;
         refined.location = point;
         refined.residual = std::vector<double>{residual};
-        refined.max_error = std::vector<double>{config.target_tolerance};
+        refined.max_error = std::vector<double>{estimated_error};
         refined.multiplicity = mult;
         refined.first_nonzero_derivative = first_nonzero_deriv;
         refined.exclusion_radius = exclusion_radius;
@@ -117,7 +117,7 @@ RefinementResult ResultRefiner::refine(
         verified_indices.push_back(i);
         candidate_roots.push_back(refined);
     }
-    
+
     // Step 2: Merge nearby roots and cancel duplicates
     std::set<std::size_t> cancelled;
     std::vector<bool> merged(candidate_roots.size(), false);
@@ -208,16 +208,23 @@ bool ResultRefiner::refineRoot1D(
             // For ill-conditioned problems, small residual doesn't guarantee small error
             // Check condition number to estimate actual error
 
-            // Compute second derivative for condition estimation
-            Polynomial ddpoly = Differentiation::derivative(dpoly, 0, 1);
-            double ddf = ddpoly.evaluate(x);
-
-            // Estimate condition number: κ ≈ |f''| / |f'|²
-            // This measures sensitivity of root to perturbations
-            double kappa = std::abs(ddf) / (std::abs(df) * std::abs(df) + 1e-100);
-
-            // Estimate actual error: |error| ≈ κ × |residual| / |f'|
-            double estimated_error = kappa * std::abs(f) / std::max(std::abs(df), 1e-14);
+            // Estimate actual error using Newton's method error formula
+            // For a simple root: |x - r| ≈ |f(x)| / |f'(r)| ≈ |f(x)| / |f'(x)|
+            //
+            // NOTE: This error bound is still not rigorous and can be overly conservative.
+            // Issues:
+            // 1. The formula assumes f'(x) ≈ f'(r), which may not hold far from the root
+            // 2. Does not account for rounding errors in polynomial evaluation
+            // 3. Can be 10-1000x more conservative than actual error
+            //
+            // TODO: Consider replacing with interval Newton method for rigorous error bounds
+            // that properly account for:
+            // - Rounding errors in coefficient representation
+            // - Rounding errors in polynomial evaluation
+            // - Distance from current iterate to true root
+            //
+            // For now, this provides a reasonable heuristic for convergence checking.
+            double estimated_error = std::abs(f) / std::max(std::abs(df), 1e-14);
 
             // Accept root only if estimated error is within target tolerance
             if (estimated_error <= config.target_tolerance) {
@@ -1009,7 +1016,15 @@ bool ResultRefiner::refineRoot1DWithPrecisionEscalation(
     RefinementConfigHP config_hp;
     config_hp.max_newton_iters = config.max_newton_iters * 2; // Allow more iterations
     config_hp.max_multiplicity = config.max_multiplicity;
-    config_hp.multiplicity_hint = mult; // Pass the multiplicity detected in double precision
+
+    // Only pass multiplicity hint if condition number is reasonable AND multiplicity is low
+    // For very ill-conditioned problems or high multiplicities (>3), double-precision
+    // multiplicity detection may be unreliable, so let HP refiner detect it from scratch
+    if (condition < 1e8 && mult <= 3) {
+        config_hp.multiplicity_hint = mult; // Pass the multiplicity detected in double precision
+    } else {
+        config_hp.multiplicity_hint = 0; // Let HP refiner detect multiplicity from scratch
+    }
 
     // Set tolerance based on precision
     // Use more conservative tolerances that are achievable

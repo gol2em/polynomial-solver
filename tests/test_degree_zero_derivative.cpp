@@ -34,7 +34,8 @@ int main()
         std::cout << "    Dimension: " << dp.dimension() << std::endl;
         std::cout << "    Degrees: [" << dp.degrees()[0] << "]" << std::endl;
         std::cout << "    Coefficient count: " << dp.coefficientCount() << std::endl;
-        
+
+        dp.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& coeffs = dp.bernsteinCoefficients();
         std::cout << "    Coefficients: ";
         for (size_t i = 0; i < coeffs.size(); ++i) {
@@ -68,7 +69,8 @@ int main()
         std::cout << "  Second derivative (constant 2):" << std::endl;
         std::cout << "    Degrees: [" << d2p.degrees()[0] << "]" << std::endl;
         std::cout << "    Coefficient count: " << d2p.coefficientCount() << std::endl;
-        
+
+        d2p.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& coeffs = d2p.bernsteinCoefficients();
         std::cout << "    Coefficients: ";
         for (size_t i = 0; i < coeffs.size(); ++i) {
@@ -102,7 +104,8 @@ int main()
         std::cout << "  After ∂f/∂x (should be constant 1):" << std::endl;
         std::cout << "    Degrees: [" << df_dx.degrees()[0] << ", " << df_dx.degrees()[1] << "]" << std::endl;
         std::cout << "    Coefficient count: " << df_dx.coefficientCount() << std::endl;
-        
+
+        df_dx.ensureBernsteinPrimary();  // Explicitly convert to Bernstein
         const std::vector<double>& coeffs = df_dx.bernsteinCoefficients();
         std::cout << "    Coefficients: ";
         for (size_t i = 0; i < coeffs.size(); ++i) {

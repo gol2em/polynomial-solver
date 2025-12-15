@@ -1,150 +1,169 @@
-# Tests directory
+#==============================================================================
+# Tests Directory
+#==============================================================================
+# This file defines all unit tests for the polynomial solver library.
+# All tests are added to CTest and run with `ctest` or `make test`.
+#
+# Test organization:
+# 1. Polynomial Module Tests
+# 2. Differentiation Module Tests
+# 3. Geometry Module Tests
+# 4. Solver Module Tests
+# 5. Result Refiner Module Tests
+# 6. High-Precision Module Tests (if ENABLE_HIGH_PRECISION)
+# 7. Integration Tests
+#==============================================================================
 
-# High-precision types test (only if high precision is enabled)
-if(ENABLE_HIGH_PRECISION)
-    add_executable(test_high_precision_types test_high_precision_types.cpp)
-    target_link_libraries(test_high_precision_types PRIVATE polynomial_solver)
-    add_test(NAME HighPrecisionTypesTest COMMAND test_high_precision_types)
+#==============================================================================
+# 1. Polynomial Module Tests
+#==============================================================================
 
-    add_executable(test_polynomial_hp test_polynomial_hp.cpp)
-    target_link_libraries(test_polynomial_hp PRIVATE polynomial_solver)
-    add_test(NAME PolynomialHPTest COMMAND test_polynomial_hp)
-
-    add_executable(test_differentiation_hp test_differentiation_hp.cpp)
-    target_link_libraries(test_differentiation_hp PRIVATE polynomial_solver)
-    add_test(NAME DifferentiationHPTest COMMAND test_differentiation_hp)
-
-    add_executable(test_result_refiner_hp test_result_refiner_hp.cpp)
-    target_link_libraries(test_result_refiner_hp PRIVATE polynomial_solver)
-    add_test(NAME ResultRefinerHPTest COMMAND test_result_refiner_hp)
-
-    add_executable(test_multiplicity_methods test_multiplicity_methods.cpp)
-    target_link_libraries(test_multiplicity_methods PRIVATE polynomial_solver)
-
-    add_executable(test_convergence_comparison test_convergence_comparison.cpp)
-    target_link_libraries(test_convergence_comparison PRIVATE polynomial_solver)
-
-    add_executable(test_multiplicity_debug test_multiplicity_debug.cpp)
-    target_link_libraries(test_multiplicity_debug PRIVATE polynomial_solver)
-
-    add_executable(test_high_multiplicity test_high_multiplicity.cpp)
-    target_link_libraries(test_high_multiplicity PRIVATE polynomial_solver)
-
-    add_executable(test_precision_escalation test_precision_escalation.cpp)
-    target_link_libraries(test_precision_escalation PRIVATE polynomial_solver)
-
-    add_executable(test_hp_refiner_direct test_hp_refiner_direct.cpp)
-    target_link_libraries(test_hp_refiner_direct PRIVATE polynomial_solver)
-
-    add_executable(test_convergence_rate test_convergence_rate.cpp)
-    target_link_libraries(test_convergence_rate PRIVATE polynomial_solver)
-
-    add_executable(test_precision_requirements test_precision_requirements.cpp)
-    target_link_libraries(test_precision_requirements PRIVATE polynomial_solver)
-
-    add_executable(test_sturm_debug test_sturm_debug.cpp)
-    target_link_libraries(test_sturm_debug PRIVATE polynomial_solver)
-
-    add_executable(test_detection_limits test_detection_limits.cpp)
-    target_link_libraries(test_detection_limits PRIVATE polynomial_solver)
-
-    add_executable(test_auto_precision_lift test_auto_precision_lift.cpp)
-    target_link_libraries(test_auto_precision_lift PRIVATE polynomial_solver)
-
-    add_executable(test_ostrowski_debug test_ostrowski_debug.cpp)
-    target_link_libraries(test_ostrowski_debug PRIVATE polynomial_solver)
-
-    add_executable(test_hp_conversion_benefit test_hp_conversion_benefit.cpp)
-    target_link_libraries(test_hp_conversion_benefit PRIVATE polynomial_solver)
-endif()
-
-# Double precision Ostrowski test (no HP required)
-add_executable(test_double_ostrowski test_double_ostrowski.cpp)
-target_link_libraries(test_double_ostrowski PRIVATE polynomial_solver)
-
-if(ENABLE_HIGH_PRECISION)
-endif()
-
-# Double precision limits test (no high precision required)
-add_executable(test_double_precision_limits test_double_precision_limits.cpp)
-target_link_libraries(test_double_precision_limits PRIVATE polynomial_solver)
-
+# Test: Power ↔ Bernstein conversion
 add_executable(test_polynomial_conversion test_polynomial_conversion.cpp)
 target_link_libraries(test_polynomial_conversion PRIVATE polynomial de_casteljau)
 add_test(NAME PolynomialConversionTest COMMAND test_polynomial_conversion)
 
+# Test: Dual representation (power + Bernstein coefficients)
 add_executable(test_dual_representation test_dual_representation.cpp)
 target_link_libraries(test_dual_representation PRIVATE polynomial_solver)
 add_test(NAME DualRepresentationTest COMMAND test_dual_representation)
 
-add_executable(test_solver_refiner_workflow test_solver_refiner_workflow.cpp)
-target_link_libraries(test_solver_refiner_workflow PRIVATE polynomial_solver)
-add_test(NAME SolverRefinerWorkflowTest COMMAND test_solver_refiner_workflow)
-
+# Test: Graph control points generation
 add_executable(test_polynomial_graph test_polynomial_graph.cpp)
 target_link_libraries(test_polynomial_graph PRIVATE solver polynomial de_casteljau geometry)
 add_test(NAME PolynomialGraphTest COMMAND test_polynomial_graph)
 
+# Test: PolynomialSystem class and De Casteljau subdivision
 add_executable(test_polynomial_system test_polynomial_system.cpp)
 target_link_libraries(test_polynomial_system PRIVATE solver polynomial de_casteljau geometry)
 add_test(NAME PolynomialSystemExampleTest COMMAND test_polynomial_system)
 
-add_executable(test_solver_subdivision test_solver_subdivision.cpp)
-target_link_libraries(test_solver_subdivision PRIVATE solver polynomial de_casteljau geometry)
-add_test(NAME SolverSubdivisionTest COMMAND test_solver_subdivision)
-add_executable(test_geometry_convex test_geometry_convex.cpp)
-target_link_libraries(test_geometry_convex PRIVATE geometry)
-add_test(NAME GeometryConvexTest COMMAND test_geometry_convex)
+#==============================================================================
+# 2. Differentiation Module Tests
+#==============================================================================
 
-add_executable(test_2d_hyperplane_intersection test_2d_hyperplane_intersection.cpp)
-target_link_libraries(test_2d_hyperplane_intersection PRIVATE geometry)
-add_test(NAME 2DHyperplaneIntersectionTest COMMAND test_2d_hyperplane_intersection)
-
-add_executable(test_2d_convex_hull_robust test_2d_convex_hull_robust.cpp)
-target_link_libraries(test_2d_convex_hull_robust PRIVATE geometry)
-add_test(NAME 2DConvexHullRobustTest COMMAND test_2d_convex_hull_robust)
-
-add_executable(test_2d_hull_vertex_order test_2d_hull_vertex_order.cpp)
-target_link_libraries(test_2d_hull_vertex_order PRIVATE geometry)
-add_test(NAME 2DHullVertexOrderTest COMMAND test_2d_hull_vertex_order)
-
-add_executable(test_degenerate_boxes test_degenerate_boxes.cpp)
-target_link_libraries(test_degenerate_boxes PRIVATE solver polynomial geometry de_casteljau)
-add_test(NAME DegenerateBoxesTest COMMAND test_degenerate_boxes)
-
-add_executable(test_linear_graph_hull test_linear_graph_hull.cpp)
-target_link_libraries(test_linear_graph_hull PRIVATE solver polynomial geometry de_casteljau)
-add_test(NAME LinearGraphHullTest COMMAND test_linear_graph_hull)
-
-add_executable(test_projected_polyhedral test_projected_polyhedral.cpp)
-target_link_libraries(test_projected_polyhedral PRIVATE solver polynomial geometry de_casteljau)
-add_test(NAME ProjectedPolyhedralTest COMMAND test_projected_polyhedral)
-
-add_executable(test_method_comparison test_method_comparison.cpp)
-target_link_libraries(test_method_comparison PRIVATE solver polynomial geometry de_casteljau)
-# Note: This is a comparison tool, not added to ctest
-
-add_executable(test_ellipse_dump test_ellipse_dump.cpp)
-target_link_libraries(test_ellipse_dump PRIVATE solver polynomial geometry de_casteljau)
-add_test(NAME EllipseDumpTest COMMAND test_ellipse_dump)
-
-add_executable(test_strategies test_strategies.cpp)
-target_link_libraries(test_strategies PRIVATE solver polynomial geometry de_casteljau)
-# Note: This is a comparison tool for different strategies, not added to ctest
-
+# Test: Bernstein differentiation (1D, 2D, gradient, Hessian)
 add_executable(test_differentiation test_differentiation.cpp)
 target_link_libraries(test_differentiation PRIVATE differentiation polynomial de_casteljau geometry)
 add_test(NAME DifferentiationTest COMMAND test_differentiation)
 
-add_executable(test_differentiation_debug test_differentiation_debug.cpp)
-target_link_libraries(test_differentiation_debug PRIVATE differentiation polynomial de_casteljau geometry)
-
+# Test: Edge case - degree 0 after differentiation
 add_executable(test_degree_zero_derivative test_degree_zero_derivative.cpp)
 target_link_libraries(test_degree_zero_derivative PRIVATE differentiation polynomial de_casteljau geometry)
+add_test(NAME DegreeZeroDerivativeTest COMMAND test_degree_zero_derivative)
 
+#==============================================================================
+# 3. Geometry Module Tests
+#==============================================================================
+
+# Test: Convex hull and bounding box
+add_executable(test_geometry_convex test_geometry_convex.cpp)
+target_link_libraries(test_geometry_convex PRIVATE geometry)
+add_test(NAME GeometryConvexTest COMMAND test_geometry_convex)
+
+# Test: Polygon-hyperplane intersection
+add_executable(test_2d_hyperplane_intersection test_2d_hyperplane_intersection.cpp)
+target_link_libraries(test_2d_hyperplane_intersection PRIVATE geometry)
+add_test(NAME 2DHyperplaneIntersectionTest COMMAND test_2d_hyperplane_intersection)
+
+# Test: Robustness (collinear, duplicate points)
+add_executable(test_2d_convex_hull_robust test_2d_convex_hull_robust.cpp)
+target_link_libraries(test_2d_convex_hull_robust PRIVATE geometry)
+add_test(NAME 2DConvexHullRobustTest COMMAND test_2d_convex_hull_robust)
+
+# Test: CCW vertex ordering
+add_executable(test_2d_hull_vertex_order test_2d_hull_vertex_order.cpp)
+target_link_libraries(test_2d_hull_vertex_order PRIVATE geometry)
+add_test(NAME 2DHullVertexOrderTest COMMAND test_2d_hull_vertex_order)
+
+
+#==============================================================================
+# 4. Solver Module Tests
+#==============================================================================
+
+# Test: Subdivision solver with GraphHull method
+add_executable(test_solver_subdivision test_solver_subdivision.cpp)
+target_link_libraries(test_solver_subdivision PRIVATE solver polynomial de_casteljau geometry)
+add_test(NAME SolverSubdivisionTest COMMAND test_solver_subdivision)
+
+# Test: ProjectedPolyhedral root bounding method
+add_executable(test_projected_polyhedral test_projected_polyhedral.cpp)
+target_link_libraries(test_projected_polyhedral PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME ProjectedPolyhedralTest COMMAND test_projected_polyhedral)
+
+# Test: GraphHull method on linear functions (1D, 2D)
+add_executable(test_linear_graph_hull test_linear_graph_hull.cpp)
+target_link_libraries(test_linear_graph_hull PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME LinearGraphHullTest COMMAND test_linear_graph_hull)
+
+# Test: Degeneracy detection (0D, 1D boxes)
+add_executable(test_degenerate_boxes test_degenerate_boxes.cpp)
+target_link_libraries(test_degenerate_boxes PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME DegenerateBoxesTest COMMAND test_degenerate_boxes)
+
+# Test: Geometry dump feature
+add_executable(test_ellipse_dump test_ellipse_dump.cpp)
+target_link_libraries(test_ellipse_dump PRIVATE solver polynomial geometry de_casteljau)
+add_test(NAME EllipseDumpTest COMMAND test_ellipse_dump)
+
+#==============================================================================
+# 5. Result Refiner Module Tests
+#==============================================================================
+
+# Test: Newton refinement (double precision)
 add_executable(test_result_refiner test_result_refiner.cpp)
 target_link_libraries(test_result_refiner PRIVATE polynomial_solver)
 add_test(NAME ResultRefinerTest COMMAND test_result_refiner)
 
-message(STATUS "Tests directory configured (conversion, graph, system, differentiation, and result refiner tests enabled)")
+#==============================================================================
+# 6. High-Precision Module Tests (only if ENABLE_HIGH_PRECISION)
+#==============================================================================
 
+if(ENABLE_HIGH_PRECISION)
+    # Test: High-precision type definitions and precision control
+    add_executable(test_high_precision_types test_high_precision_types.cpp)
+    target_link_libraries(test_high_precision_types PRIVATE polynomial_solver)
+    add_test(NAME HighPrecisionTypesTest COMMAND test_high_precision_types)
+
+    # Test: High-precision polynomial operations
+    add_executable(test_polynomial_hp test_polynomial_hp.cpp)
+    target_link_libraries(test_polynomial_hp PRIVATE polynomial_solver)
+    add_test(NAME PolynomialHPTest COMMAND test_polynomial_hp)
+
+    # Test: High-precision differentiation
+    add_executable(test_differentiation_hp test_differentiation_hp.cpp)
+    target_link_libraries(test_differentiation_hp PRIVATE polynomial_solver)
+    add_test(NAME DifferentiationHPTest COMMAND test_differentiation_hp)
+
+    # Test: High-precision Newton refinement
+    add_executable(test_result_refiner_hp test_result_refiner_hp.cpp)
+    target_link_libraries(test_result_refiner_hp PRIVATE polynomial_solver)
+    add_test(NAME ResultRefinerHPTest COMMAND test_result_refiner_hp)
+endif()
+
+#==============================================================================
+# 7. Integration Tests
+#==============================================================================
+
+# Test: Full workflow (solve → refine)
+add_executable(test_solver_refiner_workflow test_solver_refiner_workflow.cpp)
+target_link_libraries(test_solver_refiner_workflow PRIVATE polynomial_solver)
+add_test(NAME SolverRefinerWorkflowTest COMMAND test_solver_refiner_workflow)
+
+#==============================================================================
+# Summary
+#==============================================================================
+
+message(STATUS "Tests configured: 21 tests (all added to CTest)")
+message(STATUS "  - Polynomial module: 4 tests")
+message(STATUS "  - Differentiation module: 2 tests")
+message(STATUS "  - Geometry module: 4 tests")
+message(STATUS "  - Solver module: 5 tests")
+message(STATUS "  - Result refiner module: 1 test")
+if(ENABLE_HIGH_PRECISION)
+    message(STATUS "  - High-precision module: 4 tests")
+else()
+    message(STATUS "  - High-precision module: 0 tests (ENABLE_HIGH_PRECISION=OFF)")
+endif()
+message(STATUS "  - Integration tests: 1 test")
+message(STATUS "Research/debug tests moved to playground/research_tests/")

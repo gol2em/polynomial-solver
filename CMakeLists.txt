@@ -310,11 +310,6 @@ add_executable(test_multiplicity_detection
 )
 target_link_libraries(test_multiplicity_detection polynomial_solver)
 
-add_executable(deflation_test
-    examples/deflation_test.cpp
-)
-target_link_libraries(deflation_test polynomial_solver)
-
 add_executable(test_1d_refinement
     tools/test_1d_refinement.cpp
 )
@@ -352,3 +347,54 @@ message(STATUS "")
 if(EXISTS "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
     file(TOUCH "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json")
 endif()
+
+#==============================================================================
+# Generate Playground Makefiles
+#==============================================================================
+# Generate simple Makefiles in playground/ and playground/research_tests/
+# so developers can quickly compile test files with: make test.cpp
+# These Makefiles automatically stay in sync with library dependencies.
+
+# Collect all link flags needed for playground executables
+# Note: We link statically against polynomial_solver.a which already contains
+# all necessary object files, so we only need external libraries (MPFR, GMP, quadmath)
+set(PLAYGROUND_LINK_FLAGS "-L${CMAKE_BINARY_DIR}/lib -lpolynomial_solver -lm")
+
+# Add high-precision library flags if enabled
+if(ENABLE_HIGH_PRECISION)
+    # Note: Boost is header-only for multiprecision, no need to link boost_system
+    # Add all libraries that were found during high-precision detection
+    foreach(LIB ${HIGH_PRECISION_LIBRARIES})
+        get_filename_component(LIB_NAME ${LIB} NAME_WE)
+        string(REGEX REPLACE "^lib" "" LIB_NAME ${LIB_NAME})
+        set(PLAYGROUND_LINK_FLAGS "${PLAYGROUND_LINK_FLAGS} -l${LIB_NAME}")
+    endforeach()
+
+    # Add quadmath if available
+    if(QUADMATH_FOUND AND QUADMATH_LIBRARY)
+        set(PLAYGROUND_LINK_FLAGS "${PLAYGROUND_LINK_FLAGS} -lquadmath")
+    endif()
+
+    set(PLAYGROUND_HP_FLAGS "CXXFLAGS += -DENABLE_HIGH_PRECISION")
+else()
+    set(PLAYGROUND_HP_FLAGS "# High precision disabled")
+endif()
+
+# Generate playground/Makefile
+configure_file(
+    "${CMAKE_SOURCE_DIR}/playground/Makefile.in"
+    "${CMAKE_SOURCE_DIR}/playground/Makefile"
+    @ONLY
+)
+
+# Generate playground/research_tests/Makefile
+configure_file(
+    "${CMAKE_SOURCE_DIR}/playground/research_tests/Makefile.in"
+    "${CMAKE_SOURCE_DIR}/playground/research_tests/Makefile"
+    @ONLY
+)
+
+message(STATUS "Generated playground Makefiles:")
+message(STATUS "  - playground/Makefile")
+message(STATUS "  - playground/research_tests/Makefile")
+message(STATUS "Developers can now use: cd playground && make <name>.cpp")

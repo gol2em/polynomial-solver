@@ -21,7 +21,8 @@ A high-performance C++11 library for solving systems of multivariate polynomial 
 - **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
 - **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
 - **Unified Library**: Single `libpolynomial_solver.a` library for easy linking
-- **Comprehensive Test Suite**: 13 test suites covering all major functionality
+- **High-Precision Arithmetic** (Tier 2): Optional MPFR/GMP/quadmath support for extreme precision
+- **Comprehensive Test Suite**: 21 test suites covering all major functionality
 - **Python Visualization**: Optional visualization tools for graphs and control points
 - **Configurable Parameters**: All solver parameters accessible via command-line flags
 
@@ -157,6 +158,47 @@ for (const auto& root : refined.roots) {
 }
 ```
 
+## High-Precision Arithmetic (Tier 2)
+
+The library supports optional high-precision arithmetic for cases where double precision (15-17 digits) is insufficient.
+
+### Quick Start with High Precision
+
+```bash
+# Install dependencies (Ubuntu/Debian)
+sudo apt-get install libboost-dev libmpfr-dev libgmp-dev
+
+# Build with high-precision support
+cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+make -j$(nproc)
+```
+
+### Using High-Precision Types
+
+```cpp
+#include <polynomial_solver.h>
+#ifdef ENABLE_HIGH_PRECISION
+#include <polynomial_hp.h>
+#include <result_refiner_hp.h>
+#endif
+
+// Use PolynomialHP and ResultRefinerHP for high-precision operations
+#ifdef ENABLE_HIGH_PRECISION
+PolynomialHP poly_hp = PolynomialHP::fromPower(degrees, hp_coeffs);
+ResultRefinerHP refiner_hp;
+auto refined_hp = refiner_hp.refine(result, system_hp, config);
+#endif
+```
+
+### Available Backends
+
+- **MPFR** (default, fastest): Runtime-configurable precision using MPFR library
+- **cpp_dec_float** (fallback): Header-only Boost backend if MPFR not available
+- **quadmath** (optional): GCC's __float128 type for 128-bit precision
+
+See [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) for complete documentation.
+
 ## Development Workflow
 
 ### Quick Testing with Makefiles
@@ -274,7 +316,7 @@ polynomial-solver/
 │   └── circle_ellipse_intersection.cpp  # 2D system
 ├── tests/                        # Test suite (Makefile-based)
 │   ├── Makefile                  # Build and run tests
-│   └── test_*.cpp                # 18 test files
+│   └── test_*.cpp                # 21 test files
 ├── tools/                        # Tools and utilities
 │   └── refine_from_dumps.cpp     # Root refinement tool
 ├── docs/                         # Documentation
@@ -483,23 +525,56 @@ uv pip install numpy matplotlib
 
 ## Test Suite
 
-All 13 test suites pass:
+All 21 test suites pass (100% pass rate):
 
+### Polynomial Module (4 tests)
 | Test | Description |
 |------|-------------|
 | PolynomialConversionTest | Power ↔ Bernstein conversion |
+| DualRepresentationTest | Dual representation design |
 | PolynomialGraphTest | Graph control points |
 | PolynomialSystemExampleTest | System evaluation |
-| SolverSubdivisionTest | Subdivision solver |
+
+### Differentiation Module (2 tests)
+| Test | Description |
+|------|-------------|
+| DifferentiationTest | Bernstein differentiation |
+| DegreeZeroDerivativeTest | Edge case handling |
+
+### Geometry Module (4 tests)
+| Test | Description |
+|------|-------------|
 | GeometryConvexTest | Convex hull algorithms |
 | 2DHyperplaneIntersectionTest | Hyperplane intersection |
 | 2DConvexHullRobustTest | Robust 2D convex hull |
 | 2DHullVertexOrderTest | Vertex ordering |
-| DegenerateBoxesTest | Degenerate case handling |
-| LinearGraphHullTest | Linear function verification |
+
+### Solver Module (5 tests)
+| Test | Description |
+|------|-------------|
+| SolverSubdivisionTest | Subdivision solver |
 | ProjectedPolyhedralTest | PP method verification |
-| DifferentiationTest | Polynomial differentiation |
-| ResultRefinerTest | High-precision Newton refinement |
+| LinearGraphHullTest | Linear function verification |
+| DegenerateBoxesTest | Degenerate case handling |
+| EllipseDumpTest | Geometry dump feature |
+
+### Result Refiner Module (1 test)
+| Test | Description |
+|------|-------------|
+| ResultRefinerTest | Newton refinement |
+
+### High-Precision Module (4 tests)
+| Test | Description |
+|------|-------------|
+| HighPrecisionTypesTest | HP type definitions |
+| PolynomialHPTest | HP polynomial operations |
+| DifferentiationHPTest | HP differentiation |
+| ResultRefinerHPTest | HP Newton refinement |
+
+### Integration Tests (1 test)
+| Test | Description |
+|------|-------------|
+| SolverRefinerWorkflowTest | Full solve → refine workflow |
 
 ## Documentation
 

@@ -101,7 +101,7 @@ python examples/visualize_circle_ellipse.py
 ```
 
 **Expected Results:**
-- All 12 tests pass
+- All 21 tests pass
 - 3 geometry dumps generated in `dumps/`
 - Visualizations generated in `visualizations/`
 - All strategies converge to root: (0.894427, 0.447214)
@@ -111,10 +111,10 @@ python examples/visualize_circle_ellipse.py
 ### Essential Files
 ```
 polynomial-solver/
-├── include/              # Header files (4 files)
-├── src/                  # Source files (5 files)
-├── tests/                # Test suite (12 files)
-├── examples/             # Example programs and scripts
+├── include/              # Header files
+├── src/                  # Source files
+├── tests/                # Test suite (21 tests)
+├── examples/             # Example programs (4 examples)
 ├── tools/                # Visualization tools
 ├── CMakeLists.txt        # Build configuration
 ├── build.sh              # Build script
@@ -265,7 +265,6 @@ These directories/files are **not** in the package (will be regenerated):
 6. Start developing!
 
 For more details, see:
-- [QUICKSTART.md](QUICKSTART.md) - Quick start guide
+- [README.md](README.md) - Project overview and quick start
 - [SETUP.md](SETUP.md) - Complete setup guide
-- [README.md](README.md) - Project overview
 

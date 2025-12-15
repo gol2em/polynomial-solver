@@ -51,6 +51,36 @@
 namespace polynomial_solver {
 
 /**
+ * @brief Multiplicity estimation method
+ */
+enum class MultiplicityMethod {
+    NONE,           ///< No multiplicity detection (assume m=1)
+    HINT,           ///< Use provided hint
+    TAYLOR,         ///< Taylor series ratio test
+    OSTROWSKI,      ///< Ostrowski's method (3 Newton iterates)
+    TAYLOR_THEN_OSTROWSKI  ///< Try Taylor first, fall back to Ostrowski if needed
+};
+
+/**
+ * @brief Iteration method for root refinement
+ */
+enum class IterationMethod {
+    NEWTON,         ///< Standard Newton's method
+    MODIFIED_NEWTON,///< Modified Newton for multiple roots: x_new = x - m*f/f'
+    HALLEY,         ///< Halley's method (third-order)
+    SCHRODER        ///< Schröder's method (third-order, good for multiple roots)
+};
+
+/**
+ * @brief When to estimate multiplicity during iteration
+ */
+enum class MultiplicityTiming {
+    ONCE_AT_START,  ///< Estimate once at the beginning
+    EVERY_ITERATION,///< Re-estimate at every iteration
+    WHEN_STAGNANT   ///< Re-estimate when convergence stagnates
+};
+
+/**
  * @brief Configuration for high-precision refinement
  */
 struct RefinementConfigHP {
@@ -61,13 +91,21 @@ struct RefinementConfigHP {
     double taylor_ratio_threshold;       ///< Ratio threshold for Taylor method (default: 10.0)
     unsigned int multiplicity_hint;      ///< Hint for multiplicity (0 = auto-detect)
 
+    // Modular workflow control
+    MultiplicityMethod multiplicity_method;  ///< How to estimate multiplicity
+    IterationMethod iteration_method;        ///< Which iteration method to use
+    MultiplicityTiming multiplicity_timing;  ///< When to estimate multiplicity
+
     RefinementConfigHP()
         : target_tolerance_str("1e-50"),
           residual_tolerance_str("1e-50"),
           max_newton_iters(100u),
           max_multiplicity(10u),
           taylor_ratio_threshold(10.0),
-          multiplicity_hint(0u)
+          multiplicity_hint(0u),
+          multiplicity_method(MultiplicityMethod::TAYLOR),
+          iteration_method(IterationMethod::MODIFIED_NEWTON),
+          multiplicity_timing(MultiplicityTiming::ONCE_AT_START)
     {}
 };
 
@@ -144,6 +182,44 @@ public:
         double initial_guess,
         const PolynomialHP& poly,
         const RefinementConfigHP& config = RefinementConfigHP());
+
+    // ========================================================================
+    // Modular Components for Flexible Workflows
+    // ========================================================================
+
+    /**
+     * @brief Estimate multiplicity using the configured method
+     *
+     * @param x Current iterate
+     * @param poly High-precision polynomial
+     * @param config Refinement configuration
+     * @param iterates Previous iterates (for Ostrowski method)
+     * @return Estimated multiplicity (≥ 1)
+     */
+    static unsigned int estimateMultiplicityModular(
+        const mpreal& x,
+        const PolynomialHP& poly,
+        const RefinementConfigHP& config,
+        const std::vector<mpreal>& iterates = std::vector<mpreal>());
+
+    /**
+     * @brief Perform one iteration step using the configured method
+     *
+     * @param x Current iterate (will be updated)
+     * @param poly High-precision polynomial
+     * @param dpoly First derivative polynomial
+     * @param ddpoly Second derivative polynomial (for Halley/Schröder)
+     * @param multiplicity Current multiplicity estimate
+     * @param method Iteration method to use
+     * @return Step size taken
+     */
+    static mpreal performIterationStep(
+        mpreal& x,
+        const PolynomialHP& poly,
+        const PolynomialHP& dpoly,
+        const PolynomialHP& ddpoly,
+        unsigned int multiplicity,
+        IterationMethod method);
 
     // ========================================================================
     // Multiplicity Detection Methods

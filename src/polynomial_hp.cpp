@@ -329,14 +329,40 @@ std::size_t PolynomialHP::coefficientCount() const {
 
 const std::vector<mpreal>& PolynomialHP::bernsteinCoefficients() const {
     if (!bernstein_valid_) {
-        convertPowerToBernstein();
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Power->Bernstein conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "PolynomialHP::bernsteinCoefficients() called on polynomial with invalid Bernstein representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. If you need Bernstein coefficients, call convertPowerToBernstein() explicitly first\n";
+        std::cerr << "2. If you're differentiating, use power-basis differentiation instead\n";
+        std::cerr << "3. If you're evaluating, ensure primary representation matches your needs\n";
+        std::cerr << "\nPrimary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "Power valid: " << (power_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "Bernstein valid: " << (bernstein_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "\nStack trace hint: Set a breakpoint at polynomial_hp.cpp:330 to see call stack\n";
+        std::cerr << "========================================\n";
+        std::abort();  // Use abort() instead of exit() to get better stack trace
     }
     return bernstein_coeffs_;
 }
 
 const std::vector<mpreal>& PolynomialHP::powerCoefficients() const {
     if (!power_valid_) {
-        convertBernsteinToPower();
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Bernstein->Power conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "PolynomialHP::powerCoefficients() called on polynomial with invalid Power representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. If you need power coefficients, call convertBernsteinToPower() explicitly first\n";
+        std::cerr << "2. Ensure the polynomial was created with the correct primary representation\n";
+        std::cerr << "\nPrimary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "Power valid: " << (power_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "Bernstein valid: " << (bernstein_valid_ ? "YES" : "NO") << "\n";
+        std::cerr << "========================================\n";
+        std::exit(EXIT_FAILURE);
     }
     return power_coeffs_;
 }

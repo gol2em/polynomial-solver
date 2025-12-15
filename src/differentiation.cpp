@@ -219,10 +219,18 @@ Polynomial Differentiation::derivative(const Polynomial& p, std::size_t axis, un
         return p;
     }
 
+    // Use differentiation method based on primary representation
+    // Primary is the original, accurate representation with no conversion errors
+    bool use_power = (p.primaryRepresentation() == PolynomialRepresentation::POWER);
+
     // Iteratively apply first-order differentiation
     Polynomial result = p;
     for (unsigned int k = 0; k < order; ++k) {
-        result = differentiateAxis(result, axis);
+        if (use_power) {
+            result = differentiateAxisPower(result, axis);
+        } else {
+            result = differentiateAxis(result, axis);
+        }
     }
 
     return result;
@@ -234,8 +242,9 @@ std::vector<Polynomial> Differentiation::gradient(const Polynomial& p)
     std::vector<Polynomial> grad;
     grad.reserve(dim);
 
+    // Use derivative() which automatically chooses the right method based on primary representation
     for (std::size_t i = 0; i < dim; ++i) {
-        grad.push_back(differentiateAxis(p, i));
+        grad.push_back(derivative(p, i, 1));
     }
 
     return grad;
@@ -246,12 +255,13 @@ std::vector<std::vector<Polynomial>> Differentiation::hessian(const Polynomial& 
     const std::size_t dim = p.dimension();
     std::vector<std::vector<Polynomial>> hess(dim);
 
+    // Use derivative() which automatically chooses the right method based on primary representation
     for (std::size_t i = 0; i < dim; ++i) {
         hess[i].resize(dim);
-        Polynomial df_dxi = differentiateAxis(p, i);
-        
+        Polynomial df_dxi = derivative(p, i, 1);
+
         for (std::size_t j = 0; j < dim; ++j) {
-            hess[i][j] = differentiateAxis(df_dxi, j);
+            hess[i][j] = derivative(df_dxi, j, 1);
         }
     }
 
@@ -350,8 +360,8 @@ const Polynomial& DerivativeCache::computeIfNeeded(const std::vector<unsigned in
     // Recursively get the previous derivative
     const Polynomial& prev = computeIfNeeded(prev_orders);
 
-    // Differentiate once more
-    Polynomial result = Differentiation::differentiateAxis(prev, diff_axis);
+    // Differentiate once more using derivative() which chooses the right method
+    Polynomial result = Differentiation::derivative(prev, diff_axis, 1);
 
     // Cache and return
     cache_[orders] = result;

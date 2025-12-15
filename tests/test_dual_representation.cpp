@@ -48,21 +48,27 @@ int main() {
     
     std::cout << "  ✓ Evaluation correct: " << val << std::endl;
 
-    // Test 3: Access Bernstein coefficients (should trigger lazy conversion)
-    std::cout << "\nTest 3: Access Bernstein coefficients (lazy conversion)" << std::endl;
-    const std::vector<double>& bern = p1.bernsteinCoefficients();
-    
-    if (!p1.hasBernsteinCoefficients()) {
+    // Test 3: Explicitly convert to Bernstein (without changing primary)
+    std::cout << "\nTest 3: Explicitly convert to Bernstein (without changing primary)" << std::endl;
+
+    // Create a copy and convert it to Bernstein
+    Polynomial p1_copy = p1;
+    p1_copy.ensureBernsteinPrimary();
+
+    // Now we can access Bernstein coefficients
+    const std::vector<double>& bern = p1_copy.bernsteinCoefficients();
+
+    if (!p1_copy.hasBernsteinCoefficients()) {
         std::cerr << "FAIL: Bernstein coefficients should now be valid" << std::endl;
         return 1;
     }
-    
-    if (p1.primaryRepresentation() != PolynomialRepresentation::POWER) {
-        std::cerr << "FAIL: Primary should still be POWER" << std::endl;
+
+    if (p1_copy.primaryRepresentation() != PolynomialRepresentation::BERNSTEIN) {
+        std::cerr << "FAIL: Primary should now be BERNSTEIN after ensureBernsteinPrimary()" << std::endl;
         return 1;
     }
-    
-    std::cout << "  ✓ Bernstein coefficients computed, primary still POWER" << std::endl;
+
+    std::cout << "  ✓ Bernstein coefficients computed, primary switched to BERNSTEIN" << std::endl;
     std::cout << "  Bernstein coeffs: [" << bern[0] << ", " << bern[1] << ", " << bern[2] << "]" << std::endl;
 
     // Test 4: Switch primary to Bernstein

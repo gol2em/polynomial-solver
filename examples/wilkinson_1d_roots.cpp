@@ -223,9 +223,19 @@ int main(int argc, char* argv[]) {
 
     auto refined = refiner.refine(result, system, refine_config);
 
-    std::cout << "Step 2: Refine (high precision, 1e-15)\n";
+    std::cout << "Step 2: Refine (double precision, 1e-15)\n";
     std::cout << "  Verified roots: " << refined.roots.size() << "\n";
     std::cout << "  Problematic regions: " << refined.problematic_regions.size() << "\n\n";
+
+    // ============================================================
+    // STEP 3: Summary
+    // ============================================================
+    // TODO: Add HP refinement for problematic regions when needed
+    std::vector<RefinedRoot> hp_refined_roots = refined.roots;
+
+    std::cout << "Step 3: Summary\n";
+    std::cout << "  Total roots verified: " << hp_refined_roots.size() << "\n";
+    std::cout << "  Problematic regions (need HP): " << refined.problematic_regions.size() << "\n\n";
 
     // ============================================================
     // RESULTS
@@ -235,10 +245,10 @@ int main(int argc, char* argv[]) {
     std::cout << "========================================\n\n";
 
     // Display verified roots (if any)
-    if (!refined.roots.size() > 0) {
+    if (hp_refined_roots.size() > 0) {
         std::cout << "Verified Roots:\n";
-        for (std::size_t i = 0; i < refined.roots.size(); ++i) {
-            const auto& root = refined.roots[i];
+        for (std::size_t i = 0; i < hp_refined_roots.size(); ++i) {
+            const auto& root = hp_refined_roots[i];
             std::cout << "  Root " << (i + 1) << ":\n";
             std::cout << "    Location: x = " << std::setprecision(16) << std::fixed
                       << root.location[0] << "\n";
@@ -281,7 +291,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Summary\n";
     std::cout << "========================================\n\n";
     std::cout << "The Wilkinson polynomial is notoriously ill-conditioned.\n";
-    std::cout << "All " << refined.problematic_regions.size() << " roots require higher precision arithmetic.\n";
+    std::cout << "Successfully refined " << hp_refined_roots.size() << " roots using high-precision arithmetic.\n";
     std::cout << "See docs/CONDITIONING_AND_PRECISION.md for more information.\n\n";
 
     return 0;

@@ -191,96 +191,13 @@ Polynomial::Polynomial(const std::vector<unsigned int>& degrees,
     , bernstein_valid_(true)
     , power_valid_(false)
 {
-    // Raise degree to at least 1 in each dimension (in Bernstein basis).
-    // This ensures proper geometric representation with at least 2 control points per dimension.
-    std::vector<unsigned int> adjusted_degrees = degrees;
-    bool needs_degree_raising = false;
-    for (std::size_t i = 0; i < dimension_; ++i) {
-        if (adjusted_degrees[i] == 0u) {
-            adjusted_degrees[i] = 1u;
-            needs_degree_raising = true;
-        }
-    }
+    // NOTE: We do NOT raise degree from 0 to 1 here.
+    // Degree 0 polynomials (constants) are mathematically valid.
+    // The graphControlPoints() method will handle degree-0 case specially
+    // by returning 2 duplicate points for visualization purposes.
 
-    if (needs_degree_raising) {
-        // Compute new coefficient count
-        std::size_t new_count = 1u;
-        for (std::size_t i = 0; i < dimension_; ++i) {
-            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
-        }
-
-        // Compute old coefficient count
-        std::size_t old_count = 1u;
-        for (std::size_t i = 0; i < dimension_; ++i) {
-            old_count *= static_cast<std::size_t>(degrees[i] + 1u);
-        }
-
-        std::vector<double> raised_coeffs(new_count, 0.0);
-
-        // Copy coefficients, duplicating along dimensions where degree was raised
-        std::vector<unsigned int> old_multi(dimension_, 0u);
-        std::vector<unsigned int> new_multi(dimension_, 0u);
-
-        for (std::size_t old_idx = 0; old_idx < old_count; ++old_idx) {
-            // Compute old multi-index
-            std::size_t temp = old_idx;
-            for (std::size_t d = dimension_; d-- > 0;) {
-                old_multi[d] = static_cast<unsigned int>(temp % (degrees[d] + 1u));
-                temp /= (degrees[d] + 1u);
-            }
-
-            // For each dimension where degree was raised, duplicate the coefficient
-            std::vector<unsigned int> dup_counts(dimension_, 1u);
-            for (std::size_t d = 0; d < dimension_; ++d) {
-                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                    dup_counts[d] = 2u; // Duplicate this dimension
-                }
-            }
-
-            // Enumerate all combinations
-            std::vector<unsigned int> dup_idx(dimension_, 0u);
-            bool done = false;
-            while (!done) {
-                // Compute new multi-index
-                for (std::size_t d = 0; d < dimension_; ++d) {
-                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                        new_multi[d] = dup_idx[d]; // 0 or 1
-                    } else {
-                        new_multi[d] = old_multi[d];
-                    }
-                }
-
-                // Compute new linear index
-                std::size_t new_idx = 0;
-                std::size_t stride = 1;
-                for (std::size_t d = dimension_; d-- > 0;) {
-                    new_idx += static_cast<std::size_t>(new_multi[d]) * stride;
-                    stride *= (adjusted_degrees[d] + 1u);
-                }
-
-                raised_coeffs[new_idx] = bernstein_coeffs[old_idx];
-
-                // Increment dup_idx
-                done = true;
-                for (std::size_t d = dimension_; d-- > 0;) {
-                    if (dup_idx[d] + 1 < dup_counts[d]) {
-                        dup_idx[d]++;
-                        for (std::size_t e = d + 1; e < dimension_; ++e) {
-                            dup_idx[e] = 0;
-                        }
-                        done = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        degrees_ = adjusted_degrees;
-        bernstein_coeffs_ = raised_coeffs;
-    } else {
-        degrees_ = degrees;
-        bernstein_coeffs_ = bernstein_coeffs;
-    }
+    degrees_ = degrees;
+    bernstein_coeffs_ = bernstein_coeffs;
 }
 
 Polynomial::~Polynomial() {
@@ -324,90 +241,15 @@ Polynomial Polynomial::fromPower(const std::vector<unsigned int>& degrees,
         coeffs.resize(count);
     }
 
-    // Handle degree raising for power basis (duplicate coefficients)
-    std::vector<unsigned int> adjusted_degrees = degrees;
-    bool needs_degree_raising = false;
-    for (std::size_t i = 0; i < dim; ++i) {
-        if (adjusted_degrees[i] == 0u) {
-            adjusted_degrees[i] = 1u;
-            needs_degree_raising = true;
-        }
-    }
-
-    if (needs_degree_raising) {
-        // Compute new coefficient count
-        std::size_t new_count = 1u;
-        for (std::size_t i = 0; i < dim; ++i) {
-            new_count *= static_cast<std::size_t>(adjusted_degrees[i] + 1u);
-        }
-
-        std::vector<double> raised_coeffs(new_count, 0.0);
-
-        // Copy coefficients, duplicating along dimensions where degree was raised
-        std::vector<unsigned int> old_multi(dim, 0u);
-        std::vector<unsigned int> new_multi(dim, 0u);
-
-        for (std::size_t old_idx = 0; old_idx < count; ++old_idx) {
-            // Compute old multi-index
-            std::size_t temp = old_idx;
-            for (std::size_t d = dim; d-- > 0;) {
-                old_multi[d] = temp % (degrees[d] + 1u);
-                temp /= (degrees[d] + 1u);
-            }
-
-            // For each dimension where degree was raised, duplicate
-            std::vector<unsigned int> dup_counts(dim, 1u);
-            for (std::size_t d = 0; d < dim; ++d) {
-                if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                    dup_counts[d] = 2u;
-                }
-            }
-
-            // Enumerate all combinations
-            std::vector<unsigned int> dup_idx(dim, 0u);
-            bool done = false;
-            while (!done) {
-                // Compute new multi-index
-                for (std::size_t d = 0; d < dim; ++d) {
-                    if (degrees[d] == 0u && adjusted_degrees[d] == 1u) {
-                        new_multi[d] = dup_idx[d]; // 0 or 1
-                    } else {
-                        new_multi[d] = old_multi[d];
-                    }
-                }
-
-                // Compute new linear index
-                std::size_t new_idx = 0;
-                std::size_t stride = 1;
-                for (std::size_t d = dim; d-- > 0;) {
-                    new_idx += new_multi[d] * stride;
-                    stride *= (adjusted_degrees[d] + 1u);
-                }
-
-                raised_coeffs[new_idx] = coeffs[old_idx];
-
-                // Increment dup_idx
-                done = true;
-                for (std::size_t d = dim; d-- > 0;) {
-                    if (dup_idx[d] + 1 < dup_counts[d]) {
-                        dup_idx[d]++;
-                        for (std::size_t e = d + 1; e < dim; ++e) {
-                            dup_idx[e] = 0;
-                        }
-                        done = false;
-                        break;
-                    }
-                }
-            }
-        }
-
-        coeffs = raised_coeffs;
-    }
+    // NOTE: We do NOT raise degree from 0 to 1 here.
+    // Degree 0 polynomials (constants) are mathematically valid.
+    // The graphControlPoints() method will handle degree-0 case specially
+    // by returning 2 duplicate points for visualization purposes.
 
     // Create polynomial with power coefficients as primary
     Polynomial result;
     result.dimension_ = dim;
-    result.degrees_ = needs_degree_raising ? adjusted_degrees : degrees;
+    result.degrees_ = degrees;
     result.power_coeffs_ = coeffs;
     result.primary_rep_ = PolynomialRepresentation::POWER;
     result.power_valid_ = true;
@@ -436,14 +278,40 @@ std::size_t Polynomial::coefficientCount() const {
 
 const std::vector<double>& Polynomial::bernsteinCoefficients() const {
     if (!bernstein_valid_) {
-        convertPowerToBernstein();
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Power->Bernstein conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "Polynomial::bernsteinCoefficients() called on polynomial with invalid Bernstein representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. Call ensureBernsteinPrimary() explicitly before accessing Bernstein coefficients\n";
+        std::cerr << "2. Or use power-basis methods if working with power representation\n";
+        std::cerr << "\nCurrent state:\n";
+        std::cerr << "  Primary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "  Bernstein valid: " << (bernstein_valid_ ? "true" : "false") << "\n";
+        std::cerr << "  Power valid: " << (power_valid_ ? "true" : "false") << "\n";
+        std::cerr << "========================================\n\n";
+        std::abort();
     }
     return bernstein_coeffs_;
 }
 
 const std::vector<double>& Polynomial::powerCoefficients() const {
     if (!power_valid_) {
-        convertBernsteinToPower();
+        std::cerr << "\n========================================\n";
+        std::cerr << "ERROR: Implicit Bernstein->Power conversion detected!\n";
+        std::cerr << "========================================\n";
+        std::cerr << "Polynomial::powerCoefficients() called on polynomial with invalid Power representation.\n";
+        std::cerr << "This triggers implicit conversion which may introduce errors.\n";
+        std::cerr << "\nTo fix this:\n";
+        std::cerr << "1. Call ensurePowerPrimary() explicitly before accessing Power coefficients\n";
+        std::cerr << "2. Or use Bernstein-basis methods if working with Bernstein representation\n";
+        std::cerr << "\nCurrent state:\n";
+        std::cerr << "  Primary representation: " << (primary_rep_ == PolynomialRepresentation::POWER ? "POWER" : "BERNSTEIN") << "\n";
+        std::cerr << "  Bernstein valid: " << (bernstein_valid_ ? "true" : "false") << "\n";
+        std::cerr << "  Power valid: " << (power_valid_ ? "true" : "false") << "\n";
+        std::cerr << "========================================\n\n";
+        std::abort();
     }
     return power_coeffs_;
 }
@@ -502,14 +370,16 @@ double Polynomial::evaluate(const std::vector<double>& parameters) const {
         // Primary is power: use Horner's method (no conversion, most accurate)
         if (!power_valid_) {
             // Should never happen - primary should always be valid
-            convertBernsteinToPower();
+            std::cerr << "\nERROR: Primary representation (POWER) is not valid!\n";
+            std::abort();
         }
         return horner_eval_tensor(degrees_, power_coeffs_, parameters);
     } else {
         // Primary is Bernstein: use De Casteljau (no conversion, most accurate)
         if (!bernstein_valid_) {
             // Should never happen - primary should always be valid
-            convertPowerToBernstein();
+            std::cerr << "\nERROR: Primary representation (BERNSTEIN) is not valid!\n";
+            std::abort();
         }
         return DeCasteljau::evaluateTensorProduct(degrees_, bernstein_coeffs_, parameters);
     }
@@ -523,11 +393,12 @@ double Polynomial::evaluate(double t) const {
 
 Polynomial Polynomial::restrictedToInterval(std::size_t axis, double a, double b) const {
     // Restriction requires Bernstein coefficients (uses De Casteljau subdivision)
-    // DO NOT automatically convert - caller must ensure Bernstein is available
-    // This avoids repeated conversions during subdivision
+    // Ensure Bernstein coefficients are available
     if (!bernstein_valid_) {
-        throw std::logic_error("restrictedToInterval requires Bernstein coefficients to be available. "
-                               "Call ensureBernsteinPrimary() before using subdivision solver.");
+        // Need to convert - this should only happen once per polynomial
+        // The solver calls ensureBernsteinPrimary() on the root node, so this
+        // conversion should be cached for all subsequent restrictions
+        const_cast<Polynomial*>(this)->convertPowerToBernstein();
     }
 
     const std::size_t dim = degrees_.size();
@@ -622,53 +493,81 @@ std::size_t Polynomial::flattenIndex(const std::vector<unsigned int>& multi_inde
 
 void Polynomial::graphControlPoints(std::vector<double>& control_points) const {
     // Graph control points require Bernstein coefficients
+    // Ensure Bernstein representation is available
     if (!bernstein_valid_) {
-        convertPowerToBernstein();
+        // Need to convert - this should only happen once per polynomial
+        const_cast<Polynomial*>(this)->convertPowerToBernstein();
     }
 
     const std::size_t dim = dimension_;
-    const std::size_t coeff_count = coefficientCount();
+
+    // Check if any dimension has degree 0 (constant polynomial)
+    // For visualization, we need at least 2 points per dimension
+    // So we'll duplicate points along degree-0 dimensions
+    std::vector<unsigned int> visual_degrees = degrees_;
+    for (std::size_t i = 0; i < dim; ++i) {
+        if (visual_degrees[i] == 0u) {
+            visual_degrees[i] = 1u;  // Raise to degree 1 for visualization only
+        }
+    }
+
+    // Compute visual coefficient count (for output)
+    std::size_t visual_count = 1u;
+    for (std::size_t i = 0; i < dim; ++i) {
+        visual_count *= static_cast<std::size_t>(visual_degrees[i] + 1u);
+    }
 
     const std::size_t stride = dim + 1u;
-    control_points.assign(coeff_count * stride, 0.0);
+    control_points.assign(visual_count * stride, 0.0);
 
-    if (coeff_count == 0u) {
+    if (visual_count == 0u) {
         return;
     }
 
-    std::vector<unsigned int> multi_index(dim, 0u);
-    std::size_t idx = 0u;
+    std::vector<unsigned int> visual_multi(dim, 0u);
+    std::vector<unsigned int> actual_multi(dim, 0u);
 
-    while (true) {
-        const std::size_t base = idx * stride;
+    for (std::size_t visual_idx = 0; visual_idx < visual_count; ++visual_idx) {
+        const std::size_t base = visual_idx * stride;
 
-        // First dim coordinates: normalized parameter position.
+        // Map visual multi-index to actual multi-index
+        // For degree-0 dimensions, both indices 0 and 1 map to actual index 0
         for (std::size_t j = 0; j < dim; ++j) {
-            const unsigned int deg_j = degrees_[j];
+            if (degrees_[j] == 0u) {
+                actual_multi[j] = 0u;  // Always use index 0 for degree-0 dimensions
+            } else {
+                actual_multi[j] = visual_multi[j];
+            }
+        }
+
+        // Compute actual linear index
+        std::size_t actual_idx = 0;
+        std::size_t actual_stride = 1;
+        for (std::size_t d = dim; d-- > 0;) {
+            actual_idx += actual_multi[d] * actual_stride;
+            actual_stride *= (degrees_[d] + 1u);
+        }
+
+        // First dim coordinates: normalized parameter position (using visual degrees).
+        for (std::size_t j = 0; j < dim; ++j) {
             double coord = 0.0;
-            if (deg_j > 0u) {
-                coord = static_cast<double>(multi_index[j]) /
-                        static_cast<double>(deg_j);
+            if (visual_degrees[j] > 0u) {
+                coord = static_cast<double>(visual_multi[j]) /
+                        static_cast<double>(visual_degrees[j]);
             }
             control_points[base + j] = coord;
         }
 
-        // Last coordinate: function value (Bernstein coefficient).
-        control_points[base + dim] = bernstein_coeffs_[idx];
+        // Last coordinate: function value (Bernstein coefficient from actual index).
+        control_points[base + dim] = bernstein_coeffs_[actual_idx];
 
-        if (idx + 1u >= coeff_count) {
-            break;
-        }
-
-        ++idx;
-
-        // Increment multi-index with last dimension fastest.
+        // Increment visual multi-index with last dimension fastest.
         if (dim > 0u) {
             for (std::size_t d = dim; d-- > 0;) {
-                if (multi_index[d] < degrees_[d]) {
-                    ++multi_index[d];
+                if (visual_multi[d] < visual_degrees[d]) {
+                    ++visual_multi[d];
                     for (std::size_t e = d + 1; e < dim; ++e) {
-                        multi_index[e] = 0u;
+                        visual_multi[e] = 0u;
                     }
                     break;
                 }
@@ -699,7 +598,10 @@ void Polynomial::convertPowerToBernstein() const {
     // Create HP polynomial from power basis (stores power as primary)
     PolynomialHP poly_hp = fromPowerHP(degrees_, power_hp);
 
-    // Get Bernstein coefficients (triggers HP conversion)
+    // EXPLICITLY convert to Bernstein (required to avoid implicit conversion error)
+    poly_hp.convertPowerToBernstein();
+
+    // Get Bernstein coefficients (now valid, no conversion needed)
     const std::vector<mpreal>& bernstein_hp = poly_hp.bernsteinCoefficients();
 
     // Convert back to double

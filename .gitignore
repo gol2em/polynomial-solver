@@ -38,8 +38,20 @@ Makefile
 *.out
 *.app
 
-# Playground directory (for local testing only, not part of library)
-playground/
+# Playground directory - for local experimentation only
+# Keep ONLY: Makefile.in (template), README.md, docs/, research_tests/ structure
+# Ignore: Makefile (auto-generated), executables, dumps, samples, Python files, etc.
+playground/*
+!playground/Makefile.in
+!playground/README.md
+!playground/docs/
+playground/docs/*
+!playground/docs/*.md
+!playground/research_tests/
+playground/research_tests/*
+!playground/research_tests/README.md
+!playground/research_tests/Makefile.in
+!playground/research_tests/*.cpp
 
 # Examples local executables (created by Makefile)
 examples/*_exe
