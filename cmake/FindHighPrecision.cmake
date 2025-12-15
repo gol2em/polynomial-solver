@@ -1,5 +1,5 @@
 # FindHighPrecision.cmake
-# 
+#
 # Detects available multiprecision libraries and configures high-precision support
 #
 # This module sets the following variables:
@@ -14,6 +14,13 @@
 #   BOOST_ROOT                     - Root directory of Boost installation
 #   GMP_ROOT                       - Root directory of GMP installation
 #   MPFR_ROOT                      - Root directory of MPFR installation
+
+# Set policy for FindBoost module (CMake 3.30+)
+# The old FindBoost module is deprecated, but we only need Boost headers
+# so we can safely use the old behavior or manual detection
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
 
 message(STATUS "")
 message(STATUS "========================================")
