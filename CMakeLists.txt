@@ -27,6 +27,12 @@ else()
 endif()
 
 # High-precision arithmetic options
+# Save whether user explicitly provided the option on command line
+if(DEFINED ENABLE_HIGH_PRECISION)
+    set(HP_USER_SPECIFIED TRUE)
+else()
+    set(HP_USER_SPECIFIED FALSE)
+endif()
 option(ENABLE_HIGH_PRECISION "Enable high-precision arithmetic support" OFF)
 option(ENABLE_TEMPLATES "Enable template-based implementation (Tier 3)" ON)
 
@@ -54,12 +60,13 @@ option(BUILD_EXAMPLES "Build example programs" ON)
 # Always check for high-precision dependencies to enable auto-detection
 include(FindHighPrecision)
 
-# Auto-enable high-precision if libraries are detected and not explicitly disabled
-if(NOT ENABLE_HIGH_PRECISION AND HIGH_PRECISION_FOUND)
+# Auto-enable high-precision if libraries are detected and user didn't explicitly disable
+if(HIGH_PRECISION_FOUND AND NOT ENABLE_HIGH_PRECISION AND NOT HP_USER_SPECIFIED)
+    # User didn't specify, and libraries are available: auto-enable
+    set(ENABLE_HIGH_PRECISION ON CACHE BOOL "Enable high-precision arithmetic support" FORCE)
     message(STATUS "")
-    message(STATUS "High-precision libraries detected!")
-    message(STATUS "  To enable: cmake .. -DENABLE_HIGH_PRECISION=ON")
-    message(STATUS "  (Currently disabled by default)")
+    message(STATUS "High-precision libraries detected - enabling automatically")
+    message(STATUS "  To disable: cmake .. -DENABLE_HIGH_PRECISION=OFF")
     message(STATUS "")
 endif()
 
@@ -67,7 +74,10 @@ if(ENABLE_HIGH_PRECISION)
     if(NOT HIGH_PRECISION_FOUND)
         message(WARNING
             "High-precision support requested but no suitable libraries found.\n"
-            "  Boost or quadmath is required.\n"
+            "\n"
+            "  Boost provides the C++ wrapper interface (boost::multiprecision)\n"
+            "  MPFR/GMP provide the actual arbitrary-precision arithmetic\n"
+            "\n"
             "  Disabling high-precision support and continuing with double precision.\n"
             "\n"
             "  To enable high-precision, install dependencies:\n"
@@ -180,6 +190,7 @@ add_library(polynomial_solver STATIC
     src/differentiation.cpp
     src/result_refiner.cpp
     src/solver.cpp
+    src/interpolation.cpp
 )
 
 # Add high-precision source files if enabled
@@ -189,6 +200,7 @@ if(ENABLE_HIGH_PRECISION)
         src/polynomial_hp.cpp
         src/differentiation_hp.cpp
         src/result_refiner_hp.cpp
+        src/interval_arithmetic.cpp
     )
 endif()
 
@@ -282,6 +294,12 @@ add_library(solver STATIC
     src/solver.cpp
 )
 target_link_libraries(solver polynomial geometry de_casteljau)
+
+# Build interpolation library
+add_library(interpolation STATIC
+    src/interpolation.cpp
+)
+target_link_libraries(interpolation polynomial)
 
 #==============================================================================
 # Executables and Tools
@@ -398,3 +416,55 @@ message(STATUS "Generated playground Makefiles:")
 message(STATUS "  - playground/Makefile")
 message(STATUS "  - playground/research_tests/Makefile")
 message(STATUS "Developers can now use: cd playground && make <name>.cpp")
+
+#==============================================================================
+# VSCode Configuration
+#==============================================================================
+# Generate .vscode/c_cpp_properties.json for IntelliSense support
+# This ensures playground files and other non-CMake files have proper include paths
+
+# Create .vscode directory if it doesn't exist
+file(MAKE_DIRECTORY "${CMAKE_SOURCE_DIR}/.vscode")
+
+# Build defines list based on configuration
+set(VSCODE_DEFINES "")
+if(ENABLE_HIGH_PRECISION)
+    set(VSCODE_DEFINES "${VSCODE_DEFINES}\n                \"ENABLE_HIGH_PRECISION\",")
+    if(USE_MPFR_BACKEND)
+        set(VSCODE_DEFINES "${VSCODE_DEFINES}\n                \"USE_MPFR_BACKEND\",")
+    endif()
+    if(ENABLE_QUADMATH)
+        set(VSCODE_DEFINES "${VSCODE_DEFINES}\n                \"ENABLE_QUADMATH\",")
+    endif()
+    if(USE_TEMPLATES)
+        set(VSCODE_DEFINES "${VSCODE_DEFINES}\n                \"USE_TEMPLATES\",")
+    endif()
+endif()
+if(ENABLE_GEOMETRY_DUMP)
+    set(VSCODE_DEFINES "${VSCODE_DEFINES}\n                \"ENABLE_GEOMETRY_DUMP\",")
+endif()
+# Remove trailing comma if any defines exist
+string(REGEX REPLACE ",\n*$" "" VSCODE_DEFINES "${VSCODE_DEFINES}")
+
+# Generate the configuration file
+file(WRITE "${CMAKE_SOURCE_DIR}/.vscode/c_cpp_properties.json"
+"{
+    \"configurations\": [
+        {
+            \"name\": \"Linux\",
+            \"compileCommands\": \"\${workspaceFolder}/compile_commands.json\",
+            \"includePath\": [
+                \"\${workspaceFolder}/include\",
+                \"\${workspaceFolder}/build/include\"
+            ],
+            \"defines\": [${VSCODE_DEFINES}
+            ],
+            \"cStandard\": \"c11\",
+            \"cppStandard\": \"c++11\"
+        }
+    ],
+    \"version\": 4
+}
+")
+
+message(STATUS "Generated VSCode configuration: .vscode/c_cpp_properties.json")

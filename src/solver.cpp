@@ -738,9 +738,11 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
 
         // Check depth limit (should rarely happen - indicates problem)
         if (node.depth >= config.max_depth) {
-            std::cerr << "Warning: Maximum depth " << config.max_depth
-                      << " reached. This may indicate numerical issues or insufficient tolerance."
-                      << std::endl;
+            if (config.verbose_warnings) {
+                std::cerr << "Warning: Maximum depth " << config.max_depth
+                          << " reached. This may indicate numerical issues or insufficient tolerance."
+                          << std::endl;
+            }
 
 #ifdef ENABLE_GEOMETRY_DUMP
             if (config.dump_geometry && method == RootBoundingMethod::ProjectedPolyhedral) {
@@ -1099,9 +1101,11 @@ Solver::subdivisionSolve(const PolynomialSystem& system,
             degeneracy_mode = true;
             result.degeneracy_detected = true;
 
-            std::cerr << "Warning: Degeneracy detected at depth " << node.depth
-                      << " (subdivision boxes: " << subdivision_boxes_per_depth[node.depth]
-                      << ", threshold: " << degeneracy_threshold << ")" << std::endl;
+            if (config.verbose_warnings) {
+                std::cerr << "Warning: Degeneracy detected at depth " << node.depth
+                          << " (subdivision boxes: " << subdivision_boxes_per_depth[node.depth]
+                          << ", threshold: " << degeneracy_threshold << ")" << std::endl;
+            }
         }
 
         // If in degeneracy mode, add box to unresolved instead of subdividing

@@ -231,6 +231,66 @@ public:
      */
     Polynomial restrictedToInterval(std::size_t axis, double a, double b) const;
 
+    //=========================================================================
+    // Polynomial Arithmetic
+    //=========================================================================
+
+    /**
+     * @brief Multiply two polynomials.
+     *
+     * Computes the product p * q in power basis. Both polynomials must have
+     * the same dimension. The result has degrees equal to the sum of the
+     * input degrees in each dimension.
+     *
+     * @param other The polynomial to multiply with
+     * @return The product polynomial
+     * @throws std::invalid_argument if dimensions don't match
+     */
+    Polynomial operator*(const Polynomial& other) const;
+
+    /**
+     * @brief Subtract two polynomials.
+     *
+     * Computes the difference p - q in power basis. Both polynomials must have
+     * the same dimension. The result has degrees equal to the maximum of the
+     * input degrees in each dimension.
+     *
+     * @param other The polynomial to subtract
+     * @return The difference polynomial
+     * @throws std::invalid_argument if dimensions don't match
+     */
+    Polynomial operator-(const Polynomial& other) const;
+
+    /**
+     * @brief Add two polynomials.
+     *
+     * Computes the sum p + q in power basis. Both polynomials must have
+     * the same dimension. The result has degrees equal to the maximum of the
+     * input degrees in each dimension.
+     *
+     * @param other The polynomial to add
+     * @return The sum polynomial
+     * @throws std::invalid_argument if dimensions don't match
+     */
+    Polynomial operator+(const Polynomial& other) const;
+
+    /**
+     * @brief Scalar multiplication.
+     *
+     * Multiplies all coefficients by a scalar value.
+     *
+     * @param scalar The scalar multiplier
+     * @return The scaled polynomial
+     */
+    Polynomial operator*(double scalar) const;
+
+    /**
+     * @brief Unary negation.
+     *
+     * @return The negated polynomial (-p)
+     */
+    Polynomial operator-() const;
+
 private:
     /// Number of variables.
     std::size_t dimension_;

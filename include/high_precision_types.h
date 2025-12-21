@@ -4,21 +4,30 @@
 /**
  * @file high_precision_types.h
  * @brief Type definitions for high-precision arithmetic
- * 
+ *
  * This header defines the multiprecision types used throughout the library.
- * The actual types depend on the backend selected at compile time:
- * 
- * - MPFR Backend: Uses boost::multiprecision::mpfr_float (arbitrary precision, runtime control)
- * - cpp_dec_float Backend: Uses boost::multiprecision::cpp_dec_float (fixed precision)
- * - quadmath Backend: Uses __float128 (fixed 128-bit precision)
- * 
- * @section backends Backend Comparison
- * 
- * | Backend        | Precision      | Runtime Control | Speed    | Dependencies |
- * |----------------|----------------|-----------------|----------|--------------|
- * | MPFR           | Arbitrary      | ✅ Yes          | Fastest  | Boost+MPFR+GMP |
- * | cpp_dec_float  | Fixed (50/100) | ❌ No           | Slower   | Boost only   |
- * | quadmath       | Fixed (128-bit)| ❌ No           | Fast     | libquadmath  |
+ *
+ * ## Architecture
+ *
+ * The library uses Boost.Multiprecision as the C++ wrapper interface to access
+ * different arithmetic backends:
+ *
+ * ```
+ * Your Code → boost::multiprecision::mpfr_float → MPFR library → GMP library
+ *                   (C++ wrapper/interface)       (float ops)    (integer ops)
+ * ```
+ *
+ * - **Boost**: Provides uniform C++ interface (`mpreal` type) via header-only templates
+ * - **MPFR**: GNU library that performs actual arbitrary-precision float computations
+ * - **GMP**: GNU library for multi-precision integers (required by MPFR)
+ *
+ * ## Backend Options
+ *
+ * | Backend        | Type Alias              | Precision      | Runtime Control | Dependencies |
+ * |----------------|-------------------------|----------------|-----------------|--------------|
+ * | MPFR           | `mpfr_float`            | Arbitrary      | ✅ Yes          | Boost+MPFR+GMP |
+ * | cpp_dec_float  | `cpp_dec_float_100`     | Fixed 100 digits | ❌ No         | Boost only   |
+ * | quadmath       | `__float128`            | Fixed 34 digits  | ❌ No         | libquadmath  |
  * 
  * @section precision_control Runtime Precision Control (MPFR only)
  * 

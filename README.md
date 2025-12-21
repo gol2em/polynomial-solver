@@ -1,287 +1,104 @@
 # Polynomial Solver
 
-A high-performance C++11 library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
+A C++11 library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
 
-**GitHub**: https://github.com/gol2em/polynomial-solver.git
-**Gitee**: https://gitee.com/gol2em/polynomial-solver.git
+## Prerequisites
 
-## Features
+### Required
+- C++11 compiler (GCC 4.8+, Clang 3.4+)
+- CMake 3.15+
+- Make
 
-- **Simple 2-Line Workflow**: Solve and refine roots with just two function calls
-- **Multivariate Polynomial Support**: Handle polynomials in multiple variables with arbitrary degrees
-- **Bernstein Basis Representation**: Numerically stable polynomial representation with power↔Bernstein conversion
-- **Multiple Root Bounding Methods**:
-  - **GraphHull**: Exact convex hull-based bounding in graph space
-  - **ProjectedPolyhedral**: Direction-by-direction projection method
-  - **None**: Uniform subdivision (baseline)
-- **Intelligent Degeneracy Detection**: Automatically detects degenerate cases (multiple roots, infinite solutions)
-- **High-Precision Result Refinement**: Newton's method with sign checking to achieve 1e-15 precision (1D)
-- **Condition Number Estimation**: Automatically detects when higher precision arithmetic is needed
-- **Multiplicity Detection**: Determines root multiplicity using derivative analysis
-- **Machine Epsilon Precision**: Achieves optimal error bounds (2.22×10⁻¹⁶) for linear systems
-- **Robust Geometry**: Exact 2D/3D convex hull and hyperplane intersection algorithms
-- **Unified Library**: Single `libpolynomial_solver.a` library for easy linking
-- **High-Precision Arithmetic** (Tier 2): Optional MPFR/GMP/quadmath support for extreme precision
-- **Comprehensive Test Suite**: 21 test suites covering all major functionality
-- **Python Visualization**: Optional visualization tools for graphs and control points
-- **Configurable Parameters**: All solver parameters accessible via command-line flags
+### Optional (High-Precision)
+- Boost (header-only multiprecision wrapper)
+- MPFR (arbitrary-precision floating-point)
+- GMP (multi-precision integers, MPFR dependency)
+
+```bash
+# Check prerequisites
+./check_prerequisites.sh
+
+# Install high-precision libraries (Ubuntu/Debian)
+sudo apt-get install libboost-dev libmpfr-dev libgmp-dev
+```
 
 ## Quick Start
 
-### 1. Build the Project
+### Build
 
 ```bash
-# Default build (double precision only)
 mkdir build && cd build
 cmake ..
 make -j$(nproc)
-
-# For configuration options, run:
-./configure-help.sh
-
-# Or see available options:
-cd build && cmake -L ..
 ```
 
-### 2. Run the Simple Example
+### Library Targets
 
-The simplest way to get started is with the 2-line workflow example:
+After building, link against:
+- **Library**: `build/lib/libpolynomial_solver.a`
+- **Include**: `include/`
 
-```bash
-./build/bin/example_simple_cubic
+```cmake
+target_include_directories(your_target PRIVATE /path/to/polynomial-solver/include)
+target_link_libraries(your_target /path/to/polynomial-solver/build/lib/libpolynomial_solver.a)
 ```
 
-This demonstrates solving a cubic polynomial `(x - 0.2)(x - 0.5)(x - 0.8)` with just two lines of code:
+### Basic Usage
 
-```cpp
-#include <polynomial_solver.h>
-
-// LINE 1: SOLVE (fast, double precision)
-Solver solver;
-auto result = solver.subdivisionSolve(system, config);
-
-// LINE 2: REFINE (high precision, 1e-15)
-ResultRefiner refiner;
-auto refined = refiner.refine(result, system, refine_config);
-```
-
-### 3. Experiment with Parameters
-
-All examples support command-line parameters for experimentation:
-
-```bash
-# Run with custom tolerance
-./build/bin/example_simple_cubic -t 1e-10
-
-# Run with custom parameters
-./build/bin/example_simple_cubic -t 1e-12 -d 150 -m 3.0
-
-# Show all options
-./build/bin/example_simple_cubic --help
-```
-
-**Common Command-line Options**:
-
-Solver Options:
-- `-t, --tolerance <value>`: Box size tolerance (default: 1e-8)
-- `-d, --max-depth <value>`: Maximum subdivision depth (default: 100)
-- `-m, --degeneracy-multiplier <value>`: Degeneracy detection multiplier (default: 5.0)
-- `--dump-geometry`: Enable geometry dump for visualization
-
-Refinement Options:
-- `--target-tolerance <value>`: For exclusion radius computation (default: 1e-15)
-- `--residual-tolerance <value>`: Convergence criterion |f(x)| < tol (default: 1e-15)
-
-Other:
-- `-h, --help`: Show help message
-
-See [docs/PARAMETERS.md](docs/PARAMETERS.md) for detailed parameter documentation.
-
-### 4. More Examples
-
-**Ill-Conditioned Problems (Wilkinson Polynomial)**:
-```bash
-# Demonstrates condition number estimation
-./build/bin/example_wilkinson_1d
-```
-
-**Multiple Roots**:
-```bash
-# Demonstrates multiplicity detection
-./build/bin/example_multiplicity_1d
-```
-
-**2D Systems (Circle-Ellipse Intersection)**:
-```bash
-# Demonstrates 2D polynomial system solving
-./build/bin/example_circle_ellipse
-```
-
-### 5. Using the Library in Your Code
-
-**Include the unified header**:
 ```cpp
 #include <polynomial_solver.h>
 using namespace polynomial_solver;
-```
 
-**Link against the library**:
-```cmake
-target_link_libraries(your_target polynomial_solver)
-```
-
-**Basic usage**:
-```cpp
-// 1. Define polynomial system
+// 1. Define polynomial: (x-0.2)(x-0.5)(x-0.8)
 std::vector<unsigned int> degrees = {3};
 std::vector<double> power_coeffs = {-0.08, 0.66, -1.5, 1.0};
 Polynomial poly = Polynomial::fromPower(degrees, power_coeffs);
-PolynomialSystem system(std::vector<Polynomial>{poly});
+PolynomialSystem system({poly});
 
-// 2. Solve (fast, double precision)
+// 2. Solve
 Solver solver;
 SubdivisionConfig config;
 config.tolerance = 1e-8;
 auto result = solver.subdivisionSolve(system, config, RootBoundingMethod::ProjectedPolyhedral);
 
-// 3. Refine (high precision, 1e-15)
+// 3. Refine
 ResultRefiner refiner;
 RefinementConfig refine_config;
-refine_config.residual_tolerance = 1e-15;  // Converge when |f(x)| < 1e-15
+refine_config.residual_tolerance = 1e-15;
 auto refined = refiner.refine(result, system, refine_config);
-
-// 4. Check results
-for (const auto& root : refined.roots) {
-    if (root.needs_higher_precision) {
-        // Use higher precision arithmetic (future feature)
-    }
-}
 ```
 
-## High-Precision Arithmetic (Tier 2)
-
-The library supports optional high-precision arithmetic for cases where double precision (15-17 digits) is insufficient.
-
-### Quick Start with High Precision
+### Run Examples
 
 ```bash
-# Install dependencies (Ubuntu/Debian)
-sudo apt-get install libboost-dev libmpfr-dev libgmp-dev
+./build/bin/example_simple_cubic          # 1D cubic
+./build/bin/example_wilkinson_1d          # Ill-conditioned
+./build/bin/example_multiplicity_1d       # Multiple roots
+./build/bin/example_circle_ellipse        # 2D system
+```
 
-# Build with high-precision support
-cd build
+Use `--help` for command-line options. See [docs/PARAMETERS.md](docs/PARAMETERS.md) for parameter details.
+
+## High-Precision Build (Optional)
+
+```bash
 cmake .. -DENABLE_HIGH_PRECISION=ON
 make -j$(nproc)
 ```
 
-### Using High-Precision Types
+See [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) for details.
 
-```cpp
-#include <polynomial_solver.h>
-#ifdef ENABLE_HIGH_PRECISION
-#include <polynomial_hp.h>
-#include <result_refiner_hp.h>
-#endif
-
-// Use PolynomialHP and ResultRefinerHP for high-precision operations
-#ifdef ENABLE_HIGH_PRECISION
-PolynomialHP poly_hp = PolynomialHP::fromPower(degrees, hp_coeffs);
-ResultRefinerHP refiner_hp;
-auto refined_hp = refiner_hp.refine(result, system_hp, config);
-#endif
-```
-
-### Available Backends
-
-- **MPFR** (default, fastest): Runtime-configurable precision using MPFR library
-- **cpp_dec_float** (fallback): Header-only Boost backend if MPFR not available
-- **quadmath** (optional): GCC's __float128 type for 128-bit precision
-
-See [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) for complete documentation.
-
-## Development Workflow
-
-### Quick Testing with Makefiles
-
-Each directory (`playground/`, `examples/`, `tests/`) has a convenient Makefile for quick compilation and testing without installation:
-
-#### Playground (Rapid Prototyping)
-
-The `playground/` directory is perfect for quick experiments:
+## Development
 
 ```bash
-cd playground
+# Playground - rapid prototyping (has Makefile)
+cd playground && make mytest && ./mytest
 
-# Create test.cpp with your code
-# Then compile and run:
-make test
-./test
-
-# Or compile all .cpp files:
-make all
-
-# Clean up:
-make clean
-```
-
-**Available commands**:
-- `make <name>` - Compile `<name>.cpp` to executable
-- `make all` - Compile all `.cpp` files
-- `make clean` - Remove executables
-- `make clean-all` - Clean executables AND library build
-- `make rebuild` - Rebuild library and recompile all
-- `make lib` - Build library only
-- `make cmake CMAKE_OPTS="..."` - Reconfigure CMake with options
-
-#### Examples (Build and Run)
-
-```bash
-cd examples
-
-# Build and run a specific example:
-make simple_cubic
-make multiplicity_1d
-make wilkinson_1d
-make circle_ellipse
-
-# Build all examples:
-make all
-
-# Run all examples:
-make run-all
-```
-
-#### Tests (Build and Run)
-
-```bash
-cd tests
-
-# List all available tests:
-make list
-
-# Build and run a specific test:
-make test_polynomial_conversion
-make test_result_refiner
-
-# Build all tests:
-make all
-
-# Run all tests:
-make run-all
-```
-
-### Advanced: Reconfigure CMake
-
-You can reconfigure CMake with custom options from any directory:
-
-```bash
-# Disable geometry dump for release builds
-make cmake CMAKE_OPTS="-DENABLE_GEOMETRY_DUMP=OFF"
-make rebuild
-
-# Enable tests
-make cmake CMAKE_OPTS="-DBUILD_TESTS=ON"
-make rebuild
+# Examples and tests are built via CMake
+cd build
+make examples           # Build all examples
+make test               # Run all tests (via CTest)
+ctest -V                # Run tests with verbose output
 ```
 
 ## Project Structure
@@ -305,306 +122,44 @@ polynomial-solver/
 │   └── de_casteljau.cpp
 ├── build/lib/                    # Build output
 │   └── libpolynomial_solver.a    # Unified library (link this!)
-├── playground/                   # Quick testing (Makefile-based)
+├── playground/                   # Quick testing (has Makefile)
 │   ├── Makefile                  # Compile any .cpp file easily
 │   └── README.md                 # Playground documentation
-├── examples/                     # Example programs (Makefile-based)
-│   ├── Makefile                  # Build and run examples
+├── examples/                     # Example programs (CMake)
 │   ├── simple_cubic.cpp          # 2-line workflow demo
 │   ├── multiplicity_1d_roots.cpp # Multiple roots
 │   ├── wilkinson_1d_roots.cpp    # Ill-conditioned
 │   └── circle_ellipse_intersection.cpp  # 2D system
-├── tests/                        # Test suite (Makefile-based)
-│   ├── Makefile                  # Build and run tests
-│   └── test_*.cpp                # 21 test files
+├── tests/                        # Test suite (CMake + CTest)
+│   └── test_*.cpp                # Test files
 ├── tools/                        # Tools and utilities
 │   └── refine_from_dumps.cpp     # Root refinement tool
 ├── docs/                         # Documentation
+│   ├── ALGORITHMS.md             # Algorithm overview
+│   ├── VISUALIZATION.md          # Visualization guide
 │   ├── PARAMETERS.md             # Parameter reference
-│   ├── CONDITIONING_AND_PRECISION.md  # Condition numbers
-│   ├── GEOMETRY_ALGORITHMS.md    # Geometric algorithms
-│   ├── DEGENERATE_BOXES.md       # Degeneracy handling
-│   └── result_refinement_design.md    # Refinement design
+│   └── ...                       # More technical docs
+├── check_prerequisites.sh        # Prerequisite checker
 ├── build.sh                      # Automated build script
 └── README.md                     # This file
 ```
 
-## Algorithm Overview
-
-### Root Bounding Methods
-
-#### GraphHull Method
-- Computes convex hull of graph control points in R^{n+1}
-- Intersects with hyperplane x_{n+1} = 0
-- Projects to R^n parameter space
-- Exact for linear functions (machine epsilon error)
-
-#### ProjectedPolyhedral Method
-- Processes each direction independently
-- Projects to 2D (direction + function value)
-- Computes convex hull and intersects with axis
-- Simpler and more modular than GraphHull
-
-### Subdivision Solver Workflow
-
-1. Start with region [0,1]^n
-2. Compute bounding box using selected method
-3. If empty: discard (no roots)
-4. If small enough: mark as converged
-5. Else: subdivide and add to queue
-6. Process boxes by depth (breadth-first)
-7. Degeneracy detection for degenerate cases
-
-### Direct Contraction Implementation
-
-The solver uses **direct contraction** to minimize error accumulation:
-
-- **Traditional approach**: Restrict polynomials incrementally from current [0,1] to [a,b] repeatedly
-  - Error grows linearly: ε ≈ k·n·ε·||b|| (k = number of contractions)
-
-- **Direct contraction**: Restrict from original [0,1] to global [A,B] each time
-  - Error stays constant: ε ≈ n·ε·||b|| (independent of k)
-  - **2-8× error reduction** in practice
-  - **Same computational cost** (2 de Casteljau subdivisions per contraction)
-  - Better accuracy at extreme precision (tolerance < 10⁻¹²)
-
-**Implementation**: Each subdivision node stores both current and original polynomials. During contraction, polynomials are recomputed from original using global box coordinates. During subdivision, the incremental approach is kept for efficiency.
-
-## Examples
-
-See [examples/README.md](examples/README.md) for detailed documentation.
-
-### Circle-Ellipse Intersection
-
-The circle-ellipse intersection example demonstrates solving the system:
-- f₁(x,y) = x² + y² - 1 = 0 (unit circle)
-- f₂(x,y) = x²/4 + 4y² - 1 = 0 (ellipse)
-
-Expected root: (2/√5, 1/√5) ≈ (0.894427, 0.447214)
-
-**Run the example:**
-```bash
-./build/bin/example_circle_ellipse
-```
-
-This generates geometry dumps in `dumps/` for all three strategies:
-- ContractFirst: Pure contraction approach
-- SubdivideFirst: Subdivision-first approach
-- Simultaneous: Balanced approach
-
-**Visualize the results:**
-```bash
-# Activate Python environment
-source .venv/bin/activate
-
-# Visualize all strategies
-python examples/visualize_circle_ellipse.py
-
-# Or visualize specific strategy with limited steps
-python examples/visualize_circle_ellipse.py --strategy ContractFirst --max-steps 10
-```
-
-## Visualization API
-
-The project provides a Python API for visualizing solver output. See [tools/README.md](tools/README.md)
-for detailed documentation.
-
-### Using the API
-
-```python
-from tools.solver_viz_api import visualize_solver
-
-# Visualize all iterations
-visualize_solver('dumps/strategy_ContractFirst_geometry.txt', 'output/')
-
-# Visualize first 20 iterations
-visualize_solver('dumps/example.txt', 'output/', max_steps=20)
-```
-
-### Command-line Usage
-
-```bash
-# Visualize using the API directly
-python tools/solver_viz_api.py dumps/example.txt --output-dir output/ --max-steps 20
-```
-
-### Generating Dump Files
-
-**Command-line control (examples):**
-
-All examples support the `--dump-geometry` flag to enable geometry dumping:
-
-```bash
-# Run without geometry dumps (default, faster)
-./build/bin/example_cubic_1d
-
-# Run with geometry dumps for visualization
-./build/bin/example_cubic_1d --dump-geometry
-```
-
-**Programmatic control:**
-
-Enable geometry dumping in your code (only when `ENABLE_GEOMETRY_DUMP` macro is defined):
-
-```cpp
-SubdivisionConfig config;
-#ifdef ENABLE_GEOMETRY_DUMP
-config.dump_geometry = true;
-config.dump_prefix = "dumps/my_dump";  // Creates dumps/my_dump_geometry.txt
-#endif
-```
-
-**Build-time control:**
-
-The `ENABLE_GEOMETRY_DUMP` macro is automatically controlled by the build type:
-
-```bash
-# Debug mode: macro is defined, feature is enabled and controlled by runtime flag
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-# or simply (Debug is default if not specified)
-cmake ..
-
-# Release mode: macro is not defined, all dump code is compiled out
-cmake -DCMAKE_BUILD_TYPE=Release ..
-```
-
-**Behavior:**
-- **Debug mode**: The `ENABLE_GEOMETRY_DUMP` macro is defined. Geometry dumping code is compiled in and can be enabled/disabled at runtime using the `dump_geometry` flag.
-- **Release mode**: The `ENABLE_GEOMETRY_DUMP` macro is not defined. All geometry dumping code is compiled out for maximum performance.
-
-The solver automatically creates the `dumps/` directory if it doesn't exist.
-
-**Standard tests** (like `test_strategies`) automatically generate dumps in `dumps/` directory.
-
-### Visualization Output
-
-Each iteration generates a PNG file with 3 subplots:
-
-1. **Subplot 1 (Left)**: First equation
-   - Polynomial surface (blue/red colormap)
-   - Zero contour (blue line, the solution curve)
-   - Control points (orange/green dots)
-   - Convex hulls (yellow/cyan polygons)
-   - Intersections with z=0 plane (red lines)
-   - Bounding intervals (red thick lines with square markers)
-
-2. **Subplot 2 (Middle)**: Second equation
-   - Same visualization elements as subplot 1
-
-3. **Subplot 3 (Right)**: Combined view
-   - Both polynomial surfaces
-   - Both zero contours (the intersection is the solution)
-   - Current bounding box (red wireframe)
-   - Final contracted box (green wireframe)
-
-### Understanding the Visualization
-
-- **Control Points**: Bernstein coefficients in graph space (x, y, f(x,y))
-- **Convex Hull**: Convex hull of control points (used for root bounding)
-- **Intersection**: Where convex hull intersects z=0 plane (potential root region)
-- **Bounding Interval**: Projected interval on each axis (red thick line)
-- **Zero Contour**: Where polynomial equals zero (the actual solution curve)
-- **Solution**: Intersection of both zero contours in subplot 3
-
-### Visualization Features
-
-- **Automatic Z-axis Scaling**: Z-axis limits are automatically adjusted to show geometry clearly
-- **Progressive Zoom**: Each iteration shows the previous iteration's box for context
-- **Pruned Cases**: Boxes with empty bounding boxes are marked with red X
-- **Decision Labels**: Each iteration shows the decision (CONTRACT/SUBDIVIDE/PRUNE)
-
-### Requirements
-
-```bash
-# Install Python dependencies
-pip install numpy matplotlib
-
-# Or using uv (recommended)
-uv pip install numpy matplotlib
-```
-
-## Test Suite
-
-All 21 test suites pass (100% pass rate):
-
-### Polynomial Module (4 tests)
-| Test | Description |
-|------|-------------|
-| PolynomialConversionTest | Power ↔ Bernstein conversion |
-| DualRepresentationTest | Dual representation design |
-| PolynomialGraphTest | Graph control points |
-| PolynomialSystemExampleTest | System evaluation |
-
-### Differentiation Module (2 tests)
-| Test | Description |
-|------|-------------|
-| DifferentiationTest | Bernstein differentiation |
-| DegreeZeroDerivativeTest | Edge case handling |
-
-### Geometry Module (4 tests)
-| Test | Description |
-|------|-------------|
-| GeometryConvexTest | Convex hull algorithms |
-| 2DHyperplaneIntersectionTest | Hyperplane intersection |
-| 2DConvexHullRobustTest | Robust 2D convex hull |
-| 2DHullVertexOrderTest | Vertex ordering |
-
-### Solver Module (5 tests)
-| Test | Description |
-|------|-------------|
-| SolverSubdivisionTest | Subdivision solver |
-| ProjectedPolyhedralTest | PP method verification |
-| LinearGraphHullTest | Linear function verification |
-| DegenerateBoxesTest | Degenerate case handling |
-| EllipseDumpTest | Geometry dump feature |
-
-### Result Refiner Module (1 test)
-| Test | Description |
-|------|-------------|
-| ResultRefinerTest | Newton refinement |
-
-### High-Precision Module (4 tests)
-| Test | Description |
-|------|-------------|
-| HighPrecisionTypesTest | HP type definitions |
-| PolynomialHPTest | HP polynomial operations |
-| DifferentiationHPTest | HP differentiation |
-| ResultRefinerHPTest | HP Newton refinement |
-
-### Integration Tests (1 test)
-| Test | Description |
-|------|-------------|
-| SolverRefinerWorkflowTest | Full solve → refine workflow |
-
 ## Documentation
 
-### User Documentation
-- **[docs/PARAMETERS.md](docs/PARAMETERS.md)**: Complete parameter reference with tuning guide
-- **[docs/CONDITIONING_AND_PRECISION.md](docs/CONDITIONING_AND_PRECISION.md)**: Understanding condition numbers and when higher precision is needed
+- [docs/ALGORITHMS.md](docs/ALGORITHMS.md) - Algorithm overview
+- [docs/PARAMETERS.md](docs/PARAMETERS.md) - Parameter reference
+- [docs/VISUALIZATION.md](docs/VISUALIZATION.md) - Visualization and geometry dump
+- [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) - High-precision arithmetic
+- [docs/CONDITIONING_AND_PRECISION.md](docs/CONDITIONING_AND_PRECISION.md) - Condition numbers
+- [docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md) - Geometric algorithms
+- [docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md) - Degeneracy handling
+- [examples/README.md](examples/README.md) - Example programs
 
-### Technical Documentation
-- **[docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md)**: Geometric algorithms (convex hull, hyperplane intersection)
-- **[docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md)**: Degeneracy detection and handling
-- **[docs/result_refinement_design.md](docs/result_refinement_design.md)**: High-precision result refinement design
+## Tests
 
-### API Documentation
-- **[include/polynomial_solver.h](include/polynomial_solver.h)**: Unified header with comprehensive usage examples
-
-## Moving to Another Environment
-
-This project is fully portable. To move to another environment:
-
-1. **Copy the entire project directory**
-2. **Run prerequisite checker**: `./check_prerequisites.sh`
-3. **Install missing dependencies** (if any)
-4. **Build**: `./build.sh --test`
-
-All dependencies are standard C++11 libraries. No external libraries required.
-
-## Author
-
-- **User**: gol2em
-- **Email**: wenyd@lsec.cc.ac.cn
+```bash
+cd build && ctest
+```
 
 ## License
 

@@ -39,11 +39,13 @@ Makefile
 *.app
 
 # Playground directory - for local experimentation only
-# Keep ONLY: Makefile.in (template), README.md, docs/, research_tests/ structure
-# Ignore: Makefile (auto-generated), executables, dumps, samples, Python files, etc.
+# Keep ONLY: Makefile.in, README.md, docs/, research_tests/, hessian_zero_set.cpp, visualize_refined_points.py
+# Ignore: all other files (executables, dumps, intermediate files, etc.)
 playground/*
 !playground/Makefile.in
 !playground/README.md
+!playground/hessian_zero_set.cpp
+!playground/visualize_refined_points.py
 !playground/docs/
 playground/docs/*
 !playground/docs/*.md
@@ -79,13 +81,15 @@ dist/
 *.egg
 
 # IDE specific files
-.vscode/*
-!.vscode/c_cpp_properties.json
+.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Internal documentation (not for distribution)
+MODULE_SUMMARY.md
 
 # Generated files (symlink to build/compile_commands.json)
 compile_commands.json

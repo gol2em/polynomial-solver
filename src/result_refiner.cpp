@@ -1085,5 +1085,165 @@ bool ResultRefiner::refineRoot1DWithPrecisionEscalation(
 }
 #endif
 
+//=============================================================================
+// CurveRefiner Implementation
+//=============================================================================
+
+CurveRefiner::CurveRefiner(const Polynomial& curve_poly)
+    : curve_poly_(curve_poly)
+{
+    if (curve_poly.dimension() != 2) {
+        throw std::invalid_argument(
+            "CurveRefiner requires a 2-dimensional polynomial, got dimension " +
+            std::to_string(curve_poly.dimension()));
+    }
+
+    // Precompute partial derivatives
+    dg_dx_ = Differentiation::derivative(curve_poly_, 0, 1);
+    dg_dy_ = Differentiation::derivative(curve_poly_, 1, 1);
+}
+
+CurveRefinedPoint CurveRefiner::refine(
+    double x0, double y0,
+    const CurveRefinementConfig& config) const
+{
+    CurveRefinedPoint result;
+    result.x = x0;
+    result.y = y0;
+    result.converged = false;
+    result.iterations = 0;
+
+    double x = x0, y = y0;
+
+    for (unsigned int iter = 0; iter < config.max_iterations; ++iter) {
+        result.iterations = iter + 1;
+
+        // Evaluate g and its gradient at current point
+        double g = curve_poly_.evaluate({x, y});
+        double gx = dg_dx_.evaluate({x, y});
+        double gy = dg_dy_.evaluate({x, y});
+
+        // Check convergence
+        result.residual = std::abs(g);
+        if (result.residual < config.residual_tolerance) {
+            result.x = x;
+            result.y = y;
+            result.converged = true;
+            return result;
+        }
+
+        // Gradient magnitude squared
+        double grad_sq = gx * gx + gy * gy;
+
+        if (grad_sq < config.min_gradient_norm) {
+            // At or near a singular point (gradient too small)
+            result.x = x;
+            result.y = y;
+            return result;
+        }
+
+        // Newton step along gradient: move by -g/|∇g|² × ∇g
+        double t = -g / grad_sq;
+        x += t * gx;
+        y += t * gy;
+    }
+
+    // Did not converge within max iterations
+    result.x = x;
+    result.y = y;
+    result.residual = std::abs(curve_poly_.evaluate({x, y}));
+    return result;
+}
+
+std::vector<CurveRefinedPoint> CurveRefiner::refineMultiple(
+    const std::vector<std::pair<double, double>>& points,
+    const CurveRefinementConfig& config) const
+{
+    std::vector<CurveRefinedPoint> results;
+    results.reserve(points.size());
+
+    for (const auto& pt : points) {
+        results.push_back(refine(pt.first, pt.second, config));
+    }
+
+    return results;
+}
+
+//=============================================================================
+// Function-based curve refinement (numerical gradient)
+//=============================================================================
+
+CurveRefinedPoint refineCurveNumerical(
+    const std::function<double(double, double)>& g,
+    double x0, double y0,
+    const CurveRefinementConfig& config)
+{
+    CurveRefinedPoint result;
+    result.x = x0;
+    result.y = y0;
+    result.converged = false;
+    result.iterations = 0;
+
+    double x = x0, y = y0;
+    const double h = 1e-8;  // Step size for numerical gradient
+
+    for (unsigned int iter = 0; iter < config.max_iterations; ++iter) {
+        result.iterations = iter + 1;
+
+        // Evaluate function at current point
+        double val = g(x, y);
+        result.residual = std::abs(val);
+
+        // Check convergence
+        if (result.residual < config.residual_tolerance) {
+            result.x = x;
+            result.y = y;
+            result.converged = true;
+            return result;
+        }
+
+        // Compute numerical gradient using central differences
+        double gx = (g(x + h, y) - g(x - h, y)) / (2 * h);
+        double gy = (g(x, y + h) - g(x, y - h)) / (2 * h);
+
+        // Gradient squared norm
+        double grad_sq = gx * gx + gy * gy;
+
+        // Check for singular point (gradient too small)
+        if (grad_sq < config.min_gradient_norm * config.min_gradient_norm) {
+            result.x = x;
+            result.y = y;
+            return result;  // converged = false
+        }
+
+        // Newton step along gradient direction
+        // Project point onto zero set: (x,y) -= (g / |∇g|²) * ∇g
+        double t = -val / grad_sq;
+        x += t * gx;
+        y += t * gy;
+    }
+
+    // Did not converge within max iterations
+    result.x = x;
+    result.y = y;
+    result.residual = std::abs(g(x, y));
+    return result;
+}
+
+std::vector<CurveRefinedPoint> refineCurveNumericalMultiple(
+    const std::function<double(double, double)>& g,
+    const std::vector<std::pair<double, double>>& points,
+    const CurveRefinementConfig& config)
+{
+    std::vector<CurveRefinedPoint> results;
+    results.reserve(points.size());
+
+    for (const auto& pt : points) {
+        results.push_back(refineCurveNumerical(g, pt.first, pt.second, config));
+    }
+
+    return results;
+}
+
 } // namespace polynomial_solver
 
