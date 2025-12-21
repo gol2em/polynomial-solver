@@ -19,10 +19,11 @@
 PROJECT_ROOT := @PROJECT_SOURCE_DIR@
 BUILD_DIR := @PROJECT_BINARY_DIR@
 INCLUDE_DIR := $(PROJECT_ROOT)/include
+BUILD_INCLUDE_DIR := $(BUILD_DIR)/include
 
 # Compiler settings (from CMake configuration)
 CXX := @CMAKE_CXX_COMPILER@
-CXXFLAGS := @CMAKE_CXX_FLAGS@ -std=c++11 -Wall -I$(INCLUDE_DIR)
+CXXFLAGS := @CMAKE_CXX_FLAGS@ -std=c++11 -Wall -I$(INCLUDE_DIR) -I$(BUILD_INCLUDE_DIR)
 LDFLAGS := @PLAYGROUND_LINK_FLAGS@
 
 # Add high-precision flags if enabled

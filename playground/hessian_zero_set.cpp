@@ -16,6 +16,7 @@
  *   -d <degree>       Polynomial degree, default: 10
  *   -t <tolerance>    Solver tolerance, default: 1e-6
  *   -m <max_depth>    Max subdivision depth, default: 15
+ *   -hp               Use high-precision refinement (~1e-30 accuracy vs ~1e-6)
  *   -q                Quiet mode (machine-readable output)
  *
  * EXAMPLE: f(x,y) = exp(-(x² + y²)), zero set is circle r = 1/√2
@@ -27,6 +28,11 @@
 #include <cmath>
 #include <vector>
 #include <cstring>
+
+#ifdef ENABLE_HIGH_PRECISION
+#include <result_refiner_hp.h>
+#include <precision_context.h>
+#endif
 
 using namespace polynomial_solver;
 
@@ -53,6 +59,7 @@ struct Config {
     double tolerance = 1e-6;
     unsigned int max_depth = 15;
     bool quiet = false;
+    bool high_precision = false;
 };
 
 Config parse_args(int argc, char* argv[]) {
@@ -63,9 +70,10 @@ Config parse_args(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "-d") == 0 && i+1 < argc) cfg.degree = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-t") == 0 && i+1 < argc) cfg.tolerance = std::atof(argv[++i]);
         else if (std::strcmp(argv[i], "-m") == 0 && i+1 < argc) cfg.max_depth = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "-hp") == 0) cfg.high_precision = true;
         else if (std::strcmp(argv[i], "-q") == 0) cfg.quiet = true;
         else if (std::strcmp(argv[i], "-h") == 0) {
-            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-t tol] [-m depth] [-q]\n";
+            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-t tol] [-m depth] [-hp] [-q]\n";
             std::exit(0);
         }
     }
@@ -154,37 +162,95 @@ int main(int argc, char* argv[]) {
 
     if (!cfg.quiet) {
         std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
+        if (cfg.high_precision) {
+            std::cout << "Refinement: HIGH PRECISION (h=1e-20, tol=1e-30)\n";
+        } else {
+            std::cout << "Refinement: double precision (h=1e-5, tol=1e-5)\n";
+        }
     }
 
     // Step 6: Refine using numerical Hessian determinant (function evaluations only)
-    // Note: Numerical second derivatives have ~h^2 error where h=1e-5, so ~1e-6 residual
     double max_box_err = 0.0, max_refined_err = 0.0;
     unsigned int n_refined = 0;
 
-    CurveRefinementConfig refine_cfg;
-    refine_cfg.residual_tolerance = 1e-5;  // Limited by numerical derivative accuracy
-    refine_cfg.max_iterations = 50;
+#ifdef ENABLE_HIGH_PRECISION
+    if (cfg.high_precision) {
+        // High-precision refinement: use smaller step size for much better accuracy
+        PrecisionContext ctx(256);  // ~77 decimal digits
 
-    for (std::size_t k = 0; k < all_boxes.size(); ++k) {
-        const auto& box = all_boxes[k];
-        const auto& reg = regions[box_region[k]];
+        // High-precision version of f_user
+        auto f_hp = [](const mpreal& x, const mpreal& y) -> mpreal {
+            return exp(-(x * x + y * y));
+        };
 
-        double s = (box.lower[0] + box.upper[0]) / 2.0;
-        double t = (box.lower[1] + box.upper[1]) / 2.0;
-        double u = reg.u0 + (reg.u1 - reg.u0) * s;
-        double v = reg.v0 + (reg.v1 - reg.v0) * t;
-        double xc, yc;
-        to_original(u, v, hw, xc, yc);
+        // High-precision Hessian determinant with smaller step size
+        auto hessian_det_hp = [&f_hp](const mpreal& x, const mpreal& y) -> mpreal {
+            mpreal h("1e-20");  // Much smaller step size possible with HP
+            mpreal f00 = f_hp(x, y);
+            mpreal f_xx = (f_hp(x+h, y) - mpreal(2)*f00 + f_hp(x-h, y)) / (h*h);
+            mpreal f_yy = (f_hp(x, y+h) - mpreal(2)*f00 + f_hp(x, y-h)) / (h*h);
+            mpreal f_xy = (f_hp(x+h, y+h) - f_hp(x+h, y-h) - f_hp(x-h, y+h) + f_hp(x-h, y-h)) / (mpreal(4)*h*h);
+            return f_xx * f_yy - f_xy * f_xy;
+        };
 
-        double r = std::sqrt(xc * xc + yc * yc);
-        max_box_err = std::max(max_box_err, std::abs(r - exp_r));
+        CurveRefinementConfigHP refine_cfg_hp;
+        refine_cfg_hp.residual_tolerance_str = "1e-30";
+        refine_cfg_hp.step_size_str = "1e-20";
+        refine_cfg_hp.max_iterations = 100;
 
-        // Use library function: refineCurveNumerical with hessian_det_numerical
-        auto result = refineCurveNumerical(hessian_det_numerical, xc, yc, refine_cfg);
-        if (result.converged) {
-            double rr = std::sqrt(result.x * result.x + result.y * result.y);
-            max_refined_err = std::max(max_refined_err, std::abs(rr - exp_r));
-            n_refined++;
+        mpreal exp_r_hp = mpreal(1) / sqrt(mpreal(2));
+
+        for (std::size_t k = 0; k < all_boxes.size(); ++k) {
+            const auto& box = all_boxes[k];
+            const auto& reg = regions[box_region[k]];
+
+            double s = (box.lower[0] + box.upper[0]) / 2.0;
+            double t = (box.lower[1] + box.upper[1]) / 2.0;
+            double u = reg.u0 + (reg.u1 - reg.u0) * s;
+            double v = reg.v0 + (reg.v1 - reg.v0) * t;
+            double xc, yc;
+            to_original(u, v, hw, xc, yc);
+
+            double r = std::sqrt(xc * xc + yc * yc);
+            max_box_err = std::max(max_box_err, std::abs(r - exp_r));
+
+            auto result = refineCurveNumericalHP(hessian_det_hp, xc, yc, refine_cfg_hp);
+            if (result.converged) {
+                mpreal rr = sqrt(result.x * result.x + result.y * result.y);
+                double err = static_cast<double>(abs(rr - exp_r_hp));
+                max_refined_err = std::max(max_refined_err, err);
+                n_refined++;
+            }
+        }
+    } else
+#endif
+    {
+        // Double-precision refinement
+        // Note: Numerical second derivatives have ~h^2 error where h=1e-5, so ~1e-6 residual
+        CurveRefinementConfig refine_cfg;
+        refine_cfg.residual_tolerance = 1e-5;  // Limited by numerical derivative accuracy
+        refine_cfg.max_iterations = 50;
+
+        for (std::size_t k = 0; k < all_boxes.size(); ++k) {
+            const auto& box = all_boxes[k];
+            const auto& reg = regions[box_region[k]];
+
+            double s = (box.lower[0] + box.upper[0]) / 2.0;
+            double t = (box.lower[1] + box.upper[1]) / 2.0;
+            double u = reg.u0 + (reg.u1 - reg.u0) * s;
+            double v = reg.v0 + (reg.v1 - reg.v0) * t;
+            double xc, yc;
+            to_original(u, v, hw, xc, yc);
+
+            double r = std::sqrt(xc * xc + yc * yc);
+            max_box_err = std::max(max_box_err, std::abs(r - exp_r));
+
+            auto result = refineCurveNumerical(hessian_det_numerical, xc, yc, refine_cfg);
+            if (result.converged) {
+                double rr = std::sqrt(result.x * result.x + result.y * result.y);
+                max_refined_err = std::max(max_refined_err, std::abs(rr - exp_r));
+                n_refined++;
+            }
         }
     }
 

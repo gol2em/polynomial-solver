@@ -47,6 +47,7 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <functional>
 
 namespace polynomial_solver {
 
@@ -386,6 +387,76 @@ public:
         mpreal& lower,
         mpreal& upper);
 };
+
+//=============================================================================
+// High-Precision Curve Refinement
+//=============================================================================
+
+/**
+ * @brief Result of high-precision curve refinement
+ */
+struct CurveRefinedPointHP {
+    mpreal x;                ///< Refined x coordinate
+    mpreal y;                ///< Refined y coordinate
+    mpreal residual;         ///< |g(x, y)| at refined point
+    unsigned int iterations; ///< Number of iterations
+    bool converged;          ///< True if converged within tolerance
+};
+
+/**
+ * @brief Configuration for high-precision curve refinement
+ */
+struct CurveRefinementConfigHP {
+    std::string residual_tolerance_str = "1e-50";  ///< Convergence criterion |g(x,y)| < tol
+    unsigned int max_iterations = 100;              ///< Maximum Newton iterations
+    std::string min_gradient_norm_str = "1e-100";   ///< Minimum |∇g| to avoid singularity
+    std::string step_size_str = "1e-20";            ///< Step size h for numerical gradient
+};
+
+/**
+ * @brief Refine a point onto a curve g(x,y) = 0 using high-precision arithmetic
+ *
+ * Uses gradient projection method with numerical gradient computed in high precision.
+ * The smaller step size enabled by high precision gives much more accurate gradients.
+ *
+ * @param g Function g(x,y) using high-precision types
+ * @param x0 Initial x coordinate (double precision, will be converted)
+ * @param y0 Initial y coordinate (double precision, will be converted)
+ * @param config Refinement configuration
+ * @return Refinement result with converged point
+ *
+ * Usage:
+ * @code
+ * // Compute Hessian determinant with high precision
+ * auto hessian_det_hp = [&f_hp](const mpreal& x, const mpreal& y) -> mpreal {
+ *     mpreal h("1e-20");  // Much smaller step size in HP
+ *     mpreal f00 = f_hp(x, y);
+ *     mpreal f_xx = (f_hp(x+h, y) - 2*f00 + f_hp(x-h, y)) / (h*h);
+ *     mpreal f_yy = (f_hp(x, y+h) - 2*f00 + f_hp(x, y-h)) / (h*h);
+ *     mpreal f_xy = (f_hp(x+h, y+h) - f_hp(x+h, y-h) - f_hp(x-h, y+h) + f_hp(x-h, y-h)) / (4*h*h);
+ *     return f_xx * f_yy - f_xy * f_xy;
+ * };
+ *
+ * CurveRefinedPointHP result = refineCurveNumericalHP(hessian_det_hp, 0.5, 0.5);
+ * @endcode
+ */
+CurveRefinedPointHP refineCurveNumericalHP(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& g,
+    double x0, double y0,
+    const CurveRefinementConfigHP& config = CurveRefinementConfigHP());
+
+/**
+ * @brief Refine multiple points onto a curve using high-precision arithmetic
+ *
+ * @param g Function g(x,y) using high-precision types
+ * @param points Vector of (x, y) pairs to refine (double precision)
+ * @param config Refinement configuration
+ * @return Vector of high-precision refinement results
+ */
+std::vector<CurveRefinedPointHP> refineCurveNumericalHPMultiple(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& g,
+    const std::vector<std::pair<double, double>>& points,
+    const CurveRefinementConfigHP& config = CurveRefinementConfigHP());
 
 } // namespace polynomial_solver
 

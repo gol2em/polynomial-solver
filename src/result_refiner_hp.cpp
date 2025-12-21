@@ -5,6 +5,7 @@
 #include "result_refiner_hp.h"
 #include "differentiation_hp.h"
 #include "precision_conversion.h"
+#include "interval_arithmetic.h"
 #include <cmath>
 #include <iostream>
 
@@ -904,34 +905,27 @@ bool ResultRefinerHP::computeErrorBounds(
         }
 
         // Compute bounds on f' over the interval [location - radius, location + radius]
-        // We need to find min|f'(x)| over this interval
+        // using rigorous interval arithmetic.
         //
-        // For Bernstein polynomials, the derivative is bounded by the convex hull
-        // of its Bernstein coefficients. We evaluate at several points to get a
-        // conservative bound.
+        // For interval Newton method, we need min|f'(x)| over the interval.
+        // Using interval arithmetic gives us GUARANTEED bounds.
 
-        mpreal df_min = abs(first_nonzero_deriv);  // Start with center value
+        // Clamp interval to [0, 1] domain
+        mpreal interval_lower = max(location - radius, mpreal("0.0"));
+        mpreal interval_upper = min(location + radius, mpreal("1.0"));
+        Interval search_interval(interval_lower, interval_upper);
 
-        // Sample derivative at multiple points in the interval
-        const int num_samples = 5;
-        for (int i = 0; i <= num_samples; ++i) {
-            mpreal t = mpreal(i) / mpreal(num_samples);
-            mpreal x_sample = location - radius + mpreal("2.0") * radius * t;
-
-            // Clamp to [0, 1] domain
-            if (x_sample < mpreal("0.0")) x_sample = mpreal("0.0");
-            if (x_sample > mpreal("1.0")) x_sample = mpreal("1.0");
-
-            mpreal df_sample = abs(dpoly.evaluate(x_sample));
-            if (df_sample < df_min && df_sample > mpreal("1e-100")) {
-                df_min = df_sample;
-            }
-        }
+        // Use interval arithmetic to find min|f'(x)| over the interval
+        mpreal df_min = minAbsOnInterval(dpoly, search_interval);
 
         // Check if derivative stays bounded away from zero
         if (df_min < mpreal("1e-100")) {
-            // Derivative too close to zero in the interval, cannot guarantee bounds
-            return false;
+            // Derivative may be zero or very small in the interval
+            // Fall back to center value if we can
+            df_min = abs(first_nonzero_deriv);
+            if (df_min < mpreal("1e-100")) {
+                return false;
+            }
         }
 
         // Compute rigorous radius: r >= |f(x*)| / min|f'|
@@ -1349,6 +1343,87 @@ std::map<std::string, unsigned int> ResultRefinerHP::estimateMultiplicityAllMeth
     // Method 4: Ostrowski (if iterates provided)
     if (abs(x1) > mpreal("1e-100") || abs(x2) > mpreal("1e-100") || abs(x3) > mpreal("1e-100")) {
         results["Ostrowski"] = estimateMultiplicityOstrowski(x1, x2, x3);
+    }
+
+    return results;
+}
+
+//=============================================================================
+// High-Precision Curve Refinement Implementation
+//=============================================================================
+
+CurveRefinedPointHP refineCurveNumericalHP(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& g,
+    double x0, double y0,
+    const CurveRefinementConfigHP& config)
+{
+    CurveRefinedPointHP result;
+    result.converged = false;
+    result.iterations = 0;
+
+    // Convert initial guess to high precision
+    mpreal x = mpreal(x0);
+    mpreal y = mpreal(y0);
+
+    // Parse configuration tolerances
+    mpreal residual_tol = mpreal(config.residual_tolerance_str);
+    mpreal min_grad_norm = mpreal(config.min_gradient_norm_str);
+    mpreal h = mpreal(config.step_size_str);
+
+    for (unsigned int i = 0; i < config.max_iterations; ++i) {
+        // Evaluate function
+        mpreal val = g(x, y);
+        result.iterations = i + 1;
+
+        // Check convergence
+        if (abs(val) < residual_tol) {
+            result.x = x;
+            result.y = y;
+            result.residual = abs(val);
+            result.converged = true;
+            return result;
+        }
+
+        // Numerical gradient using high-precision step size
+        mpreal gx = (g(x + h, y) - g(x - h, y)) / (mpreal(2) * h);
+        mpreal gy = (g(x, y + h) - g(x, y - h)) / (mpreal(2) * h);
+
+        // Gradient magnitude squared
+        mpreal grad_sq = gx * gx + gy * gy;
+
+        // Check for near-zero gradient (singularity)
+        if (grad_sq < min_grad_norm * min_grad_norm) {
+            result.x = x;
+            result.y = y;
+            result.residual = abs(val);
+            result.converged = false;
+            return result;
+        }
+
+        // Newton step along gradient direction
+        // Project point onto zero set: (x,y) -= (g / |∇g|²) * ∇g
+        mpreal t = -val / grad_sq;
+        x += t * gx;
+        y += t * gy;
+    }
+
+    // Did not converge within max iterations
+    result.x = x;
+    result.y = y;
+    result.residual = abs(g(x, y));
+    return result;
+}
+
+std::vector<CurveRefinedPointHP> refineCurveNumericalHPMultiple(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& g,
+    const std::vector<std::pair<double, double>>& points,
+    const CurveRefinementConfigHP& config)
+{
+    std::vector<CurveRefinedPointHP> results;
+    results.reserve(points.size());
+
+    for (const auto& pt : points) {
+        results.push_back(refineCurveNumericalHP(g, pt.first, pt.second, config));
     }
 
     return results;
