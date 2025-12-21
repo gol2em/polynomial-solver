@@ -20,35 +20,57 @@ make test_with_geometry_dump
 python3 visualize_circle_boxes_2d.py
 ```
 
-### 2. Hessian Determinant Zero Set (`test_hessian_determinant`)
-Finds regions where a function is convex/concave/saddle by computing the zero set of det(Hessian).
+### 2. Hessian Zero Set Finder (`hessian_zero_set`)
 
-**Function on [-1,1]²:**
-- f1 = 10xy²x + √|x²y|
-- f2 = atan2(0.001, sin(5y) - 2x)
-- f3 = 10y³ + x³
-- f4 = atan2(0.01, sin(5x) - 2y)
-- f = f1 + f2 + f3 + f4
+**The recommended example for finding zero sets of Hessian determinants of nonlinear functions.**
+
+This demonstrates the complete workflow:
+1. Divide domain into subregions for better local approximation
+2. Interpolate f(x,y) as polynomial in each subregion
+3. Compute symbolic Hessian using `Differentiation::hessian()`
+4. Compute det(H) = H[0][0]\*H[1][1] - H[0][1]² using polynomial arithmetic
+5. Find zero set using subdivision solver
+6. Refine box centers onto curve using Newton's method
 
 **Usage:**
 ```bash
-make test_hessian_determinant
-./test_hessian_determinant [degree]  # default degree=10
-python3 visualize_hessian_det.py
+make hessian_zero_set
+./hessian_zero_set [options]
+
+Options:
+  -r <half_width>   Region = [-r, r]², default: 1.5
+  -s <subdivisions> Subdivisions per axis, default: 4
+  -d <degree>       Polynomial degree, default: 10
+  -t <tolerance>    Solver tolerance, default: 1e-6
+  -m <max_depth>    Max subdivision depth, default: 15
+  -q                Quiet mode (output: boxes box_err refined_err)
 ```
 
-**How it works:**
-1. Transforms domain from [-1,1]² to [0,1]² via (x,y) = (2u-1, 2v-1)
-2. Interpolates det(Hessian) with Bernstein polynomial of degree k×k
-3. Finds zero set using the Projected Polyhedral method
-4. Visualizes regions:
-   - Red (det(H) > 0): Locally convex or concave
-   - Blue (det(H) < 0): Saddle points
-   - Black curve: Boundary (det(H) = 0)
+**Example function** (modify in source for your application):
+- f(x,y) = exp(-(x² + y²))  (Gaussian surface)
+- Zero set of det(H): circle of radius r = 1/√2 ≈ 0.7071
 
-**Parameters:**
-- `degree`: Bernstein interpolation degree (higher = more accurate, slower)
-- Recommended: 5-15 for good balance
+**Key API usage:**
+```cpp
+// 1. Interpolate nonlinear function as polynomial
+Polynomial f = Interpolation::interpolate2D(func, degree, degree,
+    0.0, 1.0, 0.0, 1.0, AbscissaeType::CHEBYSHEV);
+
+// 2. Compute symbolic Hessian
+auto H = Differentiation::hessian(f);
+
+// 3. Compute determinant using polynomial arithmetic
+Polynomial det_H = H[0][0] * H[1][1] - H[0][1] * H[0][1];
+
+// 4. Solve
+Solver solver;
+auto result = solver.subdivisionSolve(PolynomialSystem({det_H}), config);
+
+// 5. Refine using CurveRefiner (polynomial) or numerical gradient (function)
+```
+
+### 3. Legacy Hessian Test (`test_hessian_determinant`)
+Older test for a complex analytical function. See source for details.
 
 ## Building
 

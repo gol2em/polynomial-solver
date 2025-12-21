@@ -137,6 +137,7 @@ struct SubdivisionConfig {
     SubdivisionStrategy strategy; ///< Subdivision strategy to use (default: ContractFirst).
     bool dump_geometry;        ///< If true, dump detailed geometric information during solving.
     std::string dump_prefix;   ///< Prefix for dump files (default: "dump").
+    bool verbose_warnings;     ///< If true, print warnings to stderr (default: false).
 
     SubdivisionConfig()
         : tolerance(1e-8),
@@ -145,7 +146,8 @@ struct SubdivisionConfig {
           contraction_threshold(0.9),
           strategy(SubdivisionStrategy::ContractFirst),
           dump_geometry(false),
-          dump_prefix("dump")
+          dump_prefix("dump"),
+          verbose_warnings(false)
     {
     }
 };
