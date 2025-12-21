@@ -1,141 +1,141 @@
 # Playground
 
-This directory contains experimental tests for the polynomial solver library.
+This directory contains the primary example and research materials for the polynomial solver library.
 
-## Samples
+## Quick Start: Finding Zero Sets of Nonlinear Functions
 
-The `samples/` folder contains simple, well-tested examples demonstrating successful usage:
-- **Circle Test**: Finding the zero set of x² + y² - 1 = 0
+The **`hessian_zero_set.cpp`** example demonstrates the complete workflow for finding zero sets of Hessian determinants (or any nonlinear function you define).
 
-See `samples/README.md` for details.
-
-## Experimental Tests
-
-### 1. Circle Test (`test_with_geometry_dump`)
-Tests the solver on a simple circle equation: x² + y² - 1 = 0
+### Build and Run
 
 ```bash
-make test_with_geometry_dump
-./test_with_geometry_dump
-python3 visualize_circle_boxes_2d.py
+cd playground
+make hessian_zero_set
+./hessian_zero_set
 ```
 
-### 2. Hessian Zero Set Finder (`hessian_zero_set`)
+### Command Line Options
 
-**The recommended example for finding zero sets of Hessian determinants of nonlinear functions.**
-
-This demonstrates the complete workflow:
-1. Divide domain into subregions for better local approximation
-2. Interpolate f(x,y) as polynomial in each subregion
-3. Compute symbolic Hessian using `Differentiation::hessian()`
-4. Compute det(H) = H[0][0]\*H[1][1] - H[0][1]² using polynomial arithmetic
-5. Find zero set using subdivision solver
-6. Refine box centers onto curve using Newton's method
-
-**Usage:**
-```bash
-make hessian_zero_set
+```
 ./hessian_zero_set [options]
-
-Options:
   -r <half_width>   Region = [-r, r]², default: 1.5
   -s <subdivisions> Subdivisions per axis, default: 4
-  -d <degree>       Polynomial degree, default: 10
-  -t <tolerance>    Solver tolerance, default: 1e-6
-  -m <max_depth>    Max subdivision depth, default: 15
-  -q                Quiet mode (output: boxes box_err refined_err)
+  -d <degree>       Polynomial degree for interpolation, default: 10
+  -n <boxes>        Target boxes per subregion, default: 2000
+  -t <tolerance>    Solver box tolerance, default: 1e-6
+  -hp               Use high-precision refinement (~1e-30 vs ~1e-6 accuracy)
+  -q                Quiet mode (output: total_boxes max_box_err max_refined_err)
 ```
 
-**Example function** (modify in source for your application):
-- f(x,y) = exp(-(x² + y²))  (Gaussian surface)
-- Zero set of det(H): circle of radius r = 1/√2 ≈ 0.7071
+### Example Output
 
-**Key API usage:**
+```bash
+# Normal mode
+$ ./hessian_zero_set -r 1.0 -s 2 -n 1500
+Hessian Zero Set Finder
+=======================
+Region: [-1, 1]^2
+Subdivisions: 2x2
+Polynomial degree: 10 (Hessian det degree: 16)
+Target boxes/subregion: 1500
+Solver tolerance: 1e-06
+Expected radius: 0.707107
+
+Region [0,0]: 6514 boxes
+...
+Total boxes: 26041
+Refinement: double precision (h=1e-5, tol=1e-5)
+
+=== Results ===
+Refined: 20131/26041
+Max box error:     1.407757e-03
+Max refined error: 3.253795e-06
+
+# Quiet mode for scripting (outputs: boxes box_err refined_err)
+$ ./hessian_zero_set -q
+48386 0.000666702 3.22552e-06
+
+# High-precision refinement (~1e-30 accuracy)
+$ ./hessian_zero_set -hp -q
+48386 0.000666702 2.34e-31
+```
+
+### Customizing for Your Function
+
+Modify the **USER-DEFINED FUNCTION** section at the top of the source file:
+
 ```cpp
-// 1. Interpolate nonlinear function as polynomial
-Polynomial f = Interpolation::interpolate2D(func, degree, degree,
-    0.0, 1.0, 0.0, 1.0, AbscissaeType::CHEBYSHEV);
+// === USER-DEFINED FUNCTION ===
+double f_user(double x, double y) {
+    return std::exp(-(x*x + y*y));  // Replace with your function
+}
 
-// 2. Compute symbolic Hessian
+double expected_radius() {
+    return 1.0 / std::sqrt(2.0);    // Replace with your expected value (for validation)
+}
+```
+
+### Workflow Summary
+
+1. **Divide** domain into subregions for better local polynomial approximation
+2. **Interpolate** f(x,y) as polynomial using Chebyshev nodes
+3. **Compute** symbolic Hessian matrix via `Differentiation::hessian()`
+4. **Compute** det(H) = H₁₁·H₂₂ - H₁₂² using polynomial arithmetic
+5. **Solve** for zero set using subdivision solver (PP method)
+6. **Refine** box centers onto curve via Newton's method with numerical gradient
+
+### Key API Functions
+
+```cpp
+// Interpolate nonlinear function as polynomial
+Polynomial f = Interpolation::interpolate2D(func, degree, degree,
+    u_min, u_max, v_min, v_max, AbscissaeType::CHEBYSHEV);
+
+// Compute symbolic Hessian matrix
 auto H = Differentiation::hessian(f);
 
-// 3. Compute determinant using polynomial arithmetic
+// Compute determinant
 Polynomial det_H = H[0][0] * H[1][1] - H[0][1] * H[0][1];
 
-// 4. Solve
+// Configure and solve
+SubdivisionConfig config = defaultSolverConfig();
+config.tolerance = 1e-6;
+config.degeneracy_multiplier = target_boxes / (degree * degree);
+
 Solver solver;
 auto result = solver.subdivisionSolve(PolynomialSystem({det_H}), config);
 
-// 5. Refine using CurveRefiner (polynomial) or numerical gradient (function)
+// Refine (double precision)
+refineCurveNumerical(g_func, x0, y0, CurveRefinementConfig{1e-5, 1e-5, 50});
+
+// Refine (high precision, ~1e-30 accuracy)
+refineCurveNumericalHP(g_hp_func, x0, y0, CurveRefinementConfigHP{"1e-20", "1e-30", 100});
 ```
 
-### 3. Legacy Hessian Test (`test_hessian_determinant`)
-Older test for a complex analytical function. See source for details.
+## Directory Contents
 
-## Building
+- **`hessian_zero_set.cpp`** - Main example (see above)
+- **`docs/`** - Technical documentation on algorithms and methods
+- **`research_tests/`** - Research and debugging test files
 
-The playground has an **auto-generated Makefile** that stays in sync with the library's dependencies.
+## Building Your Own Tests
 
-### Quick Start
+The playground has an auto-generated Makefile that stays in sync with library dependencies:
 
 ```bash
-cd playground
-make test_program_name
-./test_program_name
+# Compile any .cpp file
+make your_test
+./your_test
 ```
 
-That's it! The Makefile is automatically generated when you run `cmake` in the main project.
-
-### Workflow
-
-1. **Configure the main project** (first time or after adding dependencies):
-   ```bash
-   cd /path/to/polynomial-solver
-   cmake -B build
-   ```
-   This generates `playground/Makefile` with all the correct link flags.
-
-2. **Create your test file**:
-   ```bash
-   cd playground
-   # Create test.cpp with your experimental code
-   ```
-
-3. **Compile and run**:
-   ```bash
-   make test
-   ./test
-   ```
-
-### Building All Programs
-
-```bash
-cd playground
-make all
-```
-
-This compiles all `.cpp` files in the playground directory.
-
-### Cleaning Up
-
-```bash
-make clean
-```
-
-### How It Works
-
-- When you run `cmake` in the main project, it generates `playground/Makefile` from `Makefile.in`
-- The generated Makefile includes all necessary:
-  - Compiler flags
-  - Include paths
-  - Link libraries (polynomial_solver, MPFR, GMP, Boost, etc.)
-  - High-precision flags (if enabled)
-- You just use `make <name>` to compile `<name>.cpp` → `<name>` executable
-- No need to manually specify `-I`, `-L`, `-l` flags!
+The Makefile is generated when you run `cmake -B build` in the project root. It automatically includes:
+- All compiler flags and include paths
+- Link libraries (polynomial_solver, MPFR, GMP, etc.)
+- High-precision flags (if enabled)
 
 ## Research Tests
 
-The `research_tests/` subdirectory also has an auto-generated Makefile:
+The `research_tests/` subdirectory contains tests for algorithm development:
 
 ```bash
 cd playground/research_tests
@@ -143,11 +143,4 @@ make test_multiplicity_methods
 ./test_multiplicity_methods
 ```
 
-**Note:** Research tests may require updates to compile with the current codebase.
-
-## Why This Approach?
-
-✅ **Simple**: Just `make test` to compile `test.cpp`
-✅ **Automatic**: Dependencies tracked by CMake, no manual updates needed
-✅ **Fast**: Direct compilation, no CMake overhead for quick experiments
-✅ **Flexible**: Add any `.cpp` file and compile it immediately
+See `research_tests/README.md` for details.

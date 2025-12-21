@@ -13,9 +13,9 @@
  * USAGE: ./hessian_zero_set [options]
  *   -r <half_width>   Region = [-r, r]², default: 1.5
  *   -s <subdivisions> Subdivisions per axis, default: 4
- *   -d <degree>       Polynomial degree, default: 10
- *   -t <tolerance>    Solver tolerance, default: 1e-6
- *   -m <max_depth>    Max subdivision depth, default: 15
+ *   -d <degree>       Polynomial degree for interpolation, default: 10
+ *   -n <boxes>        Target boxes per subregion, default: 2000
+ *   -t <tolerance>    Solver box tolerance, default: 1e-6
  *   -hp               Use high-precision refinement (~1e-30 accuracy vs ~1e-6)
  *   -q                Quiet mode (machine-readable output)
  *
@@ -56,8 +56,8 @@ struct Config {
     double half_width = 1.5;
     unsigned int subdivisions = 4;
     unsigned int degree = 10;
+    unsigned int target_boxes = 2000;  // Target boxes per subregion
     double tolerance = 1e-6;
-    unsigned int max_depth = 15;
     bool quiet = false;
     bool high_precision = false;
 };
@@ -68,12 +68,12 @@ Config parse_args(int argc, char* argv[]) {
         if (std::strcmp(argv[i], "-r") == 0 && i+1 < argc) cfg.half_width = std::atof(argv[++i]);
         else if (std::strcmp(argv[i], "-s") == 0 && i+1 < argc) cfg.subdivisions = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-d") == 0 && i+1 < argc) cfg.degree = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "-n") == 0 && i+1 < argc) cfg.target_boxes = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-t") == 0 && i+1 < argc) cfg.tolerance = std::atof(argv[++i]);
-        else if (std::strcmp(argv[i], "-m") == 0 && i+1 < argc) cfg.max_depth = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-hp") == 0) cfg.high_precision = true;
         else if (std::strcmp(argv[i], "-q") == 0) cfg.quiet = true;
         else if (std::strcmp(argv[i], "-h") == 0) {
-            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-t tol] [-m depth] [-hp] [-q]\n";
+            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-n boxes] [-t tol] [-hp] [-q]\n";
             std::exit(0);
         }
     }
@@ -115,12 +115,22 @@ int main(int argc, char* argv[]) {
     const unsigned int nsub = cfg.subdivisions;
     const double exp_r = expected_radius();
 
+    // Compute degeneracy_multiplier from target_boxes
+    // The Hessian det polynomial has degree 2*(d-2) in each variable
+    // expected_max_roots = (2*(d-2))^2 for a single curve
+    // degeneracy_threshold = degeneracy_multiplier * expected_max_roots
+    // So: degeneracy_multiplier = target_boxes / expected_max_roots
+    unsigned int hess_deg = 2 * (cfg.degree - 2);
+    unsigned int expected_max_roots = hess_deg * hess_deg;
+    double degeneracy_multiplier = static_cast<double>(cfg.target_boxes) / expected_max_roots;
+
     if (!cfg.quiet) {
         std::cout << "Hessian Zero Set Finder\n"
                   << "=======================\n"
                   << "Region: [-" << hw << ", " << hw << "]^2\n"
                   << "Subdivisions: " << nsub << "x" << nsub << "\n"
-                  << "Polynomial degree: " << cfg.degree << "\n"
+                  << "Polynomial degree: " << cfg.degree << " (Hessian det degree: " << hess_deg << ")\n"
+                  << "Target boxes/subregion: " << cfg.target_boxes << "\n"
                   << "Solver tolerance: " << cfg.tolerance << "\n"
                   << "Expected radius: " << exp_r << "\n\n";
     }
@@ -143,8 +153,8 @@ int main(int argc, char* argv[]) {
 
             SubdivisionConfig scfg = defaultSolverConfig();
             scfg.tolerance = cfg.tolerance;
-            scfg.max_depth = cfg.max_depth;
-            scfg.degeneracy_multiplier = 5.0;
+            scfg.max_depth = 100;  // High max_depth, rely on degeneracy_multiplier for stopping
+            scfg.degeneracy_multiplier = degeneracy_multiplier;
 
             Solver solver;
             auto result = solver.subdivisionSolve(PolynomialSystem({det_H}), scfg, RootBoundingMethod::ProjectedPolyhedral);
