@@ -8,7 +8,7 @@
  *   3. Compute symbolic Hessian using Differentiation::hessian()
  *   4. Compute det(H) using polynomial arithmetic
  *   5. Find zero set using subdivision solver
- *   6. Refine box centers onto the curve using Newton's method
+ *   6. Refine box centers onto the curve using Newton's method with numerical gradient
  *
  * USAGE: ./hessian_zero_set [options]
  *   -r <half_width>   Region = [-r, r]², default: 1.5
@@ -39,13 +39,7 @@ double f_user(double x, double y) {
     return std::exp(-(x * x + y * y));
 }
 
-// The Hessian determinant (for refinement). If unknown, use polynomial refinement.
-double hessian_det_user(double x, double y) {
-    double r2 = x * x + y * y;
-    return 4.0 * (1.0 - 2.0 * r2) * std::exp(-2.0 * r2);
-}
-
-// Expected result for verification
+// Expected result for verification (set to NaN if unknown)
 double expected_radius() { return 1.0 / std::sqrt(2.0); }
 
 // ============================================================================
@@ -94,22 +88,15 @@ Polynomial compute_hessian_det(double u0, double u1, double v0, double v1, doubl
     return H[0][0] * H[1][1] - H[0][1] * H[0][1];
 }
 
-bool refine_numerical(const std::function<double(double,double)>& g, double x0, double y0,
-                      double tol, unsigned int max_iters, double& xo, double& yo) {
-    double x = x0, y = y0;
-    const double h = 1e-8;
-    for (unsigned int i = 0; i < max_iters; ++i) {
-        double val = g(x, y);
-        if (std::abs(val) < tol) { xo = x; yo = y; return true; }
-        double gx = (g(x+h, y) - g(x-h, y)) / (2*h);
-        double gy = (g(x, y+h) - g(x, y-h)) / (2*h);
-        double gs = gx*gx + gy*gy;
-        if (gs < 1e-30) { xo = x; yo = y; return false; }
-        double t = -val / gs;
-        x += t * gx; y += t * gy;
-    }
-    xo = x; yo = y;
-    return false;
+// Compute Hessian determinant numerically from f_user
+// det(H) = f_xx * f_yy - f_xy^2
+double hessian_det_numerical(double x, double y) {
+    const double h = 1e-5;
+    double f00 = f_user(x, y);
+    double f_xx = (f_user(x+h, y) - 2*f00 + f_user(x-h, y)) / (h*h);
+    double f_yy = (f_user(x, y+h) - 2*f00 + f_user(x, y-h)) / (h*h);
+    double f_xy = (f_user(x+h, y+h) - f_user(x+h, y-h) - f_user(x-h, y+h) + f_user(x-h, y-h)) / (4*h*h);
+    return f_xx * f_yy - f_xy * f_xy;
 }
 
 struct Region { double u0, u1, v0, v1; Polynomial det_H; };
@@ -169,9 +156,14 @@ int main(int argc, char* argv[]) {
         std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
     }
 
-    // Step 6: Refine using original function
+    // Step 6: Refine using numerical Hessian determinant (function evaluations only)
+    // Note: Numerical second derivatives have ~h^2 error where h=1e-5, so ~1e-6 residual
     double max_box_err = 0.0, max_refined_err = 0.0;
     unsigned int n_refined = 0;
+
+    CurveRefinementConfig refine_cfg;
+    refine_cfg.residual_tolerance = 1e-5;  // Limited by numerical derivative accuracy
+    refine_cfg.max_iterations = 50;
 
     for (std::size_t k = 0; k < all_boxes.size(); ++k) {
         const auto& box = all_boxes[k];
@@ -187,9 +179,10 @@ int main(int argc, char* argv[]) {
         double r = std::sqrt(xc * xc + yc * yc);
         max_box_err = std::max(max_box_err, std::abs(r - exp_r));
 
-        double xr, yr;
-        if (refine_numerical(hessian_det_user, xc, yc, 1e-14, 50, xr, yr)) {
-            double rr = std::sqrt(xr * xr + yr * yr);
+        // Use library function: refineCurveNumerical with hessian_det_numerical
+        auto result = refineCurveNumerical(hessian_det_numerical, xc, yc, refine_cfg);
+        if (result.converged) {
+            double rr = std::sqrt(result.x * result.x + result.y * result.y);
             max_refined_err = std::max(max_refined_err, std::abs(rr - exp_r));
             n_refined++;
         }

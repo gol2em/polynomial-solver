@@ -32,6 +32,7 @@
 
 #include <vector>
 #include <cstddef>
+#include <functional>
 #include "polynomial.h"
 #include "solver.h"
 
@@ -436,6 +437,159 @@ private:
         const RefinementConfig& config) const;
 
 };
+
+//=============================================================================
+// CurveRefiner - Refinement for curves (1 equation in 2D)
+//=============================================================================
+
+/**
+ * @brief Result of curve point refinement
+ */
+struct CurveRefinedPoint {
+    double x;                    ///< Refined x coordinate
+    double y;                    ///< Refined y coordinate
+    double residual;             ///< |g(x,y)| at refined point
+    bool converged;              ///< True if refinement converged
+    unsigned int iterations;     ///< Number of iterations used
+};
+
+/**
+ * @brief Configuration for curve refinement
+ */
+struct CurveRefinementConfig {
+    double residual_tolerance;      ///< Target |g(x,y)| tolerance (default: 1e-14)
+    unsigned int max_iterations;    ///< Maximum iterations (default: 50)
+    double min_gradient_norm;       ///< Minimum |∇g| to avoid singular points (default: 1e-20)
+
+    CurveRefinementConfig()
+        : residual_tolerance(1e-14)
+        , max_iterations(50)
+        , min_gradient_norm(1e-20)
+    {}
+};
+
+/**
+ * @brief Refiner for projecting points onto curves defined by g(x,y) = 0
+ *
+ * For a curve defined by a bivariate polynomial g(x,y) = 0, this class
+ * provides methods to project initial guesses onto the curve using
+ * gradient projection (Newton's method along the gradient direction).
+ *
+ * The algorithm:
+ *   1. Given initial point (x₀, y₀) near the curve
+ *   2. Evaluate g and ∇g = (gₓ, gᵧ) at current point
+ *   3. Move along gradient: (x,y) ← (x,y) - g/|∇g|² × ∇g
+ *   4. Repeat until |g| < tolerance
+ *
+ * This finds the point on the curve closest to the initial guess
+ * (in the gradient direction), which is the orthogonal projection
+ * onto the curve for small displacements.
+ *
+ * Usage:
+ * @code
+ * Polynomial g = ...;  // 2D polynomial defining the curve g(x,y) = 0
+ * CurveRefiner refiner(g);
+ *
+ * double x = 0.5, y = 0.5;  // Initial guess
+ * CurveRefinedPoint result = refiner.refine(x, y);
+ *
+ * if (result.converged) {
+ *     std::cout << "Point on curve: (" << result.x << ", " << result.y << ")\n";
+ * }
+ * @endcode
+ */
+class CurveRefiner {
+public:
+    /**
+     * @brief Construct a curve refiner for a given polynomial
+     *
+     * @param curve_poly Bivariate polynomial g(x,y) defining the curve g = 0
+     * @throws std::invalid_argument if polynomial is not 2-dimensional
+     */
+    explicit CurveRefiner(const Polynomial& curve_poly);
+
+    /**
+     * @brief Refine a point onto the curve
+     *
+     * Projects the initial guess onto the curve g(x,y) = 0 using
+     * gradient projection.
+     *
+     * @param x0 Initial x coordinate
+     * @param y0 Initial y coordinate
+     * @param config Refinement configuration
+     * @return Refinement result with converged point
+     */
+    CurveRefinedPoint refine(
+        double x0, double y0,
+        const CurveRefinementConfig& config = CurveRefinementConfig()) const;
+
+    /**
+     * @brief Refine multiple points onto the curve
+     *
+     * @param points Vector of (x, y) pairs to refine
+     * @param config Refinement configuration
+     * @return Vector of refinement results
+     */
+    std::vector<CurveRefinedPoint> refineMultiple(
+        const std::vector<std::pair<double, double>>& points,
+        const CurveRefinementConfig& config = CurveRefinementConfig()) const;
+
+    /**
+     * @brief Get the curve polynomial
+     */
+    const Polynomial& polynomial() const { return curve_poly_; }
+
+private:
+    Polynomial curve_poly_;      ///< The curve polynomial g(x,y)
+    Polynomial dg_dx_;           ///< Partial derivative ∂g/∂x
+    Polynomial dg_dy_;           ///< Partial derivative ∂g/∂y
+};
+
+//=============================================================================
+// Function-based curve refinement (uses numerical gradient)
+//=============================================================================
+
+/**
+ * @brief Refine a point onto a curve using only function evaluations
+ *
+ * Uses Newton's method with numerical gradient (central differences) to
+ * project a point onto the zero set of g(x,y) = 0.
+ *
+ * This is useful when only function evaluations are available (no analytic
+ * derivatives or polynomial representation).
+ *
+ * @param g Function g(x,y) defining the curve g = 0
+ * @param x0 Initial x coordinate
+ * @param y0 Initial y coordinate
+ * @param config Refinement configuration
+ * @return Refinement result with converged point
+ *
+ * Usage:
+ * @code
+ * auto g = [](double x, double y) { return x*x + y*y - 1.0; };  // Unit circle
+ * CurveRefinedPoint result = refineCurveNumerical(g, 0.8, 0.7);
+ * if (result.converged) {
+ *     // result.x, result.y is on the circle
+ * }
+ * @endcode
+ */
+CurveRefinedPoint refineCurveNumerical(
+    const std::function<double(double, double)>& g,
+    double x0, double y0,
+    const CurveRefinementConfig& config = CurveRefinementConfig());
+
+/**
+ * @brief Refine multiple points onto a curve using only function evaluations
+ *
+ * @param g Function g(x,y) defining the curve g = 0
+ * @param points Vector of (x, y) pairs to refine
+ * @param config Refinement configuration
+ * @return Vector of refinement results
+ */
+std::vector<CurveRefinedPoint> refineCurveNumericalMultiple(
+    const std::function<double(double, double)>& g,
+    const std::vector<std::pair<double, double>>& points,
+    const CurveRefinementConfig& config = CurveRefinementConfig());
 
 } // namespace polynomial_solver
 

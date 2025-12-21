@@ -39,17 +39,12 @@ Makefile
 *.app
 
 # Playground directory - for local experimentation only
-# Keep: Makefile.in (template), README.md, docs/, research_tests/ structure
-# Keep: key example .cpp files (hessian_zero_set.cpp, test_hessian_determinant.cpp)
-# Ignore: Makefile (auto-generated), executables, dumps, samples, Python files, etc.
+# Keep ONLY: Makefile.in, README.md, docs/, research_tests/, hessian_zero_set.cpp
+# Ignore: all other files (executables, dumps, intermediate files, Python scripts, etc.)
 playground/*
 !playground/Makefile.in
 !playground/README.md
 !playground/hessian_zero_set.cpp
-!playground/test_hessian_determinant.cpp
-!playground/HESSIAN_COMPUTATION.md
-!playground/compare_methods.py
-!playground/visualize_*.py
 !playground/docs/
 playground/docs/*
 !playground/docs/*.md
@@ -58,11 +53,6 @@ playground/research_tests/*
 !playground/research_tests/README.md
 !playground/research_tests/Makefile.in
 !playground/research_tests/*.cpp
-!playground/samples/
-playground/samples/*
-!playground/samples/README.md
-!playground/samples/*.cpp
-!playground/samples/*.py
 
 # Examples local executables (created by Makefile)
 examples/*_exe
