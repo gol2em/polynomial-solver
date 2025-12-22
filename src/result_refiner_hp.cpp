@@ -1429,6 +1429,60 @@ std::vector<CurveRefinedPointHP> refineCurveNumericalHPMultiple(
     return results;
 }
 
+//=============================================================================
+// CurveRefinementConfigHP factory
+//=============================================================================
+
+CurveRefinementConfigHP CurveRefinementConfigHP::fromPrecisionBits(
+    unsigned int bits, unsigned int max_iters)
+{
+    CurveRefinementConfigHP config;
+    config.max_iterations = max_iters;
+
+    // For b bits: ~b/3.32 decimal digits
+    // Optimal h ~ 10^(-digits/4), tol ~ 10^(-digits/2)
+    // This balances truncation O(h²) and roundoff O(ε/h²) errors
+    unsigned int digits = bits * 3 / 10;  // Conservative approximation of bits/3.32
+    unsigned int h_exp = digits / 4;
+    unsigned int tol_exp = digits / 2;
+
+    config.step_size_str = "1e-" + std::to_string(h_exp);
+    config.residual_tolerance_str = "1e-" + std::to_string(tol_exp);
+
+    return config;
+}
+
+//=============================================================================
+// Numerical Hessian Determinant
+//=============================================================================
+
+mpreal computeNumericalHessianDetHP(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& f,
+    const mpreal& x, const mpreal& y,
+    const std::string& h_str)
+{
+    mpreal h(h_str);
+    mpreal f00 = f(x, y);
+
+    // Second partial derivatives using central differences
+    mpreal f_xx = (f(x + h, y) - mpreal(2) * f00 + f(x - h, y)) / (h * h);
+    mpreal f_yy = (f(x, y + h) - mpreal(2) * f00 + f(x, y - h)) / (h * h);
+    mpreal f_xy = (f(x + h, y + h) - f(x + h, y - h) - f(x - h, y + h) + f(x - h, y - h))
+                  / (mpreal(4) * h * h);
+
+    // Hessian determinant
+    return f_xx * f_yy - f_xy * f_xy;
+}
+
+std::function<mpreal(const mpreal&, const mpreal&)> makeHessianDetFunctionHP(
+    const std::function<mpreal(const mpreal&, const mpreal&)>& f,
+    const std::string& h_str)
+{
+    return [f, h_str](const mpreal& x, const mpreal& y) -> mpreal {
+        return computeNumericalHessianDetHP(f, x, y, h_str);
+    };
+}
+
 } // namespace polynomial_solver
 
 #endif // ENABLE_HIGH_PRECISION

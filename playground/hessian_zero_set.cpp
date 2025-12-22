@@ -173,52 +173,28 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Compute optimal step size and tolerance based on precision
-    // For b bits: ~b/3.32 decimal digits, optimal h ~ 10^(-digits/4), tol ~ 10^(-digits/2)
-    // This balances truncation O(h²) and roundoff O(eps/h²) errors
-    unsigned int digits = cfg.precision_bits * 3 / 10;  // ~bits/3.32
-    unsigned int h_exp = digits / 4;   // step size exponent
-    unsigned int tol_exp = digits / 2; // tolerance exponent
-    std::string h_str = "1e-" + std::to_string(h_exp);
-    std::string tol_str = "1e-" + std::to_string(tol_exp);
-
-    if (!cfg.quiet) {
-        std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
-        if (cfg.high_precision) {
-            std::cout << "Refinement: HIGH PRECISION (" << cfg.precision_bits << " bits, h=" << h_str << ", tol=" << tol_str << ")\n";
-        } else {
-            std::cout << "Refinement: double precision (h=1e-5, tol=1e-5)\n";
-        }
-    }
-
     // Step 6: Refine using numerical Hessian determinant (function evaluations only)
     double max_box_err = 0.0, max_refined_err = 0.0;
     unsigned int n_refined = 0;
 
 #ifdef ENABLE_HIGH_PRECISION
     if (cfg.high_precision) {
-        // High-precision refinement: use smaller step size for much better accuracy
+        // High-precision refinement with auto-computed optimal parameters
         PrecisionContext ctx(cfg.precision_bits);
+        auto refine_cfg_hp = CurveRefinementConfigHP::fromPrecisionBits(cfg.precision_bits);
 
-        // High-precision version of f_user
+        if (!cfg.quiet) {
+            std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
+            std::cout << "Refinement: HIGH PRECISION (" << cfg.precision_bits << " bits, "
+                      << "h=" << refine_cfg_hp.step_size_str << ", "
+                      << "tol=" << refine_cfg_hp.residual_tolerance_str << ")\n";
+        }
+
+        // High-precision f(x,y) and its Hessian determinant
         auto f_hp = [](const mpreal& x, const mpreal& y) -> mpreal {
             return exp(-(x * x + y * y));
         };
-
-        // High-precision Hessian determinant with configurable step size
-        auto hessian_det_hp = [&f_hp, &h_str](const mpreal& x, const mpreal& y) -> mpreal {
-            mpreal h(h_str);
-            mpreal f00 = f_hp(x, y);
-            mpreal f_xx = (f_hp(x+h, y) - mpreal(2)*f00 + f_hp(x-h, y)) / (h*h);
-            mpreal f_yy = (f_hp(x, y+h) - mpreal(2)*f00 + f_hp(x, y-h)) / (h*h);
-            mpreal f_xy = (f_hp(x+h, y+h) - f_hp(x+h, y-h) - f_hp(x-h, y+h) + f_hp(x-h, y-h)) / (mpreal(4)*h*h);
-            return f_xx * f_yy - f_xy * f_xy;
-        };
-
-        CurveRefinementConfigHP refine_cfg_hp;
-        refine_cfg_hp.residual_tolerance_str = tol_str;
-        refine_cfg_hp.step_size_str = h_str;
-        refine_cfg_hp.max_iterations = 100;
+        auto hessian_det_hp = makeHessianDetFunctionHP(f_hp, refine_cfg_hp.step_size_str);
 
         mpreal exp_r_hp = mpreal(1) / sqrt(mpreal(2));
 
@@ -248,6 +224,11 @@ int main(int argc, char* argv[]) {
 #endif
     {
         // Double-precision refinement
+        if (!cfg.quiet) {
+            std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
+            std::cout << "Refinement: double precision (h=1e-5, tol=1e-5)\n";
+        }
+
         // Note: Numerical second derivatives have ~h^2 error where h=1e-5, so ~1e-6 residual
         CurveRefinementConfig refine_cfg;
         refine_cfg.residual_tolerance = 1e-5;  // Limited by numerical derivative accuracy

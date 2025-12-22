@@ -109,8 +109,12 @@ auto result = solver.subdivisionSolve(PolynomialSystem({det_H}), config);
 // Refine (double precision)
 refineCurveNumerical(g_func, x0, y0, CurveRefinementConfig{1e-5, 1e-5, 50});
 
-// Refine (high precision, ~1e-30 accuracy)
-refineCurveNumericalHP(g_hp_func, x0, y0, CurveRefinementConfigHP{"1e-20", "1e-30", 100});
+// High-precision refinement with automatic parameter tuning
+PrecisionContext ctx(128);  // Set working precision (128 bits → ~38 digits)
+auto hp_config = CurveRefinementConfigHP::fromPrecisionBits(128);
+auto f_hp = [](const mpreal& x, const mpreal& y) { return exp(-(x*x + y*y)); };
+auto hess_det_hp = makeHessianDetFunctionHP(f_hp, hp_config.step_size_str);
+refineCurveNumericalHP(hess_det_hp, x0, y0, hp_config);
 ```
 
 ## Directory Contents
