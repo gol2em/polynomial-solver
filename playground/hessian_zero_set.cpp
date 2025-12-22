@@ -83,15 +83,14 @@ Config parse_args(int argc, char* argv[]) {
     return cfg;
 }
 
-inline void to_original(double u, double v, double hw, double& x, double& y) {
-    x = (2.0 * u - 1.0) * hw;
-    y = (2.0 * v - 1.0) * hw;
-}
-
-Polynomial compute_hessian_det(double u0, double u1, double v0, double v1, double hw, unsigned int deg) {
-    auto local_f = [=](double s, double t) {
-        double u = u0 + (u1 - u0) * s, v = v0 + (v1 - v0) * t, x, y;
-        to_original(u, v, hw, x, y);
+/// Compute Hessian det polynomial on subregion [u0,u1]×[v0,v1] of unit domain
+Polynomial compute_hessian_det(const Domain2D& domain, double u0, double u1, double v0, double v1, unsigned int deg) {
+    // Create subdomain that maps [0,1]² to [u0,u1]×[v0,v1] in unit domain, then to user domain
+    auto local_f = [&domain, u0, u1, v0, v1](double s, double t) {
+        double u = u0 + (u1 - u0) * s;
+        double v = v0 + (v1 - v0) * t;
+        double x, y;
+        domain.fromUnit(u, v, x, y);
         return f_user(x, y);
     };
     Polynomial f = Interpolation::interpolate2D(local_f, deg, deg, 0.0, 1.0, 0.0, 1.0, AbscissaeType::CHEBYSHEV);
@@ -114,9 +113,11 @@ struct Region { double u0, u1, v0, v1; Polynomial det_H; };
 
 int main(int argc, char* argv[]) {
     Config cfg = parse_args(argc, argv);
-    const double hw = cfg.half_width;
     const unsigned int nsub = cfg.subdivisions;
     const double exp_r = expected_radius();
+
+    // Create domain for coordinate transformations
+    Domain2D domain = Domain2D::symmetric(cfg.half_width);
 
     // Compute degeneracy_multiplier from target_boxes
     // The Hessian det polynomial has degree 2*(d-2) in each variable
@@ -130,7 +131,7 @@ int main(int argc, char* argv[]) {
     if (!cfg.quiet) {
         std::cout << "Hessian Zero Set Finder\n"
                   << "=======================\n"
-                  << "Region: [-" << hw << ", " << hw << "]^2\n"
+                  << "Region: [" << domain.x_min << ", " << domain.x_max << "]^2\n"
                   << "Subdivisions: " << nsub << "x" << nsub << "\n"
                   << "Polynomial degree: " << cfg.degree << " (Hessian det degree: " << hess_deg << ")\n"
                   << "Target boxes/subregion: " << cfg.target_boxes << "\n"
@@ -150,7 +151,7 @@ int main(int argc, char* argv[]) {
             double v_min = static_cast<double>(j) / nsub;
             double v_max = static_cast<double>(j + 1) / nsub;
 
-            Polynomial det_H = compute_hessian_det(u_min, u_max, v_min, v_max, hw, cfg.degree);
+            Polynomial det_H = compute_hessian_det(domain, u_min, u_max, v_min, v_max, cfg.degree);
             std::size_t ridx = regions.size();
             regions.push_back({u_min, u_max, v_min, v_max, det_H});
 
@@ -202,12 +203,13 @@ int main(int argc, char* argv[]) {
             const auto& box = all_boxes[k];
             const auto& reg = regions[box_region[k]];
 
+            // Map box center: local [0,1]² → subregion → global unit → user domain
             double s = (box.lower[0] + box.upper[0]) / 2.0;
             double t = (box.lower[1] + box.upper[1]) / 2.0;
             double u = reg.u0 + (reg.u1 - reg.u0) * s;
             double v = reg.v0 + (reg.v1 - reg.v0) * t;
             double xc, yc;
-            to_original(u, v, hw, xc, yc);
+            domain.fromUnit(u, v, xc, yc);
 
             double r = std::sqrt(xc * xc + yc * yc);
             max_box_err = std::max(max_box_err, std::abs(r - exp_r));
@@ -238,12 +240,13 @@ int main(int argc, char* argv[]) {
             const auto& box = all_boxes[k];
             const auto& reg = regions[box_region[k]];
 
+            // Map box center: local [0,1]² → subregion → global unit → user domain
             double s = (box.lower[0] + box.upper[0]) / 2.0;
             double t = (box.lower[1] + box.upper[1]) / 2.0;
             double u = reg.u0 + (reg.u1 - reg.u0) * s;
             double v = reg.v0 + (reg.v1 - reg.v0) * t;
             double xc, yc;
-            to_original(u, v, hw, xc, yc);
+            domain.fromUnit(u, v, xc, yc);
 
             double r = std::sqrt(xc * xc + yc * yc);
             max_box_err = std::max(max_box_err, std::abs(r - exp_r));

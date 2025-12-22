@@ -88,14 +88,17 @@ double expected_radius() {
 ### Key API Functions
 
 ```cpp
-// Interpolate nonlinear function as polynomial
-Polynomial f = Interpolation::interpolate2D(func, degree, degree,
-    u_min, u_max, v_min, v_max, AbscissaeType::CHEBYSHEV);
+// Domain2D handles coordinate transformations between user space and [0,1]²
+Domain2D domain = Domain2D::symmetric(1.5);  // [-1.5, 1.5]²
+// or: Domain2D domain(x_min, x_max, y_min, y_max);
 
-// Compute symbolic Hessian matrix
+// Wrap user function for interpolation on [0,1]²
+auto f_unit = domain.wrapFunction(f_user);
+Polynomial f = Interpolation::interpolate2D(f_unit, degree, degree,
+    0.0, 1.0, 0.0, 1.0, AbscissaeType::CHEBYSHEV);
+
+// Compute symbolic Hessian matrix and determinant
 auto H = Differentiation::hessian(f);
-
-// Compute determinant
 Polynomial det_H = H[0][0] * H[1][1] - H[0][1] * H[0][1];
 
 // Configure and solve
@@ -105,6 +108,10 @@ config.degeneracy_multiplier = target_boxes / (degree * degree);
 
 Solver solver;
 auto result = solver.subdivisionSolve(PolynomialSystem({det_H}), config);
+
+// Transform results back to user coordinates
+double x, y;
+domain.fromUnit(u_result, v_result, x, y);
 
 // Refine (double precision)
 refineCurveNumerical(g_func, x0, y0, CurveRefinementConfig{1e-5, 1e-5, 50});
