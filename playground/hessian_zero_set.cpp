@@ -26,6 +26,7 @@
 #include <polynomial_solver.h>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 #include <cmath>
 #include <vector>
 #include <cstring>
@@ -62,6 +63,7 @@ struct Config {
     bool quiet = false;
     bool high_precision = false;
     unsigned int precision_bits = 128;  // ~38 decimal digits
+    std::string output_file;            // Output file for refined points (empty = no output)
 };
 
 Config parse_args(int argc, char* argv[]) {
@@ -74,9 +76,11 @@ Config parse_args(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "-t") == 0 && i+1 < argc) cfg.tolerance = std::atof(argv[++i]);
         else if (std::strcmp(argv[i], "-hp") == 0) cfg.high_precision = true;
         else if (std::strcmp(argv[i], "-b") == 0 && i+1 < argc) cfg.precision_bits = std::atoi(argv[++i]);
+        else if (std::strcmp(argv[i], "-o") == 0 && i+1 < argc) cfg.output_file = argv[++i];
         else if (std::strcmp(argv[i], "-q") == 0) cfg.quiet = true;
         else if (std::strcmp(argv[i], "-h") == 0) {
-            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-n boxes] [-t tol] [-hp] [-b bits] [-q]\n";
+            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-n boxes] [-t tol] [-hp] [-b bits] [-o file] [-q]\n"
+                      << "  -o file  Output refined points to file (format: x y per line)\n";
             std::exit(0);
         }
     }
@@ -177,6 +181,7 @@ int main(int argc, char* argv[]) {
     // Step 6: Refine using numerical Hessian determinant (function evaluations only)
     double max_box_err = 0.0, max_refined_err = 0.0;
     unsigned int n_refined = 0;
+    std::vector<std::pair<double, double>> refined_points;  // Store refined (x, y) points
 
 #ifdef ENABLE_HIGH_PRECISION
     if (cfg.high_precision) {
@@ -216,6 +221,10 @@ int main(int argc, char* argv[]) {
 
             auto result = refineCurveNumericalHP(hessian_det_hp, xc, yc, refine_cfg_hp);
             if (result.converged) {
+                double rx = static_cast<double>(result.x);
+                double ry = static_cast<double>(result.y);
+                refined_points.emplace_back(rx, ry);
+
                 mpreal rr = sqrt(result.x * result.x + result.y * result.y);
                 double err = static_cast<double>(abs(rr - exp_r_hp));
                 max_refined_err = std::max(max_refined_err, err);
@@ -253,10 +262,27 @@ int main(int argc, char* argv[]) {
 
             auto result = refineCurveNumerical(hessian_det_numerical, xc, yc, refine_cfg);
             if (result.converged) {
+                refined_points.emplace_back(result.x, result.y);
                 double rr = std::sqrt(result.x * result.x + result.y * result.y);
                 max_refined_err = std::max(max_refined_err, std::abs(rr - exp_r));
                 n_refined++;
             }
+        }
+    }
+
+    // Write refined points to file if requested
+    if (!cfg.output_file.empty()) {
+        std::ofstream ofs(cfg.output_file);
+        if (ofs) {
+            ofs << std::setprecision(17);
+            for (const auto& pt : refined_points) {
+                ofs << pt.first << " " << pt.second << "\n";
+            }
+            if (!cfg.quiet) {
+                std::cout << "Wrote " << refined_points.size() << " points to " << cfg.output_file << "\n";
+            }
+        } else {
+            std::cerr << "Error: Could not open " << cfg.output_file << " for writing\n";
         }
     }
 

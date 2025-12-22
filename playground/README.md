@@ -25,6 +25,7 @@ make hessian_zero_set
   -t <tolerance>    Solver box tolerance, default: 1e-6
   -hp               Use high-precision refinement
   -b <bits>         Precision bits for HP mode, default: 128
+  -o <file>         Output refined points to file (x y per line)
   -q                Quiet mode (output: total_boxes max_box_err max_refined_err)
 ```
 
@@ -59,7 +60,35 @@ $ ./hessian_zero_set -n 500 -s 2 -hp -q
 # Higher precision (256 bits → ~39 digits)
 $ ./hessian_zero_set -n 500 -s 2 -hp -b 256 -q
 9485 0.00245755 3.03e-39
+
+# Output points to file for visualization
+$ ./hessian_zero_set -n 500 -s 2 -hp -o dumps/hessian_points.txt -q
+9485 0.00245755 2.82e-19
 ```
+
+### Visualizing Results
+
+Use the Python tool to visualize refined points:
+
+```bash
+# From the project root directory (uses root .venv)
+cd playground
+../.venv/bin/python visualize_refined_points.py dumps/hessian_points.txt --show-expected --analyze
+
+# Save to file
+../.venv/bin/python visualize_refined_points.py dumps/hessian_points.txt -o output.png
+```
+
+**Output files location:** `playground/dumps/`
+
+Example comparison (f(x,y) = exp(-x²-y²), expected circle at r = 1/√2):
+
+| Mode | Max Error | Point Uniformity (CV) |
+|------|-----------|----------------------|
+| Double precision | ~3e-6 | 4.79 |
+| HP 128-bit | ~1e-16 (machine ε) | 1.69 |
+
+The HP mode achieves machine epsilon accuracy for the radius.
 
 ### Customizing for Your Function
 
@@ -127,8 +156,52 @@ refineCurveNumericalHP(hess_det_hp, x0, y0, hp_config);
 ## Directory Contents
 
 - **`hessian_zero_set.cpp`** - Main example (see above)
+- **`visualize_refined_points.py`** - Python visualization tool
+- **`dumps/`** - Output directory for point files and visualizations
 - **`docs/`** - Technical documentation on algorithms and methods
 - **`research_tests/`** - Research and debugging test files
+
+## Setup Guide
+
+### Prerequisites
+
+```bash
+# Required: MPFR and GMP for high-precision arithmetic
+sudo apt install libmpfr-dev libgmp-dev  # Debian/Ubuntu
+
+# Python venv in project root (for visualization)
+cd /path/to/polynomial-solver
+python -m venv .venv
+source .venv/bin/activate
+pip install numpy matplotlib
+```
+
+### Build with High-Precision Support
+
+```bash
+# From project root
+mkdir -p build && cd build
+cmake .. -DENABLE_HIGH_PRECISION=ON
+make -j$(nproc)
+cd ../playground
+make hessian_zero_set
+```
+
+### Verify HP is working
+
+```bash
+# Double precision (max error ~1e-6)
+./hessian_zero_set -n 500 -s 2 -q
+# Output: 9485 0.00245755 3.06e-06
+
+# High precision (max error ~1e-16, machine epsilon for double output)
+./hessian_zero_set -n 500 -s 2 -hp -q
+# Output: 9485 0.00245755 2.82e-19
+
+# The HP mode refines internally with arbitrary precision (MPFR),
+# then converts to double for output. The ~1e-19 residual shows the
+# curve is found with much higher accuracy than double can represent.
+```
 
 ## Building Your Own Tests
 
