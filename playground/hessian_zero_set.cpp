@@ -16,7 +16,8 @@
  *   -d <degree>       Polynomial degree for interpolation, default: 10
  *   -n <boxes>        Target boxes per subregion, default: 2000
  *   -t <tolerance>    Solver box tolerance, default: 1e-6
- *   -hp               Use high-precision refinement (~1e-30 accuracy vs ~1e-6)
+ *   -hp               Use high-precision refinement
+ *   -b <bits>         Precision bits for HP mode, default: 128 (~38 digits)
  *   -q                Quiet mode (machine-readable output)
  *
  * EXAMPLE: f(x,y) = exp(-(x² + y²)), zero set is circle r = 1/√2
@@ -60,6 +61,7 @@ struct Config {
     double tolerance = 1e-6;
     bool quiet = false;
     bool high_precision = false;
+    unsigned int precision_bits = 128;  // ~38 decimal digits
 };
 
 Config parse_args(int argc, char* argv[]) {
@@ -71,9 +73,10 @@ Config parse_args(int argc, char* argv[]) {
         else if (std::strcmp(argv[i], "-n") == 0 && i+1 < argc) cfg.target_boxes = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-t") == 0 && i+1 < argc) cfg.tolerance = std::atof(argv[++i]);
         else if (std::strcmp(argv[i], "-hp") == 0) cfg.high_precision = true;
+        else if (std::strcmp(argv[i], "-b") == 0 && i+1 < argc) cfg.precision_bits = std::atoi(argv[++i]);
         else if (std::strcmp(argv[i], "-q") == 0) cfg.quiet = true;
         else if (std::strcmp(argv[i], "-h") == 0) {
-            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-n boxes] [-t tol] [-hp] [-q]\n";
+            std::cerr << "Usage: " << argv[0] << " [-r hw] [-s sub] [-d deg] [-n boxes] [-t tol] [-hp] [-b bits] [-q]\n";
             std::exit(0);
         }
     }
@@ -170,10 +173,19 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Compute optimal step size and tolerance based on precision
+    // For b bits: ~b/3.32 decimal digits, optimal h ~ 10^(-digits/4), tol ~ 10^(-digits/2)
+    // This balances truncation O(h²) and roundoff O(eps/h²) errors
+    unsigned int digits = cfg.precision_bits * 3 / 10;  // ~bits/3.32
+    unsigned int h_exp = digits / 4;   // step size exponent
+    unsigned int tol_exp = digits / 2; // tolerance exponent
+    std::string h_str = "1e-" + std::to_string(h_exp);
+    std::string tol_str = "1e-" + std::to_string(tol_exp);
+
     if (!cfg.quiet) {
         std::cout << "\nTotal boxes: " << all_boxes.size() << "\n";
         if (cfg.high_precision) {
-            std::cout << "Refinement: HIGH PRECISION (h=1e-20, tol=1e-30)\n";
+            std::cout << "Refinement: HIGH PRECISION (" << cfg.precision_bits << " bits, h=" << h_str << ", tol=" << tol_str << ")\n";
         } else {
             std::cout << "Refinement: double precision (h=1e-5, tol=1e-5)\n";
         }
@@ -186,16 +198,16 @@ int main(int argc, char* argv[]) {
 #ifdef ENABLE_HIGH_PRECISION
     if (cfg.high_precision) {
         // High-precision refinement: use smaller step size for much better accuracy
-        PrecisionContext ctx(256);  // ~77 decimal digits
+        PrecisionContext ctx(cfg.precision_bits);
 
         // High-precision version of f_user
         auto f_hp = [](const mpreal& x, const mpreal& y) -> mpreal {
             return exp(-(x * x + y * y));
         };
 
-        // High-precision Hessian determinant with smaller step size
-        auto hessian_det_hp = [&f_hp](const mpreal& x, const mpreal& y) -> mpreal {
-            mpreal h("1e-20");  // Much smaller step size possible with HP
+        // High-precision Hessian determinant with configurable step size
+        auto hessian_det_hp = [&f_hp, &h_str](const mpreal& x, const mpreal& y) -> mpreal {
+            mpreal h(h_str);
             mpreal f00 = f_hp(x, y);
             mpreal f_xx = (f_hp(x+h, y) - mpreal(2)*f00 + f_hp(x-h, y)) / (h*h);
             mpreal f_yy = (f_hp(x, y+h) - mpreal(2)*f00 + f_hp(x, y-h)) / (h*h);
@@ -204,8 +216,8 @@ int main(int argc, char* argv[]) {
         };
 
         CurveRefinementConfigHP refine_cfg_hp;
-        refine_cfg_hp.residual_tolerance_str = "1e-30";
-        refine_cfg_hp.step_size_str = "1e-20";
+        refine_cfg_hp.residual_tolerance_str = tol_str;
+        refine_cfg_hp.step_size_str = h_str;
         refine_cfg_hp.max_iterations = 100;
 
         mpreal exp_r_hp = mpreal(1) / sqrt(mpreal(2));

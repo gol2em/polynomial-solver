@@ -23,41 +23,42 @@ make hessian_zero_set
   -d <degree>       Polynomial degree for interpolation, default: 10
   -n <boxes>        Target boxes per subregion, default: 2000
   -t <tolerance>    Solver box tolerance, default: 1e-6
-  -hp               Use high-precision refinement (~1e-30 vs ~1e-6 accuracy)
+  -hp               Use high-precision refinement
+  -b <bits>         Precision bits for HP mode, default: 128
   -q                Quiet mode (output: total_boxes max_box_err max_refined_err)
 ```
 
 ### Example Output
 
 ```bash
-# Normal mode
-$ ./hessian_zero_set -r 1.0 -s 2 -n 1500
+# Normal mode with fewer boxes
+$ ./hessian_zero_set -n 500 -s 2
 Hessian Zero Set Finder
 =======================
-Region: [-1, 1]^2
+Region: [-1.5, 1.5]^2
 Subdivisions: 2x2
 Polynomial degree: 10 (Hessian det degree: 16)
-Target boxes/subregion: 1500
-Solver tolerance: 1e-06
-Expected radius: 0.707107
-
-Region [0,0]: 6514 boxes
+Target boxes/subregion: 500
 ...
-Total boxes: 26041
+Total boxes: 9485
 Refinement: double precision (h=1e-5, tol=1e-5)
 
 === Results ===
-Refined: 20131/26041
-Max box error:     1.407757e-03
-Max refined error: 3.253795e-06
+Refined: 9485/9485
+Max box error:     2.457554e-03
+Max refined error: 3.028793e-06
 
 # Quiet mode for scripting (outputs: boxes box_err refined_err)
-$ ./hessian_zero_set -q
-48386 0.000666702 3.22552e-06
+$ ./hessian_zero_set -n 500 -s 2 -q
+9485 0.00245755 3.02879e-06
 
-# High-precision refinement (~1e-30 accuracy)
-$ ./hessian_zero_set -hp -q
-48386 0.000666702 2.34e-31
+# High-precision refinement (default 128 bits → ~19 digits)
+$ ./hessian_zero_set -n 500 -s 2 -hp -q
+9485 0.00245755 2.82e-19
+
+# Higher precision (256 bits → ~39 digits)
+$ ./hessian_zero_set -n 500 -s 2 -hp -b 256 -q
+9485 0.00245755 3.03e-39
 ```
 
 ### Customizing for Your Function
