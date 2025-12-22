@@ -80,13 +80,15 @@ dist/
 *.egg
 
 # IDE specific files
-.vscode/*
-!.vscode/c_cpp_properties.json
+.vscode/
 .idea/
 *.swp
 *.swo
 *~
 .DS_Store
+
+# Internal documentation (not for distribution)
+MODULE_SUMMARY.md
 
 # Generated files (symlink to build/compile_commands.json)
 compile_commands.json

@@ -99,6 +99,9 @@
 // De Casteljau algorithm (for advanced users)
 #include "de_casteljau.h"
 
+// Polynomial interpolation from function samples
+#include "interpolation.h"
+
 /**
  * @namespace polynomial_solver
  * @brief Main namespace for the Polynomial Solver library

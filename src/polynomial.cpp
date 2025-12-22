@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <stdexcept>
 
 #ifdef ENABLE_HIGH_PRECISION
 #include "polynomial_hp.h"
@@ -62,6 +63,27 @@ bool increment_multi_except_axis(std::vector<unsigned int>& index,
                 if (e == axis) {
                     continue;
                 }
+                index[e] = 0u;
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Increment a multi-index over all dimensions.
+// Returns false when all combinations have been exhausted.
+bool increment_multi_index(std::vector<unsigned int>& index,
+                           const std::vector<unsigned int>& degrees)
+{
+    const std::size_t dim = degrees.size();
+
+    for (std::size_t d = dim; d-- > 0;) {
+        if (index[d] < degrees[d]) {
+            ++index[d];
+            // Reset all dimensions greater than d to zero.
+            for (std::size_t e = d + 1; e < dim; ++e) {
                 index[e] = 0u;
             }
             return true;
@@ -684,5 +706,183 @@ void Polynomial::convertBernsteinToPower() const {
     power_valid_ = true;
 }
 
+//=============================================================================
+// Polynomial Arithmetic
+//=============================================================================
+
+Polynomial Polynomial::operator*(const Polynomial& other) const {
+    if (dimension_ != other.dimension_) {
+        throw std::invalid_argument("Polynomial multiplication requires same dimension");
+    }
+
+    if (dimension_ == 0) {
+        return Polynomial();
+    }
+
+    // Get power coefficients of both polynomials
+    const std::vector<double>& a = powerCoefficients();
+    const std::vector<double>& b = other.powerCoefficients();
+
+    // Result degrees = sum of degrees
+    std::vector<unsigned int> result_degrees(dimension_);
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_degrees[i] = degrees_[i] + other.degrees_[i];
+    }
+
+    // Compute result size and allocate
+    std::size_t result_size = 1;
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_size *= (result_degrees[i] + 1);
+    }
+    std::vector<double> result_coeffs(result_size, 0.0);
+
+    // Compute strides for all arrays
+    std::vector<std::size_t> strides_a, strides_b, strides_result;
+    compute_strides(degrees_, strides_a);
+    compute_strides(other.degrees_, strides_b);
+    compute_strides(result_degrees, strides_result);
+
+    // Iterate over all multi-indices of a
+    std::vector<unsigned int> idx_a(dimension_, 0);
+    do {
+        std::size_t flat_a = flatten_index(idx_a, strides_a);
+        double coeff_a = a[flat_a];
+        if (coeff_a == 0.0) continue;
+
+        // Iterate over all multi-indices of b
+        std::vector<unsigned int> idx_b(dimension_, 0);
+        do {
+            std::size_t flat_b = flatten_index(idx_b, strides_b);
+            double coeff_b = b[flat_b];
+            if (coeff_b == 0.0) continue;
+
+            // Result index = idx_a + idx_b
+            std::vector<unsigned int> idx_result(dimension_);
+            for (std::size_t i = 0; i < dimension_; ++i) {
+                idx_result[i] = idx_a[i] + idx_b[i];
+            }
+            std::size_t flat_result = flatten_index(idx_result, strides_result);
+            result_coeffs[flat_result] += coeff_a * coeff_b;
+
+        } while (increment_multi_index(idx_b, other.degrees_));
+    } while (increment_multi_index(idx_a, degrees_));
+
+    return Polynomial::fromPower(result_degrees, result_coeffs);
+}
+
+Polynomial Polynomial::operator-(const Polynomial& other) const {
+    if (dimension_ != other.dimension_) {
+        throw std::invalid_argument("Polynomial subtraction requires same dimension");
+    }
+
+    if (dimension_ == 0) {
+        return Polynomial();
+    }
+
+    // Get power coefficients of both polynomials
+    const std::vector<double>& a = powerCoefficients();
+    const std::vector<double>& b = other.powerCoefficients();
+
+    // Result degrees = max of degrees
+    std::vector<unsigned int> result_degrees(dimension_);
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_degrees[i] = std::max(degrees_[i], other.degrees_[i]);
+    }
+
+    // Compute result size and allocate
+    std::size_t result_size = 1;
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_size *= (result_degrees[i] + 1);
+    }
+    std::vector<double> result_coeffs(result_size, 0.0);
+
+    // Compute strides
+    std::vector<std::size_t> strides_a, strides_b, strides_result;
+    compute_strides(degrees_, strides_a);
+    compute_strides(other.degrees_, strides_b);
+    compute_strides(result_degrees, strides_result);
+
+    // Add coefficients from a
+    std::vector<unsigned int> idx(dimension_, 0);
+    do {
+        std::size_t flat_a = flatten_index(idx, strides_a);
+        std::size_t flat_result = flatten_index(idx, strides_result);
+        result_coeffs[flat_result] += a[flat_a];
+    } while (increment_multi_index(idx, degrees_));
+
+    // Subtract coefficients from b
+    idx.assign(dimension_, 0);
+    do {
+        std::size_t flat_b = flatten_index(idx, strides_b);
+        std::size_t flat_result = flatten_index(idx, strides_result);
+        result_coeffs[flat_result] -= b[flat_b];
+    } while (increment_multi_index(idx, other.degrees_));
+
+    return Polynomial::fromPower(result_degrees, result_coeffs);
+}
+
+Polynomial Polynomial::operator+(const Polynomial& other) const {
+    if (dimension_ != other.dimension_) {
+        throw std::invalid_argument("Polynomial addition requires same dimension");
+    }
+
+    if (dimension_ == 0) {
+        return Polynomial();
+    }
+
+    // Get power coefficients of both polynomials
+    const std::vector<double>& a = powerCoefficients();
+    const std::vector<double>& b = other.powerCoefficients();
+
+    // Result degrees = max of degrees
+    std::vector<unsigned int> result_degrees(dimension_);
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_degrees[i] = std::max(degrees_[i], other.degrees_[i]);
+    }
+
+    // Compute result size and allocate
+    std::size_t result_size = 1;
+    for (std::size_t i = 0; i < dimension_; ++i) {
+        result_size *= (result_degrees[i] + 1);
+    }
+    std::vector<double> result_coeffs(result_size, 0.0);
+
+    // Compute strides
+    std::vector<std::size_t> strides_a, strides_b, strides_result;
+    compute_strides(degrees_, strides_a);
+    compute_strides(other.degrees_, strides_b);
+    compute_strides(result_degrees, strides_result);
+
+    // Add coefficients from a
+    std::vector<unsigned int> idx(dimension_, 0);
+    do {
+        std::size_t flat_a = flatten_index(idx, strides_a);
+        std::size_t flat_result = flatten_index(idx, strides_result);
+        result_coeffs[flat_result] += a[flat_a];
+    } while (increment_multi_index(idx, degrees_));
+
+    // Add coefficients from b
+    idx.assign(dimension_, 0);
+    do {
+        std::size_t flat_b = flatten_index(idx, strides_b);
+        std::size_t flat_result = flatten_index(idx, strides_result);
+        result_coeffs[flat_result] += b[flat_b];
+    } while (increment_multi_index(idx, other.degrees_));
+
+    return Polynomial::fromPower(result_degrees, result_coeffs);
+}
+
+Polynomial Polynomial::operator*(double scalar) const {
+    const std::vector<double>& coeffs = powerCoefficients();
+    std::vector<double> result_coeffs(coeffs.size());
+    for (std::size_t i = 0; i < coeffs.size(); ++i) {
+        result_coeffs[i] = coeffs[i] * scalar;
+    }
+    return Polynomial::fromPower(degrees_, result_coeffs);
+}
+
+Polynomial Polynomial::operator-() const {
+    return (*this) * (-1.0);
+}
 
 } // namespace polynomial_solver

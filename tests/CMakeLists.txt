@@ -139,6 +139,11 @@ if(ENABLE_HIGH_PRECISION)
     add_executable(test_result_refiner_hp test_result_refiner_hp.cpp)
     target_link_libraries(test_result_refiner_hp PRIVATE polynomial_solver)
     add_test(NAME ResultRefinerHPTest COMMAND test_result_refiner_hp)
+
+    # Test: Interval arithmetic for rigorous bounds
+    add_executable(test_interval_arithmetic test_interval_arithmetic.cpp)
+    target_link_libraries(test_interval_arithmetic PRIVATE polynomial_solver)
+    add_test(NAME IntervalArithmeticTest COMMAND test_interval_arithmetic)
 endif()
 
 #==============================================================================
@@ -154,14 +159,14 @@ add_test(NAME SolverRefinerWorkflowTest COMMAND test_solver_refiner_workflow)
 # Summary
 #==============================================================================
 
-message(STATUS "Tests configured: 21 tests (all added to CTest)")
+message(STATUS "Tests configured: 22 tests (all added to CTest)")
 message(STATUS "  - Polynomial module: 4 tests")
 message(STATUS "  - Differentiation module: 2 tests")
 message(STATUS "  - Geometry module: 4 tests")
 message(STATUS "  - Solver module: 5 tests")
 message(STATUS "  - Result refiner module: 1 test")
 if(ENABLE_HIGH_PRECISION)
-    message(STATUS "  - High-precision module: 4 tests")
+    message(STATUS "  - High-precision module: 5 tests")
 else()
     message(STATUS "  - High-precision module: 0 tests (ENABLE_HIGH_PRECISION=OFF)")
 endif()
