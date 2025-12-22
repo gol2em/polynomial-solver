@@ -166,8 +166,11 @@ refineCurveNumericalHP(hess_det_hp, x0, y0, hp_config);
 ### Prerequisites
 
 ```bash
-# Required: MPFR and GMP for high-precision arithmetic
-sudo apt install libmpfr-dev libgmp-dev  # Debian/Ubuntu
+# High-precision arithmetic requires Boost + MPFR + GMP:
+#   - Boost: Provides boost::multiprecision wrapper (header-only)
+#   - MPFR: Actual arbitrary-precision floating-point library
+#   - GMP:  Multi-precision integers (MPFR dependency)
+sudo apt install libboost-dev libmpfr-dev libgmp-dev  # Debian/Ubuntu
 
 # Python venv in project root (for visualization)
 cd /path/to/polynomial-solver

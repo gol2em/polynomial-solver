@@ -37,13 +37,31 @@ make -j$(nproc)
 - **None** - Always available
 
 ### Tier 2 & 3 (High Precision)
-- **Boost headers** (~50 MB, header-only)
-- **MPFR library** (~1 MB, optional, can build from source)
-- **GMP library** (~1 MB, optional, can build from source)
-- **Fallback**: cpp_dec_float (header-only, no MPFR/GMP needed)
+
+The library uses **Boost.Multiprecision** as the C++ wrapper interface to access different arithmetic backends:
+
+| Component | Role | Size | Notes |
+|-----------|------|------|-------|
+| **Boost** | `boost::multiprecision` wrapper | ~50 MB headers | Header-only, provides uniform C++ interface |
+| **MPFR** | Arbitrary-precision floats | ~1 MB library | GNU MPFR, the actual computation engine |
+| **GMP** | Multi-precision integers | ~1 MB library | Required by MPFR |
+
+**Backend Options:**
+
+1. **MPFR backend** (recommended): Uses `boost::multiprecision::mpfr_float`
+   - Requires: Boost + MPFR + GMP
+   - Features: Runtime-configurable precision, fastest performance
+
+2. **cpp_dec_float backend** (fallback): Uses `boost::multiprecision::cpp_dec_float_100`
+   - Requires: Boost only (header-only)
+   - Features: Fixed 100-digit precision, 2-5× slower than MPFR, zero library dependencies
+
+3. **quadmath backend** (alternative): Uses GCC's native `__float128`
+   - Requires: libquadmath only (no Boost)
+   - Features: Fixed 34-digit precision, very fast
 
 ### Optional
-- **libquadmath** (for __float128 support)
+- **libquadmath** (for __float128 support, included with GCC)
 
 ## Precision Comparison
 

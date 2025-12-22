@@ -230,6 +230,11 @@ make -j$(nproc)
 
 #### Prerequisites
 
+High-precision arithmetic uses `boost::multiprecision` as the C++ wrapper interface:
+- **Boost**: Provides `boost::multiprecision::mpfr_float` wrapper (header-only)
+- **MPFR**: GNU arbitrary-precision floating-point library (the actual computation engine)
+- **GMP**: GNU multi-precision integers (required by MPFR)
+
 Install dependencies:
 
 ```bash

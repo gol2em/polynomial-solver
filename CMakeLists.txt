@@ -74,7 +74,10 @@ if(ENABLE_HIGH_PRECISION)
     if(NOT HIGH_PRECISION_FOUND)
         message(WARNING
             "High-precision support requested but no suitable libraries found.\n"
-            "  Boost or quadmath is required.\n"
+            "\n"
+            "  Boost provides the C++ wrapper interface (boost::multiprecision)\n"
+            "  MPFR/GMP provide the actual arbitrary-precision arithmetic\n"
+            "\n"
             "  Disabling high-precision support and continuing with double precision.\n"
             "\n"
             "  To enable high-precision, install dependencies:\n"

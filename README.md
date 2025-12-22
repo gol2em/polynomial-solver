@@ -166,6 +166,9 @@ The library supports optional high-precision arithmetic for cases where double p
 
 ```bash
 # Install dependencies (Ubuntu/Debian)
+# - Boost: Provides boost::multiprecision wrapper interface (header-only)
+# - MPFR: GNU arbitrary-precision floating-point library
+# - GMP:  GNU multi-precision integers (MPFR dependency)
 sudo apt-get install libboost-dev libmpfr-dev libgmp-dev
 
 # Build with high-precision support
@@ -193,9 +196,11 @@ auto refined_hp = refiner_hp.refine(result, system_hp, config);
 
 ### Available Backends
 
-- **MPFR** (default, fastest): Runtime-configurable precision using MPFR library
-- **cpp_dec_float** (fallback): Header-only Boost backend if MPFR not available
-- **quadmath** (optional): GCC's __float128 type for 128-bit precision
+All backends (except quadmath) use `boost::multiprecision` as the C++ wrapper interface:
+
+- **MPFR** (default, fastest): `boost::multiprecision::mpfr_float` wrapping MPFR library. Runtime-configurable precision. Requires: Boost + MPFR + GMP.
+- **cpp_dec_float** (fallback): `boost::multiprecision::cpp_dec_float_100`. Fixed 100-digit precision. Requires: Boost only (header-only, no libraries).
+- **quadmath** (optional): GCC's native `__float128`. Fixed 34-digit precision. Requires: libquadmath only (no Boost).
 
 See [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) for complete documentation.
 

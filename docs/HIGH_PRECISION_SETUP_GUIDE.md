@@ -2,14 +2,29 @@
 
 This guide shows you how to set up high-precision arithmetic on a dedicated server **without admin rights**.
 
+## Architecture Overview
+
+High-precision arithmetic uses **Boost.Multiprecision** as the C++ wrapper interface:
+
+```
+Your Code → boost::multiprecision::mpfr_float → MPFR library → GMP library
+                    (C++ wrapper)               (float ops)    (integer ops)
+```
+
+- **Boost**: Header-only C++ wrapper that provides `mpreal` type alias
+- **MPFR**: GNU library that performs the actual arbitrary-precision computations
+- **GMP**: GNU library for multi-precision integers (MPFR dependency)
+
 ## Quick Decision Tree
 
 ```
 Can you install packages? (sudo apt install)
 ├─ YES → Use MPFR backend (fastest)
+│        sudo apt install libboost-dev libmpfr-dev libgmp-dev
 └─ NO → Can you build from source?
     ├─ YES → Build MPFR locally (fastest)
     └─ NO → Use cpp_dec_float (header-only, slower but works)
+            (Only needs Boost headers, no libraries)
 ```
 
 ## Option 1: Build MPFR Locally (Recommended)
