@@ -1,5 +1,5 @@
-#include "polynomial.h"
-#include "de_casteljau.h"
+#include "core/polynomial.h"
+#include "core/de_casteljau.h"
 
 /**
  * @file polynomial.cpp
@@ -11,8 +11,8 @@
 #include <stdexcept>
 
 #ifdef ENABLE_HIGH_PRECISION
-#include "polynomial_hp.h"
-#include "precision_conversion.h"
+#include "hp/polynomial_hp.h"
+#include "hp/precision_conversion.h"
 #endif
 
 namespace {

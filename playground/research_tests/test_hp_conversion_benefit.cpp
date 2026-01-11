@@ -11,11 +11,11 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "polynomial.h"
-#include "polynomial_hp.h"
-#include "precision_conversion.h"
-#include "precision_context.h"
-#include "result_refiner.h"
+#include "core/polynomial.h"
+#include "hp/polynomial_hp.h"
+#include "hp/precision_conversion.h"
+#include "hp/precision_context.h"
+#include "refinement/result_refiner.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

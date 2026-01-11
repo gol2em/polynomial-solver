@@ -34,7 +34,7 @@
  * With MPFR backend, you can change precision at runtime:
  * 
  * @code{.cpp}
- * #include "high_precision_types.h"
+ * #include "hp/high_precision_types.h"
  * 
  * // Set precision to 256 bits
  * setPrecision(256);

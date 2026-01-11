@@ -8,8 +8,8 @@
  * 3. Polynomials with multiple roots (some simple, some multiple)
  */
 
-#include "polynomial.h"
-#include "differentiation.h"
+#include "core/polynomial.h"
+#include "core/differentiation.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

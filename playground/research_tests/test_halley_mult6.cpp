@@ -1,10 +1,10 @@
 #ifdef ENABLE_HIGH_PRECISION
 
 #include "config.h"
-#include "polynomial_hp.h"
-#include "polynomial.h"
-#include "differentiation_hp.h"
-#include "precision_context.h"
+#include "hp/polynomial_hp.h"
+#include "core/polynomial.h"
+#include "hp/differentiation_hp.h"
+#include "hp/precision_context.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

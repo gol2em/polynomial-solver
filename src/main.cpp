@@ -1,8 +1,8 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
-#include "solver.h"
-#include "geometry.h"
+#include "solver/solver.h"
+#include "core/geometry.h"
 
 /**
  * @file main.cpp

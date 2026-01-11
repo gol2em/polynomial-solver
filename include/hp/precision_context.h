@@ -11,7 +11,7 @@
  * @section usage Usage Example
  * 
  * @code{.cpp}
- * #include "precision_context.h"
+ * #include "hp/precision_context.h"
  * 
  * void example() {
  *     setPrecision(256);  // Base precision: 256 bits
@@ -46,7 +46,7 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "high_precision_types.h"
+#include "hp/high_precision_types.h"
 
 namespace polynomial_solver {
 

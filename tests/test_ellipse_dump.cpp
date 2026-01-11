@@ -1,7 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include <cmath>
-#include "solver.h"
+#include "solver/solver.h"
 
 using namespace polynomial_solver;
 

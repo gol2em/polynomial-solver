@@ -18,7 +18,7 @@
  *
  * @code{.cpp}
  * #ifdef ENABLE_HIGH_PRECISION
- * #include "high_precision_refiner.h"
+ * #include "hp/high_precision_refiner.h"
  * using namespace polynomial_solver::high_precision;
  *
  * // After double-precision solving and refinement
@@ -58,7 +58,7 @@
 
 #include <vector>
 #include <string>
-#include "polynomial.h"
+#include "core/polynomial.h"
 
 // Use Boost.Multiprecision with MPFR backend
 // This is header-only if Boost is configured that way

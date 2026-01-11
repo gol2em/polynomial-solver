@@ -11,7 +11,7 @@
  * @section usage Usage Example
  * 
  * @code{.cpp}
- * #include "precision_conversion.h"
+ * #include "hp/precision_conversion.h"
  * 
  * // Convert double to high precision
  * double x = 3.14159265358979323846;
@@ -31,7 +31,7 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "high_precision_types.h"
+#include "hp/high_precision_types.h"
 #include <vector>
 #include <iostream>
 #include <sstream>

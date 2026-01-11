@@ -12,9 +12,9 @@
 #include <vector>
 #include <string>
 
-#include "polynomial.h"
-#include "geometry.h"
-#include "de_casteljau.h"
+#include "core/polynomial.h"
+#include "core/geometry.h"
+#include "core/de_casteljau.h"
 
 namespace polynomial_solver {
 

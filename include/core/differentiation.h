@@ -14,7 +14,7 @@
  * computed dimension-by-dimension.
  */
 
-#include "polynomial.h"
+#include "core/polynomial.h"
 #include <map>
 #include <vector>
 

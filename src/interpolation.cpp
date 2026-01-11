@@ -3,7 +3,7 @@
  * @brief Implementation of polynomial interpolation from function samples.
  */
 
-#include "interpolation.h"
+#include "core/interpolation.h"
 #include <cmath>
 #include <algorithm>
 #include <stdexcept>

@@ -8,12 +8,12 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "result_refiner_hp.h"
-#include "polynomial_hp.h"
-#include "polynomial.h"
-#include "differentiation_hp.h"
-#include "high_precision_types.h"
-#include "precision_context.h"
+#include "hp/result_refiner_hp.h"
+#include "hp/polynomial_hp.h"
+#include "core/polynomial.h"
+#include "hp/differentiation_hp.h"
+#include "hp/high_precision_types.h"
+#include "hp/precision_context.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

@@ -1,6 +1,16 @@
 # Polynomial Solver
 
-A C++11 library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
+A C++11 research library for solving systems of multivariate polynomial equations using subdivision methods with Bernstein basis representation.
+
+**Status**: Research/experimental. Not verified for production use.
+
+## Overview
+
+This library implements:
+- Bernstein subdivision for root isolation
+- Newton-based refinement with several iteration methods
+- Templated architecture supporting double and arbitrary precision (mpreal)
+- Multiplicity estimation using Ostrowski's method
 
 ## Prerequisites
 
@@ -43,7 +53,7 @@ target_include_directories(your_target PRIVATE /path/to/polynomial-solver/includ
 target_link_libraries(your_target /path/to/polynomial-solver/build/lib/libpolynomial_solver.a)
 ```
 
-### Basic Usage
+### Basic Usage (Original API)
 
 ```cpp
 #include <polynomial_solver.h>
@@ -68,13 +78,51 @@ refine_config.residual_tolerance = 1e-15;
 auto refined = refiner.refine(result, system, refine_config);
 ```
 
+### Templated API (Recommended for new code)
+
+```cpp
+#include "core/polynomial_base.h"
+#include "solver/solver_base.h"
+#include "refinement/result_refiner_base.h"
+using namespace polynomial_solver;
+
+// Type aliases
+using Poly = PolynomialBase<double>;
+using Solver = SolverBase<double>;
+using Refiner = ResultRefinerBase<double>;
+
+// 1. Define polynomial
+Poly poly = Poly::fromPower({-0.08, 0.66, -1.5, 1.0});
+
+// 2. Solve
+PolynomialSystemBase<double> system;
+system.polynomials.push_back(poly.convertedToBernstein());
+SubdivisionConfigBase<double> config;
+config.tolerance = 1e-8;
+auto result = Solver::solve(system, config);
+
+// 3. Refine
+RefinementConfigBase<double> refine_config;
+refine_config.target_tolerance = 1e-15;
+auto refined = Refiner::refineBatch(result.boxes, poly, refine_config);
+```
+
+See [docs/TEMPLATED_SOLVER.md](docs/TEMPLATED_SOLVER.md) for the full templated API guide.
+
 ### Run Examples
 
 ```bash
+# Original API examples
 ./build/bin/example_simple_cubic          # 1D cubic
 ./build/bin/example_wilkinson_1d          # Ill-conditioned
 ./build/bin/example_multiplicity_1d       # Multiple roots
 ./build/bin/example_circle_ellipse        # 2D system
+
+# Templated API examples
+./build/bin/example_simple_cubic_templated      # Basic workflow
+./build/bin/example_wilkinson_1d_templated      # 20-root Wilkinson
+./build/bin/example_multiplicity_1d_templated   # HP escalation for mult-6
+./build/bin/example_circle_ellipse_templated    # 2D Newton refinement
 ```
 
 Use `--help` for command-line options. See [docs/PARAMETERS.md](docs/PARAMETERS.md) for parameter details.
@@ -105,52 +153,55 @@ ctest -V                # Run tests with verbose output
 
 ```
 polynomial-solver/
-├── include/                      # Header files
-│   ├── polynomial_solver.h       # Unified header (include this!)
-│   ├── polynomial.h              # Multivariate polynomial class
-│   ├── solver.h                  # Main solver interface
-│   ├── result_refiner.h          # High-precision refinement
-│   ├── differentiation.h         # Polynomial differentiation
-│   ├── geometry.h                # Geometric algorithms
-│   └── de_casteljau.h            # De Casteljau algorithm
+├── include/
+│   ├── polynomial_solver.h       # Main umbrella header
+│   │
+│   ├── core/                     # Fundamental types
+│   │   ├── polynomial.h          # Original Polynomial class
+│   │   ├── polynomial_base.h     # Templated PolynomialBase<Scalar>
+│   │   ├── geometry.h            # Convex hull, intersection
+│   │   ├── geometry_base.h       # Templated geometry
+│   │   ├── de_casteljau.h        # De Casteljau subdivision
+│   │   ├── differentiation.h     # Polynomial differentiation
+│   │   └── interpolation.h       # Polynomial interpolation
+│   │
+│   ├── solver/                   # Solving algorithms
+│   │   ├── solver.h              # Original Solver class
+│   │   ├── solver_base.h         # Templated SolverBase<Scalar>
+│   │   ├── bounding_strategy.h   # Root bounding methods
+│   │   └── newton_multidim.h     # Multi-dimensional Newton
+│   │
+│   ├── refinement/               # Root refinement
+│   │   ├── result_refiner.h      # Original ResultRefiner
+│   │   └── result_refiner_base.h # Templated ResultRefinerBase<Scalar>
+│   │
+│   └── hp/                       # High-precision support
+│       ├── high_precision_types.h
+│       ├── polynomial_hp.h
+│       ├── result_refiner_hp.h
+│       └── precision_conversion.h
+│
 ├── src/                          # Implementation files
-│   ├── polynomial.cpp
-│   ├── solver.cpp
-│   ├── result_refiner.cpp
-│   ├── differentiation.cpp
-│   ├── geometry.cpp
-│   └── de_casteljau.cpp
-├── build/lib/                    # Build output
-│   └── libpolynomial_solver.a    # Unified library (link this!)
-├── playground/                   # Quick testing (has Makefile)
-│   ├── Makefile                  # Compile any .cpp file easily
-│   └── README.md                 # Playground documentation
-├── examples/                     # Example programs (CMake)
-│   ├── simple_cubic.cpp          # 2-line workflow demo
-│   ├── multiplicity_1d_roots.cpp # Multiple roots
-│   ├── wilkinson_1d_roots.cpp    # Ill-conditioned
-│   └── circle_ellipse_intersection.cpp  # 2D system
-├── tests/                        # Test suite (CMake + CTest)
-│   └── test_*.cpp                # Test files
-├── tools/                        # Tools and utilities
-│   └── refine_from_dumps.cpp     # Root refinement tool
+├── examples/                     # Example programs
+│   ├── simple_cubic.cpp          # Original API
+│   ├── simple_cubic_templated.cpp    # Templated API
+│   ├── multiplicity_1d_templated.cpp # HP escalation workflow
+│   └── ...
+├── tests/                        # Test suite (33 tests)
+├── tools/                        # Utilities
+├── playground/                   # Rapid prototyping
 ├── docs/                         # Documentation
-│   ├── ALGORITHMS.md             # Algorithm overview
-│   ├── VISUALIZATION.md          # Visualization guide
-│   ├── PARAMETERS.md             # Parameter reference
-│   └── ...                       # More technical docs
-├── check_prerequisites.sh        # Prerequisite checker
-├── build.sh                      # Automated build script
-└── README.md                     # This file
+└── build/lib/libpolynomial_solver.a  # Link this!
 ```
 
 ## Documentation
 
+- [docs/TEMPLATED_SOLVER.md](docs/TEMPLATED_SOLVER.md) - **Templated API guide** (recommended)
 - [docs/ALGORITHMS.md](docs/ALGORITHMS.md) - Algorithm overview
 - [docs/PARAMETERS.md](docs/PARAMETERS.md) - Parameter reference
-- [docs/VISUALIZATION.md](docs/VISUALIZATION.md) - Visualization and geometry dump
 - [docs/HIGH_PRECISION.md](docs/HIGH_PRECISION.md) - High-precision arithmetic
 - [docs/CONDITIONING_AND_PRECISION.md](docs/CONDITIONING_AND_PRECISION.md) - Condition numbers
+- [docs/VISUALIZATION.md](docs/VISUALIZATION.md) - Visualization and geometry dump
 - [docs/GEOMETRY_ALGORITHMS.md](docs/GEOMETRY_ALGORITHMS.md) - Geometric algorithms
 - [docs/DEGENERATE_BOXES.md](docs/DEGENERATE_BOXES.md) - Degeneracy handling
 - [examples/README.md](examples/README.md) - Example programs
@@ -158,7 +209,9 @@ polynomial-solver/
 ## Tests
 
 ```bash
-cd build && ctest
+cd build && ctest        # Run all 33 tests
+ctest -V                 # Verbose output
+ctest -R Refiner         # Run tests matching "Refiner"
 ```
 
 ## License

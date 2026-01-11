@@ -147,7 +147,55 @@ if(ENABLE_HIGH_PRECISION)
 endif()
 
 #==============================================================================
-# 7. Integration Tests
+# 7. Template-Based Implementation Tests (Tier 3)
+#==============================================================================
+# These tests verify the templated implementations (PolynomialBase<T>, etc.)
+# They are always built when high-precision is enabled (USE_TEMPLATES is ON by default)
+
+if(ENABLE_HIGH_PRECISION)
+    # Test: PolynomialBase<double> basic functionality
+    add_executable(test_polynomial_base test_polynomial_base.cpp)
+    target_link_libraries(test_polynomial_base PRIVATE polynomial_solver)
+    add_test(NAME PolynomialBaseTest COMMAND test_polynomial_base)
+
+    # Test: PolynomialBase comprehensive (vs Polynomial, HP types)
+    add_executable(test_polynomial_base_comprehensive test_polynomial_base_comprehensive.cpp)
+    target_link_libraries(test_polynomial_base_comprehensive PRIVATE polynomial_solver)
+    add_test(NAME PolynomialBaseComprehensiveTest COMMAND test_polynomial_base_comprehensive)
+
+    # Test: PolynomialBase solver compatibility (shadow tests)
+    add_executable(test_polynomial_base_solver_compat test_polynomial_base_solver_compat.cpp)
+    target_link_libraries(test_polynomial_base_solver_compat PRIVATE polynomial_solver)
+    add_test(NAME PolynomialBaseSolverCompatTest COMMAND test_polynomial_base_solver_compat)
+
+    # Test: Templated differentiation
+    add_executable(test_differentiation_base test_differentiation_base.cpp)
+    target_link_libraries(test_differentiation_base PRIVATE polynomial_solver)
+    add_test(NAME DifferentiationBaseTest COMMAND test_differentiation_base)
+
+    # Test: Templated result refiner
+    add_executable(test_result_refiner_base test_result_refiner_base.cpp)
+    target_link_libraries(test_result_refiner_base PRIVATE polynomial_solver)
+    add_test(NAME ResultRefinerBaseTest COMMAND test_result_refiner_base)
+
+    # Test: Region tracking for subdivision
+    add_executable(test_region_tracking test_region_tracking.cpp)
+    target_link_libraries(test_region_tracking PRIVATE polynomial_solver)
+    add_test(NAME RegionTrackingTest COMMAND test_region_tracking)
+
+    # Test: Templated solver
+    add_executable(test_solver_base test_solver_base.cpp)
+    target_link_libraries(test_solver_base PRIVATE polynomial_solver)
+    add_test(NAME SolverBaseTest COMMAND test_solver_base)
+
+    # Test: Templated geometry
+    add_executable(test_geometry_base test_geometry_base.cpp)
+    target_link_libraries(test_geometry_base PRIVATE polynomial_solver)
+    add_test(NAME GeometryBaseTest COMMAND test_geometry_base)
+endif()
+
+#==============================================================================
+# 8. Integration Tests
 #==============================================================================
 
 # Test: Full workflow (solve → refine)
@@ -155,11 +203,32 @@ add_executable(test_solver_refiner_workflow test_solver_refiner_workflow.cpp)
 target_link_libraries(test_solver_refiner_workflow PRIVATE polynomial_solver)
 add_test(NAME SolverRefinerWorkflowTest COMMAND test_solver_refiner_workflow)
 
+# Test: Multidimensional polynomials (3D+)
+add_executable(test_multidim test_multidim.cpp)
+target_link_libraries(test_multidim PRIVATE polynomial_solver)
+add_test(NAME MultidimTest COMMAND test_multidim)
+
+# Test: Solver vs SolverBase comparison (verify identical results)
+add_executable(test_solver_comparison test_solver_comparison.cpp)
+target_link_libraries(test_solver_comparison PRIVATE polynomial_solver)
+add_test(NAME SolverComparisonTest COMMAND test_solver_comparison)
+
+# Test: Multidimensional Newton refinement with convergence analysis
+if(ENABLE_HIGH_PRECISION)
+    add_executable(test_newton_multidim test_newton_multidim.cpp)
+    target_link_libraries(test_newton_multidim PRIVATE polynomial_solver)
+    add_test(NAME NewtonMultidimTest COMMAND test_newton_multidim)
+endif()
+
 #==============================================================================
 # Summary
 #==============================================================================
 
-message(STATUS "Tests configured: 22 tests (all added to CTest)")
+if(ENABLE_HIGH_PRECISION)
+    message(STATUS "Tests configured: 30 tests (all added to CTest)")
+else()
+    message(STATUS "Tests configured: 17 tests (all added to CTest)")
+endif()
 message(STATUS "  - Polynomial module: 4 tests")
 message(STATUS "  - Differentiation module: 2 tests")
 message(STATUS "  - Geometry module: 4 tests")
@@ -167,8 +236,10 @@ message(STATUS "  - Solver module: 5 tests")
 message(STATUS "  - Result refiner module: 1 test")
 if(ENABLE_HIGH_PRECISION)
     message(STATUS "  - High-precision module: 5 tests")
+    message(STATUS "  - Tier 3 template module: 8 tests")
 else()
     message(STATUS "  - High-precision module: 0 tests (ENABLE_HIGH_PRECISION=OFF)")
+    message(STATUS "  - Tier 3 template module: 0 tests (ENABLE_HIGH_PRECISION=OFF)")
 endif()
 message(STATUS "  - Integration tests: 1 test")
 message(STATUS "Research/debug tests moved to playground/research_tests/")

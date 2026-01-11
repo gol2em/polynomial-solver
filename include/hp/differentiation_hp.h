@@ -17,8 +17,8 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "polynomial_hp.h"
-#include "polynomial.h"
+#include "hp/polynomial_hp.h"
+#include "core/polynomial.h"
 #include <vector>
 
 namespace polynomial_solver {

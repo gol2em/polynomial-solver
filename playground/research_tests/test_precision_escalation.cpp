@@ -5,9 +5,9 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "result_refiner.h"
-#include "polynomial.h"
-#include "precision_context.h"
+#include "refinement/result_refiner.h"
+#include "core/polynomial.h"
+#include "hp/precision_context.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

@@ -1,5 +1,5 @@
-#include "polynomial.h"
-#include "solver.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>

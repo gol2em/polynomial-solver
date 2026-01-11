@@ -15,16 +15,16 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "polynomial.h"
-#include "polynomial_hp.h"
-#include "solver.h"
-#include "result_refiner.h"
-#include "result_refiner_hp.h"
-#include "differentiation.h"
-#include "differentiation_hp.h"
-#include "high_precision_types.h"
-#include "precision_context.h"
-#include "precision_conversion.h"
+#include "core/polynomial.h"
+#include "hp/polynomial_hp.h"
+#include "solver/solver.h"
+#include "refinement/result_refiner.h"
+#include "hp/result_refiner_hp.h"
+#include "core/differentiation.h"
+#include "hp/differentiation_hp.h"
+#include "hp/high_precision_types.h"
+#include "hp/precision_context.h"
+#include "hp/precision_conversion.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

@@ -15,7 +15,7 @@
  *
  * @code{.cpp}
  * #ifdef ENABLE_HIGH_PRECISION
- * #include "result_refiner_hp.h"
+ * #include "hp/result_refiner_hp.h"
  * using namespace polynomial_solver;
  *
  * // Set precision (256 bits = ~77 decimal digits)
@@ -42,8 +42,8 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "polynomial_hp.h"
-#include "high_precision_types.h"
+#include "hp/polynomial_hp.h"
+#include "hp/high_precision_types.h"
 #include <vector>
 #include <string>
 #include <map>

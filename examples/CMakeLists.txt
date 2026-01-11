@@ -17,12 +17,36 @@ target_link_libraries(example_multiplicity_1d polynomial_solver)
 add_executable(example_wilkinson_1d wilkinson_1d_roots.cpp)
 target_link_libraries(example_wilkinson_1d polynomial_solver)
 
+#==============================================================================
+# Templated Workflow Examples (using SolverBase/ResultRefinerBase)
+#==============================================================================
+
+# Simple Cubic - Templated
+add_executable(example_simple_cubic_templated simple_cubic_templated.cpp)
+target_link_libraries(example_simple_cubic_templated polynomial_solver)
+
+# Circle-Ellipse - Templated with 2D Newton refinement
+add_executable(example_circle_ellipse_templated circle_ellipse_templated.cpp)
+target_link_libraries(example_circle_ellipse_templated polynomial_solver)
+
+# Multiplicity - Templated
+add_executable(example_multiplicity_1d_templated multiplicity_1d_templated.cpp)
+target_link_libraries(example_multiplicity_1d_templated polynomial_solver)
+
+# Wilkinson - Templated
+add_executable(example_wilkinson_1d_templated wilkinson_1d_templated.cpp)
+target_link_libraries(example_wilkinson_1d_templated polynomial_solver)
+
 # Set output directory
 set_target_properties(
     example_simple_cubic
     example_circle_ellipse
     example_multiplicity_1d
     example_wilkinson_1d
+    example_simple_cubic_templated
+    example_circle_ellipse_templated
+    example_multiplicity_1d_templated
+    example_wilkinson_1d_templated
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
@@ -33,5 +57,9 @@ add_dependencies(examples
     example_circle_ellipse
     example_multiplicity_1d
     example_wilkinson_1d
+    example_simple_cubic_templated
+    example_circle_ellipse_templated
+    example_multiplicity_1d_templated
+    example_wilkinson_1d_templated
 )
 

@@ -1,16 +1,16 @@
-#include "result_refiner.h"
-#include "differentiation.h"
+#include "refinement/result_refiner.h"
+#include "core/differentiation.h"
 #include <cmath>
 #include <algorithm>
 #include <set>
 #include <limits>
 
 #ifdef ENABLE_HIGH_PRECISION
-#include "result_refiner_hp.h"
-#include "polynomial_hp.h"
-#include "precision_context.h"
-#include "high_precision_types.h"
-#include "precision_conversion.h"
+#include "hp/result_refiner_hp.h"
+#include "hp/polynomial_hp.h"
+#include "hp/precision_context.h"
+#include "hp/high_precision_types.h"
+#include "hp/precision_conversion.h"
 #endif
 
 namespace polynomial_solver {

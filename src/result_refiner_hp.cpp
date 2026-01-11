@@ -2,10 +2,10 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "result_refiner_hp.h"
-#include "differentiation_hp.h"
-#include "precision_conversion.h"
-#include "interval_arithmetic.h"
+#include "hp/result_refiner_hp.h"
+#include "hp/differentiation_hp.h"
+#include "hp/precision_conversion.h"
+#include "core/interval_arithmetic.h"
 #include <cmath>
 #include <iostream>
 

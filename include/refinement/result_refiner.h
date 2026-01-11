@@ -33,8 +33,8 @@
 #include <vector>
 #include <cstddef>
 #include <functional>
-#include "polynomial.h"
-#include "solver.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
 
 namespace polynomial_solver {
 

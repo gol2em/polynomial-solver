@@ -6,7 +6,7 @@
 #include <random>
 
 
-#include "polynomial.h"
+#include "core/polynomial.h"
 
 using polynomial_solver::Polynomial;
 

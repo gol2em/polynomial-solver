@@ -1,4 +1,4 @@
-#include "solver.h"
+#include "solver/solver.h"
 #include <queue>
 #include <map>
 #include <algorithm>

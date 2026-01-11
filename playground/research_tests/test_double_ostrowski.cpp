@@ -7,8 +7,8 @@
  * We just want to verify that Ostrowski can detect multiplicity correctly
  */
 
-#include "result_refiner.h"
-#include "polynomial.h"
+#include "refinement/result_refiner.h"
+#include "core/polynomial.h"
 #include <iostream>
 #include <iomanip>
 #include <vector>

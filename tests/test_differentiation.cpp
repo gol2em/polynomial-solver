@@ -1,5 +1,5 @@
-#include "differentiation.h"
-#include "polynomial.h"
+#include "core/differentiation.h"
+#include "core/polynomial.h"
 #include <iostream>
 #include <cmath>
 #include <vector>

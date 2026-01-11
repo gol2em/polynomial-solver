@@ -232,16 +232,55 @@ install(TARGETS polynomial_solver
     LIBRARY DESTINATION lib
 )
 
+# Install main umbrella header
+install(FILES include/polynomial_solver.h DESTINATION include)
+
+# Install core headers
 install(FILES
-    include/polynomial_solver.h
-    include/polynomial.h
-    include/solver.h
-    include/result_refiner.h
-    include/differentiation.h
-    include/geometry.h
-    include/de_casteljau.h
-    DESTINATION include
+    include/core/polynomial.h
+    include/core/polynomial_base.h
+    include/core/polynomial_impl.h
+    include/core/geometry.h
+    include/core/geometry_base.h
+    include/core/geometry_impl.h
+    include/core/de_casteljau.h
+    include/core/differentiation.h
+    include/core/interpolation.h
+    include/core/interval_arithmetic.h
+    DESTINATION include/core
 )
+
+# Install solver headers
+install(FILES
+    include/solver/solver.h
+    include/solver/solver_base.h
+    include/solver/solver_impl.h
+    include/solver/bounding_strategy.h
+    include/solver/bounding_strategy_impl.h
+    include/solver/newton_multidim.h
+    DESTINATION include/solver
+)
+
+# Install refinement headers
+install(FILES
+    include/refinement/result_refiner.h
+    include/refinement/result_refiner_base.h
+    DESTINATION include/refinement
+)
+
+# Install high-precision headers (if enabled)
+if(ENABLE_HIGH_PRECISION)
+    install(FILES
+        include/hp/high_precision_types.h
+        include/hp/high_precision_refiner.h
+        include/hp/polynomial_hp.h
+        include/hp/differentiation_hp.h
+        include/hp/precision_context.h
+        include/hp/precision_conversion.h
+        include/hp/result_refiner_hp.h
+        DESTINATION include/hp
+    )
+endif()
 
 #==============================================================================
 # Legacy individual libraries (for backward compatibility)

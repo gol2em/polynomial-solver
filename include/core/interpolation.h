@@ -13,13 +13,13 @@
 #ifndef POLYNOMIAL_SOLVER_INTERPOLATION_H
 #define POLYNOMIAL_SOLVER_INTERPOLATION_H
 
-#include "polynomial.h"
+#include "core/polynomial.h"
 #include "config.h"
 #include <functional>
 #include <vector>
 
 #ifdef ENABLE_HIGH_PRECISION
-#include "high_precision_types.h"
+#include "hp/high_precision_types.h"
 #endif
 
 namespace polynomial_solver {

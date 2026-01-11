@@ -1,4 +1,4 @@
-#include "polynomial.h"
+#include "core/polynomial.h"
 #include <iostream>
 #include <cmath>
 #include <vector>

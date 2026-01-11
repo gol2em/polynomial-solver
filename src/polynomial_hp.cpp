@@ -2,8 +2,8 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "polynomial_hp.h"
-#include "precision_conversion.h"
+#include "hp/polynomial_hp.h"
+#include "hp/precision_conversion.h"
 #include <stdexcept>
 
 namespace {

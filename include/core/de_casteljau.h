@@ -11,8 +11,8 @@
 
 #include <vector>
 
-#include "polynomial.h"
-#include "geometry.h"
+#include "core/polynomial.h"
+#include "core/geometry.h"
 
 namespace polynomial_solver {
 

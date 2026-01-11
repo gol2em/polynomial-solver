@@ -2,8 +2,8 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "differentiation_hp.h"
-#include "high_precision_types.h"
+#include "hp/differentiation_hp.h"
+#include "hp/high_precision_types.h"
 #include <algorithm>
 #include <stdexcept>
 #include <iostream>

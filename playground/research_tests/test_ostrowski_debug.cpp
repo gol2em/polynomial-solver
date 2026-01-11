@@ -1,9 +1,9 @@
 #include <iostream>
 #include <iomanip>
-#include "polynomial.h"
-#include "polynomial_hp.h"
-#include "differentiation_hp.h"
-#include "precision_context.h"
+#include "core/polynomial.h"
+#include "hp/polynomial_hp.h"
+#include "hp/differentiation_hp.h"
+#include "hp/precision_context.h"
 
 using namespace polynomial_solver;
 

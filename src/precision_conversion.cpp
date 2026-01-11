@@ -7,7 +7,7 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "precision_conversion.h"
+#include "hp/precision_conversion.h"
 
 namespace polynomial_solver {
 

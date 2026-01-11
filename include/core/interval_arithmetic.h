@@ -24,8 +24,8 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "high_precision_types.h"
-#include "polynomial_hp.h"
+#include "hp/high_precision_types.h"
+#include "hp/polynomial_hp.h"
 #include <vector>
 #include <algorithm>
 

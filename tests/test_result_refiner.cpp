@@ -1,6 +1,6 @@
-#include "result_refiner.h"
-#include "polynomial.h"
-#include "solver.h"
+#include "refinement/result_refiner.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
 #include <iostream>
 #include <iomanip>
 #include <cmath>

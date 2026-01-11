@@ -1,6 +1,6 @@
-#include "polynomial.h"
-#include "solver.h"
-#include "de_casteljau.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
+#include "core/de_casteljau.h"
 
 #include <cmath>
 #include <iostream>

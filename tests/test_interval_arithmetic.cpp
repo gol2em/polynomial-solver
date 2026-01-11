@@ -5,9 +5,9 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "interval_arithmetic.h"
-#include "polynomial_hp.h"
-#include "precision_context.h"
+#include "core/interval_arithmetic.h"
+#include "hp/polynomial_hp.h"
+#include "hp/precision_context.h"
 #include <iostream>
 #include <cassert>
 #include <cmath>

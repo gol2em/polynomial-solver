@@ -7,9 +7,9 @@
 
 #ifdef ENABLE_HIGH_PRECISION
 
-#include "high_precision_types.h"
-#include "precision_context.h"
-#include "precision_conversion.h"
+#include "hp/high_precision_types.h"
+#include "hp/precision_context.h"
+#include "hp/precision_conversion.h"
 #include <iostream>
 #include <cassert>
 #include <cmath>

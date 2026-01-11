@@ -1,7 +1,7 @@
-#include "polynomial.h"
-#include "solver.h"
-#include "result_refiner.h"
-#include "differentiation.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
+#include "refinement/result_refiner.h"
+#include "core/differentiation.h"
 #include <iostream>
 #include <cmath>
 #include <vector>

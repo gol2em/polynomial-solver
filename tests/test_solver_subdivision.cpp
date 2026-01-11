@@ -1,6 +1,6 @@
-#include "polynomial.h"
-#include "solver.h"
-#include "geometry.h"
+#include "core/polynomial.h"
+#include "solver/solver.h"
+#include "core/geometry.h"
 
 #include <cmath>
 #include <cstring>

@@ -82,25 +82,25 @@
 #define POLYNOMIAL_SOLVER_H
 
 // Core polynomial functionality
-#include "polynomial.h"
+#include "core/polynomial.h"
 
 // Solver functionality
-#include "solver.h"
+#include "solver/solver.h"
 
 // Result refinement
-#include "result_refiner.h"
+#include "refinement/result_refiner.h"
 
 // Differentiation (for advanced users)
-#include "differentiation.h"
+#include "core/differentiation.h"
 
 // Geometry algorithms (for advanced users)
-#include "geometry.h"
+#include "core/geometry.h"
 
 // De Casteljau algorithm (for advanced users)
-#include "de_casteljau.h"
+#include "core/de_casteljau.h"
 
 // Polynomial interpolation from function samples
-#include "interpolation.h"
+#include "core/interpolation.h"
 
 /**
  * @namespace polynomial_solver

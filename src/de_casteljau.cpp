@@ -1,4 +1,4 @@
-#include "de_casteljau.h"
+#include "core/de_casteljau.h"
 
 /**
  * @file de_casteljau.cpp
